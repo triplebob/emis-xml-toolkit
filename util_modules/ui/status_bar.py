@@ -174,7 +174,7 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
             # Changelog section - Direct in-app display 
-            with st.sidebar.expander("🎯 What's New - v2.2.1", expanded=False):
+            with st.sidebar.expander("🎯 What's New: v2.2.1", expanded=False):
                 st.markdown("""
                     **🚀 Major Performance & Caching Overhaul - v2.2.0**
                     
