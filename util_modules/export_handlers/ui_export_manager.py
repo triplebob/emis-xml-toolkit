@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable
 from .clinical_code_export import ClinicalCodeExportHandler
 from .search_export import SearchExportHandler
-from ..ui.ui_helpers import render_download_button
+# Import moved to function level to avoid circular dependency
 from ..core import ReportClassifier, SearchManager
 
 

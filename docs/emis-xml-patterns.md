@@ -57,6 +57,321 @@ Technical reference for all currently encountered EMIS XML search patterns, stru
 - **Examples**: -6 MONTH, +186 DAY, -1 YEAR
 - **Usage**: Rolling time windows from current date or baseline
 
+### Variable-Based Temporal Patterns
+Modern EMIS versions support named temporal variables within `<singleValue><variable>` structures for intuitive date filtering.
+
+#### Named Temporal Variables
+All time units support Last/This/Next patterns:
+
+##### Daily Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>DAY</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Daily tracking and immediate reporting
+
+##### Weekly Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>WEEK</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Weekly reporting cycles
+
+##### Monthly Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>MONTH</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Monthly reporting cycles
+
+#### Quarterly Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>QUARTER</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Quarter-based reporting and claims tracking
+
+#### Weekly Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>WEEK</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Recent activity tracking
+
+#### Monthly Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>MONTH</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Monthly reporting cycles
+
+#### Annual Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>YEAR</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Annual reporting and review cycles
+
+#### Fiscal Year Variables
+```xml
+<singleValue>
+    <variable>
+        <value>Last</value>
+        <unit>FISCALYEAR</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Values**: Last, This, Next
+- **Usage**: Financial year reporting (April-March cycles)
+
+#### Numeric Offset Variables
+All time units support positive and negative numeric offsets:
+
+```xml
+<singleValue>
+    <variable>
+        <value>-1</value>
+        <unit>MONTH</unit>
+        <relation>RELATIVE</relation>
+    </variable>
+</singleValue>
+```
+- **Pattern**: Any integer (positive/negative) + any time unit
+- **Examples**: -12 MONTH, 3 WEEK, -5 DAY, 2 QUARTER, -1 YEAR, 6 FISCALYEAR
+- **Usage**: Precise offset calculations from search date
+- **Units Supported**: DAY, WEEK, MONTH, QUARTER, YEAR, FISCALYEAR
+
+### Range-Based Temporal Patterns
+
+All temporal variable patterns can also be used in date ranges with `rangeFrom` and `rangeTo` boundaries:
+
+#### Temporal Variable Ranges
+```xml
+<rangeValue>
+    <rangeFrom>
+        <value>
+            <value>Last</value>
+            <unit>QUARTER</unit>
+            <relation>RELATIVE</relation>
+        </value>
+        <operator>GTEQ</operator>
+    </rangeFrom>
+    <rangeTo>
+        <value>
+            <value>-1</value>
+            <unit>YEAR</unit>
+            <relation>RELATIVE</relation>
+        </value>
+        <operator>LTEQ</operator>
+    </rangeTo>
+</rangeValue>
+```
+- **Pattern**: Any temporal variable can be used as range boundary
+- **Operators**: GTEQ (>=), LTEQ (<=), GT (>), LT (<), EQ (=)
+- **Usage**: Complex date filtering with "between" logic
+
+#### Range Examples
+
+**Quarterly Range:**
+```xml
+<rangeFrom>
+    <value>
+        <value>This</value>
+        <unit>QUARTER</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>GTEQ</operator>
+</rangeFrom>
+<rangeTo>
+    <value>
+        <value>Next</value>
+        <unit>QUARTER</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>LTEQ</operator>
+</rangeTo>
+```
+
+**Numeric Offset Range:**
+```xml
+<rangeFrom>
+    <value>
+        <value>-6</value>
+        <unit>MONTH</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>GTEQ</operator>
+</rangeFrom>
+<rangeTo>
+    <value>
+        <value>3</value>
+        <unit>MONTH</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>LTEQ</operator>
+</rangeTo>
+```
+
+**Mixed Unit Range:**
+```xml
+<rangeFrom>
+    <value>
+        <value>Last</value>
+        <unit>FISCALYEAR</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>GTEQ</operator>
+</rangeFrom>
+<rangeTo>
+    <value>
+        <value>30</value>
+        <unit>DAY</unit>
+        <relation>RELATIVE</relation>
+    </value>
+    <operator>LTEQ</operator>
+</rangeTo>
+```
+
+## Report Context Temporal Patterns
+
+The same temporal variable patterns appear in all EMIS report types but with different nesting structures:
+
+### List Report Date Patterns
+```xml
+<listReport>
+    <columnGroups>
+        <columnGroup>
+            <criteria>
+                <criterion>
+                    <filterAttribute>
+                        <columnValue>
+                            <column>ISSUE_DATE</column>
+                            <rangeValue>
+                                <rangeFrom>
+                                    <value>
+                                        <value>Last</value>
+                                        <unit>QUARTER</unit>
+                                        <relation>RELATIVE</relation>
+                                    </value>
+                                    <operator>GTEQ</operator>
+                                </rangeFrom>
+                                <rangeTo>
+                                    <value>
+                                        <value>3</value>
+                                        <unit>MONTH</unit>
+                                        <relation>RELATIVE</relation>
+                                    </value>
+                                    <operator>LTEQ</operator>
+                                </rangeTo>
+                            </rangeValue>
+                        </columnValue>
+                    </filterAttribute>
+                </criterion>
+            </criteria>
+        </columnGroup>
+    </columnGroups>
+</listReport>
+```
+
+### Audit Report Date Patterns
+```xml
+<auditReport>
+    <columnGroups>
+        <columnGroup>
+            <criteria>
+                <criterion>
+                    <filterAttribute>
+                        <columnValue>
+                            <column>DATE</column>
+                            <rangeValue>
+                                <rangeFrom>
+                                    <value>
+                                        <value>This</value>
+                                        <unit>FISCALYEAR</unit>
+                                        <relation>RELATIVE</relation>
+                                    </value>
+                                    <operator>GTEQ</operator>
+                                </rangeFrom>
+                            </rangeValue>
+                        </columnValue>
+                    </filterAttribute>
+                </criterion>
+            </criteria>
+        </columnGroup>
+    </columnGroups>
+</auditReport>
+```
+
+### Aggregate Report Date Patterns
+```xml
+<aggregateReport>
+    <criteria>
+        <criterion>
+            <filterAttribute>
+                <columnValue>
+                    <column>DATE</column>
+                    <rangeValue>
+                        <rangeFrom>
+                            <value>
+                                <value>-6</value>
+                                <unit>MONTH</unit>
+                                <relation>RELATIVE</relation>
+                            </value>
+                            <operator>GTEQ</operator>
+                        </rangeFrom>
+                    </rangeValue>
+                </columnValue>
+            </filterAttribute>
+        </criterion>
+    </criteria>
+</aggregateReport>
+```
+
+All temporal patterns work identically across search and report contexts. Only the XML nesting structure differs.
+
 ### Absolute Dates
 - **Format**: `<value>01/04/2023</value><relation>ABSOLUTE</relation>`
 - **Usage**: Fixed regulatory boundaries, QOF reporting periods

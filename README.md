@@ -222,7 +222,8 @@ emis-xml-convertor/
 │   │   ├── text_utils.py                # Text processing utilities
 │   │   ├── debug_logger.py              # Development tools
 │   │   ├── github_loader.py             # External data loading
-│   │   └── caching/             # Lookup cache system
+│   │   └── caching/             # Comprehensive caching system
+│   │       ├── cache_manager.py          # Centralized cache management with TTL
 │   │       ├── lookup_cache.py          # Core caching engine
 │   │       └── generate_github_cache.py # Cache generation utilities
 │   └── common/                # Shared utilities and infrastructure
@@ -244,11 +245,12 @@ emis-xml-convertor/
 ## 🔧 Technical Specifications
 
 ### **Performance Optimizations**
-- **Cache-First Architecture**: Multi-tier caching (local → GitHub → API fallback)
-- **Single XML Parse**: Eliminates redundant processing with element classification
+- **Centralized Cache Management**: Unified caching architecture with optimized TTL settings
+- **Report-Specific Caching**: Instant dropdown switching with 10,000-entry SNOMED cache
+- **Memory Management**: Real-time monitoring with automatic garbage collection
 - **Dictionary-based Lookups**: O(1) SNOMED translation (100x faster than DataFrame searches)
-- **Smart Caching**: Session state management with intelligent invalidation
-- **Progress Tracking**: Real-time feedback for large file processing
+- **Progressive Loading**: Section-by-section rendering with native Streamlit spinners
+- **Lazy Export Generation**: Export files created only when requested
 
 ### **NHS Terminology Server Integration**
 - **FHIR R4 Compliance**: Full NHS England Terminology Server API support
@@ -360,6 +362,6 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 
 ---
 
-*Last Updated: October 2025*  
-*Application Version: 2.1.1*  
+*Last Updated: November 2025*  
+*Application Version: 2.2.0*  
 *Live Application: https://emis-xml-toolkit.streamlit.app/*

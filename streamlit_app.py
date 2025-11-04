@@ -17,149 +17,6 @@ import os
 import xml.etree.ElementTree as ET
 
 
-@st.cache_data(ttl=1800, max_entries=50)  # Cache XML processing for 30 minutes
-def extract_codes_with_separate_parsers(xml_content):
-    """
-    Extract EMIS GUIDs using separate search and report parsers while maintaining architectural separation.
-    Returns combined list of EMIS GUIDs with proper source attribution.
-    """
-    try:
-        root = ET.fromstring(xml_content)
-        all_emis_guids = []
-        
-        # Define namespaces
-        namespaces = {
-            'emis': 'http://www.e-mis.com/emisopen'
-        }
-        
-        # Step 1: Extract codes from searches using SearchAnalyzer approach
-        # Note: We don't actually need the analyzers for code extraction, just for structure
-        # Find all reports first, then filter for those with criteria
-        all_reports = root.findall('.//emis:report', namespaces) + root.findall('.//report')
-        searches = []
-        for report in all_reports:
-            # Check if this report has criteria (making it a search)
-            criteria = report.find('.//criteria')
-            if criteria is None:
-                criteria = report.find('.//emis:criteria', namespaces)
-            if criteria is not None:
-                searches.append(report)
-        
-        for search_elem in searches:
-            try:
-                # Get search ID for source attribution
-                search_id_elem = search_elem.find('id')
-                if search_id_elem is None:
-                    search_id_elem = search_elem.find('emis:id', namespaces)
-                if search_id_elem is None:
-                    search_id_elem = search_elem.find('id')
-                search_id = search_id_elem.text if search_id_elem is not None else f"search_{hash(ET.tostring(search_elem))}"
-                
-                # Extract the criteria content from this search and parse it as XML
-                criteria_content = ET.tostring(search_elem, encoding='unicode')
-                search_codes = parse_xml_for_emis_guids(f"<root>{criteria_content}</root>", source_guid=search_id)
-                all_emis_guids.extend(search_codes)
-                
-            except Exception as e:
-                st.warning(f"Error processing search: {str(e)}")
-                continue
-        
-        # Step 2: Extract codes from reports using ReportAnalyzer approach
-        
-        # Find list reports
-        list_reports = root.findall('.//emis:listReport', namespaces) + root.findall('.//listReport')
-        for report_elem in list_reports:
-            try:
-                # Find parent report by searching from root for reports containing this listReport
-                parent_report = None
-                for report in all_reports:
-                    if report_elem in list(report.iter()):
-                        parent_report = report
-                        break
-                
-                if parent_report is not None:
-                    report_id_elem = parent_report.find('id')
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('emis:id', namespaces)
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('id')
-                    report_id = report_id_elem.text if report_id_elem is not None else f"list_report_{hash(ET.tostring(report_elem))}"
-                else:
-                    report_id = f"list_report_{hash(ET.tostring(report_elem))}"
-                
-                # Extract codes from the report content
-                report_content = ET.tostring(report_elem, encoding='unicode')
-                report_codes = parse_xml_for_emis_guids(f"<root>{report_content}</root>", source_guid=report_id)
-                all_emis_guids.extend(report_codes)
-                
-            except Exception as e:
-                st.warning(f"Error processing list report: {str(e)}")
-                continue
-        
-        # Find audit reports
-        audit_reports = root.findall('.//emis:auditReport', namespaces) + root.findall('.//auditReport')
-        for report_elem in audit_reports:
-            try:
-                # Find parent report by searching from root for reports containing this auditReport
-                parent_report = None
-                for report in all_reports:
-                    if report_elem in list(report.iter()):
-                        parent_report = report
-                        break
-                
-                if parent_report is not None:
-                    report_id_elem = parent_report.find('id')
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('emis:id', namespaces)
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('id')
-                    report_id = report_id_elem.text if report_id_elem is not None else f"audit_report_{hash(ET.tostring(report_elem))}"
-                else:
-                    report_id = f"audit_report_{hash(ET.tostring(report_elem))}"
-                
-                report_content = ET.tostring(report_elem, encoding='unicode')
-                report_codes = parse_xml_for_emis_guids(f"<root>{report_content}</root>", source_guid=report_id)
-                all_emis_guids.extend(report_codes)
-                
-            except Exception as e:
-                st.warning(f"Error processing audit report: {str(e)}")
-                continue
-        
-        # Find aggregate reports
-        aggregate_reports = root.findall('.//emis:aggregateReport', namespaces) + root.findall('.//aggregateReport')
-        for report_elem in aggregate_reports:
-            try:
-                # Find parent report by searching from root for reports containing this aggregateReport
-                parent_report = None
-                for report in all_reports:
-                    if report_elem in list(report.iter()):
-                        parent_report = report
-                        break
-                
-                if parent_report is not None:
-                    report_id_elem = parent_report.find('id')
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('emis:id', namespaces)
-                    if report_id_elem is None:
-                        report_id_elem = parent_report.find('id')
-                    report_id = report_id_elem.text if report_id_elem is not None else f"aggregate_report_{hash(ET.tostring(report_elem))}"
-                else:
-                    report_id = f"aggregate_report_{hash(ET.tostring(report_elem))}"
-                
-                report_content = ET.tostring(report_elem, encoding='unicode')
-                report_codes = parse_xml_for_emis_guids(f"<root>{report_content}</root>", source_guid=report_id)
-                all_emis_guids.extend(report_codes)
-                
-            except Exception as e:
-                st.warning(f"Error processing aggregate report: {str(e)}")
-                continue
-        
-        return all_emis_guids
-        
-    except Exception as e:
-        st.error(f"Error in separate parser extraction: {str(e)}")
-        # Fallback to unified parsing
-        return parse_xml_for_emis_guids(xml_content, source_guid="entire_xml")
 
 # Page configuration
 st.set_page_config(
@@ -269,6 +126,12 @@ def main():
                         del st.session_state.xml_content
                     if 'unified_clinical_data_cache' in st.session_state:
                         del st.session_state.unified_clinical_data_cache
+                    if 'master_xml_json_export' in st.session_state:
+                        del st.session_state.master_xml_json_export
+                    # Clean up report export caches
+                    keys_to_remove = [key for key in st.session_state.keys() if key.startswith(('report_excel_', 'report_json_'))]
+                    for key in keys_to_remove:
+                        del st.session_state[key]
                     
                     st.session_state.is_processing = True
                     st.rerun()
@@ -311,8 +174,12 @@ def main():
                         if progress_bar:
                             progress_bar.progress(5, text="Parsing XML structure...")
                         
-                        # Use separate parsers to maintain architectural separation while enabling per-entity deduplication
-                        emis_guids = extract_codes_with_separate_parsers(xml_content)
+                        # Use cached XML code extraction from cache_manager
+                        from util_modules.utils.caching.cache_manager import cache_manager
+                        import hashlib
+                        
+                        xml_content_hash = hashlib.md5(xml_content.encode()).hexdigest()
+                        emis_guids = cache_manager.cache_xml_code_extraction(xml_content_hash, xml_content)
                         
                         # Store emis_guids in session state for potential reprocessing
                         st.session_state.emis_guids = emis_guids
@@ -362,7 +229,7 @@ def main():
                         
                         # Translate to SNOMED codes with progress tracking
                         if progress_bar:
-                            progress_bar.progress(30, text="Translating GUIDs to SNOMED codes...")
+                            progress_bar.progress(30, text="Processing clinical codes...")
                         
                         # Get deduplication mode from session state, default to unique_codes
                         deduplication_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
@@ -457,9 +324,8 @@ def main():
                         if progress_bar:
                             progress_bar.progress(100, text="Processing Complete! Rendering Results - This May Take a Moment...")
                         
-                        # Show a persistent message about rendering since UI preparation can take time
+                        # Remove the rendering message as it's no longer needed
                         rendering_placeholder = st.empty()
-                        rendering_placeholder.info("🎨 Preparing results display... Large files may take a moment to render.")
                         
                         # Clear progress bar after longer pause to show the message
                         if progress_bar:

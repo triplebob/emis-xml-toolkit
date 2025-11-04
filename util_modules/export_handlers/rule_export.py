@@ -193,3 +193,109 @@ class RuleExportHandler:
         filename = f"Rule_{rule_number}_{safe_search_name}_{timestamp}.xlsx"
         
         return filename, output.getvalue()
+    
+    def generate_comprehensive_analysis_report(self, analysis, xml_filename: str):
+        """
+        Generate comprehensive rule analysis report for download
+        
+        Args:
+            analysis: Analysis object (SearchRuleAnalysis or CompleteAnalysisResult)
+            xml_filename: Original XML filename for reference
+            
+        Returns:
+            tuple: (filename, report_text)
+        """
+        # Works with both SearchRuleAnalysis (legacy) and CompleteAnalysisResult (orchestrated)
+        
+        # Extract the right attributes based on analysis type
+        if hasattr(analysis, 'overall_complexity'):
+            # CompleteAnalysisResult from orchestrated analysis
+            complexity_metrics = analysis.overall_complexity
+            rule_flow = analysis.rule_flow
+            # Filter to only actual searches for detailed breakdown
+            from ..core.report_classifier import ReportClassifier
+            search_reports = ReportClassifier.filter_searches_only(analysis.reports)
+        else:
+            # SearchRuleAnalysis (legacy format)
+            complexity_metrics = analysis.complexity_metrics
+            rule_flow = analysis.rule_flow
+            search_reports = analysis.reports
+        
+        # Create detailed analysis report
+        report_lines = [
+            f"EMIS Search Rule Analysis Report",
+            f"Source File: {xml_filename}",
+            f"Document ID: {analysis.document_id}",
+            f"Created: {analysis.creation_time}",
+            f"",
+            f"COMPLEXITY OVERVIEW:",
+            f"Level: {complexity_metrics.get('complexity_level', 'Basic')}",
+            f"Score: {complexity_metrics.get('complexity_score', 0)}",
+            f"",
+            f"SEARCH EXECUTION FLOW:",
+        ]
+        
+        for i, step in enumerate(rule_flow, 1):
+            step_type = step.get('report_type', 'Search')
+            report_lines.append(f"Step {i} - {step_type}: {step.get('report_name', 'Unknown')}")
+            report_lines.append(f"  Action: {step.get('action', 'Unknown')}")
+            description = step.get('description', '')
+            if description:
+                report_lines.append(f"  Description: {description}")
+            report_lines.append("")
+        
+        report_lines.append("DETAILED RULE BREAKDOWN:")
+        
+        # Sort reports alphabetically with natural number ordering
+        try:
+            sorted_reports = sorted(search_reports, key=lambda x: self._natural_sort_key(x.name))
+        except (AttributeError, TypeError):
+            sorted_reports = search_reports
+        
+        for report in sorted_reports:
+            report_lines.append(f"\nREPORT: {report.name}")
+            report_lines.append(f"Description: {getattr(report, 'description', 'No description')}")
+            
+            if hasattr(report, 'criteria_groups') and report.criteria_groups:
+                for i, group in enumerate(report.criteria_groups):
+                    report_lines.append(f"\n  Criteria Group {i+1} (Logic: {group.member_operator}):")
+                    report_lines.append(f"  Action if matched: {group.action_if_true}")
+                    report_lines.append(f"  Action if not matched: {group.action_if_false}")
+                    
+                    for j, criterion in enumerate(group.criteria):
+                        report_lines.append(f"\n    Rule {j+1}: {criterion.display_name}")
+                        report_lines.append(f"    Table: {criterion.table}")
+                        # Note: Criterion descriptions are often inaccurate, removed
+                        if criterion.negation:
+                            report_lines.append(f"    Action: Exclude (NOT)")
+                        else:
+                            report_lines.append(f"    Action: Include")
+                        
+                        if criterion.restrictions:
+                            for restriction in criterion.restrictions:
+                                report_lines.append(f"    Restriction: {restriction.description}")
+            else:
+                report_lines.append("  No criteria groups found")
+        
+        report_text = "\n".join(report_lines)
+        
+        # Generate filename with timestamp
+        clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"{clean_xml_name}_rule_analysis_{timestamp}.txt"
+        
+        return filename, report_text
+    
+    def _natural_sort_key(self, text):
+        """Natural sort key that handles numbers and letters properly"""
+        import re
+        # Extract the leading number or letter from the name
+        match = re.match(r'^(\d+)', text)
+        if match:
+            # If it starts with a number, use that number for sorting
+            number = int(match.group(1))
+            return (0, number, text)  # Numbers come first
+        else:
+            # If it starts with a letter, use that letter for sorting
+            first_char = text[0].upper() if text else 'Z'
+            return (1, ord(first_char), text)  # Letters come after numbers

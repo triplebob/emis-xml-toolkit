@@ -281,6 +281,16 @@ def render_debug_controls() -> None:
                     emis_guid_col = st.session_state.get('emis_guid_col', 'EMIS GUID')
                     version_info = st.session_state.get('lookup_version_info')
                     
+                    # Log debug info to terminal
+                    if version_info:
+                        print(f"DEBUG - Version info found: {list(version_info.keys())}")
+                        if 'emis_version' in version_info:
+                            print(f"DEBUG - EMIS Version: {version_info['emis_version']}")
+                        else:
+                            print("DEBUG - Missing original EMIS version data - cache will have limited version info")
+                    else:
+                        print("DEBUG - No version info found in session state")
+                    
                     if lookup_df is None or lookup_df.empty:
                         st.error("❌ No lookup table loaded. Please check that the app has loaded the lookup table.")
                     else:

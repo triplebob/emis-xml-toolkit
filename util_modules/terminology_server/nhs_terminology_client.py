@@ -140,7 +140,7 @@ class NHSTerminologyClient:
             return None, f"Connection error: {str(e)}"
     
     def _expand_concept_uncached(self, snomed_code: str, include_inactive: bool = False) -> ExpansionResult:
-        """Uncached version for worker threads - identical logic to expand_concept"""
+        """Uncached version for worker threads with automatic pagination"""
         try:
             # First, look up the concept to get its display name
             source_display = snomed_code
@@ -159,57 +159,90 @@ class NHSTerminologyClient:
             # ECL: < means "all descendants of" (children, grandchildren, etc.)
             ecl_expression = f"< {snomed_code}"
             
-            # Create an implicit ValueSet using ECL in the URL parameter
-            params = {
-                'url': f'http://snomed.info/sct?fhir_vs=ecl/{quote(ecl_expression)}',
-                '_format': 'json',
-                'count': 1000,  # Limit to prevent timeouts
-                'offset': 0
-            }
-            
-            if not include_inactive:
-                params['activeOnly'] = 'true'
-            
-            # Make the ValueSet $expand request
-            response_data, error_message = self._make_request(
-                "ValueSet/$expand",
-                params=params
-            )
-            
-            if not response_data:
-                return ExpansionResult(
-                    source_code=snomed_code,
-                    source_display="Unknown",
-                    children=[],
-                    total_count=0,
-                    expansion_timestamp=datetime.now(),
-                    error=error_message or "Unknown error"
-                )
-            
-            # Parse expansion results
-            children = []
+            # Fetch all results using pagination
+            all_children = []
+            offset = 0
+            batch_size = 1000
             total_count = 0
             
-            if 'expansion' in response_data:
-                expansion = response_data['expansion']
-                total_count = expansion.get('total', 0)
+            while True:
+                # Create request parameters for this batch
+                params = {
+                    'url': f'http://snomed.info/sct?fhir_vs=ecl/{quote(ecl_expression)}',
+                    '_format': 'json',
+                    'count': batch_size,
+                    'offset': offset
+                }
                 
-                if 'contains' in expansion:
-                    for concept in expansion['contains']:
-                        # All concepts in the expansion are children (ECL < excludes the parent)
-                        children.append(ExpandedConcept(
-                            code=concept.get('code', ''),
-                            display=concept.get('display', ''),
-                            system=concept.get('system', 'http://snomed.info/sct'),
-                            inactive=concept.get('inactive', False),
-                            parent_code=snomed_code
-                        ))
+                if not include_inactive:
+                    params['activeOnly'] = 'true'
+                
+                # Make the ValueSet $expand request for this batch
+                response_data, error_message = self._make_request(
+                    "ValueSet/$expand",
+                    params=params
+                )
+                
+                if not response_data:
+                    # If first batch fails, return error
+                    if offset == 0:
+                        return ExpansionResult(
+                            source_code=snomed_code,
+                            source_display="Unknown",
+                            children=[],
+                            total_count=0,
+                            expansion_timestamp=datetime.now(),
+                            error=error_message or "Unknown error"
+                        )
+                    else:
+                        # If later batch fails, break and return what we have
+                        break
+                
+                # Parse this batch of results
+                batch_children = []
+                
+                if 'expansion' in response_data:
+                    expansion = response_data['expansion']
+                    # Get total count from first batch
+                    if offset == 0:
+                        total_count = expansion.get('total', 0)
+                    
+                    if 'contains' in expansion:
+                        for concept in expansion['contains']:
+                            # All concepts in the expansion are children (ECL < excludes the parent)
+                            batch_children.append(ExpandedConcept(
+                                code=concept.get('code', ''),
+                                display=concept.get('display', ''),
+                                system=concept.get('system', 'http://snomed.info/sct'),
+                                inactive=concept.get('inactive', False),
+                                parent_code=snomed_code
+                            ))
+                
+                # Add this batch to our collection
+                all_children.extend(batch_children)
+                
+                # Check if we're done
+                if len(batch_children) < batch_size:
+                    # Received fewer results than requested, we're at the end
+                    break
+                
+                if total_count > 0 and len(all_children) >= total_count:
+                    # We have all the results according to total_count
+                    break
+                
+                # Prepare for next batch
+                offset += batch_size
+                
+                # Safety limit: don't fetch more than 50,000 results in one expansion
+                # This prevents runaway requests on very large concept hierarchies
+                if len(all_children) >= 50000:
+                    break
             
             return ExpansionResult(
                 source_code=snomed_code,
                 source_display=source_display,
-                children=children,
-                total_count=len(children),
+                children=all_children,
+                total_count=total_count if total_count > 0 else len(all_children),
                 expansion_timestamp=datetime.now(),
                 error=None
             )
@@ -227,7 +260,7 @@ class NHSTerminologyClient:
     # @st.cache_data(ttl=3600, max_entries=2000)  # Disabled - _self conflicts with worker threads
     def expand_concept(self, snomed_code: str, include_inactive: bool = False) -> ExpansionResult:
         """
-        Expand a SNOMED concept to get all child concepts using $expand operation
+        Expand a SNOMED concept to get all child concepts using $expand operation with automatic pagination
         
         Args:
             snomed_code: The SNOMED CT code to expand
@@ -236,88 +269,8 @@ class NHSTerminologyClient:
         Returns:
             ExpansionResult with child concepts or error information
         """
-        try:
-            # First, look up the concept to get its display name
-            source_display = snomed_code
-            try:
-                lookup_result = self._lookup_concept_uncached(snomed_code)
-                if lookup_result and 'parameter' in lookup_result:
-                    for param in lookup_result.get('parameter', []):
-                        if param.get('name') == 'display':
-                            source_display = param.get('valueString', snomed_code)
-                            break
-            except Exception:
-                # If lookup fails, continue with the code as display
-                pass
-            
-            # Use the correct FHIR ValueSet $expand operation with ECL
-            # ECL: < means "all descendants of" (children, grandchildren, etc.)
-            ecl_expression = f"< {snomed_code}"
-            
-            # Create an implicit ValueSet using ECL in the URL parameter
-            params = {
-                'url': f'http://snomed.info/sct?fhir_vs=ecl/{quote(ecl_expression)}',
-                '_format': 'json',
-                'count': 1000,  # Limit to prevent timeouts
-                'offset': 0
-            }
-            
-            if not include_inactive:
-                params['activeOnly'] = 'true'
-            
-            # Make the ValueSet $expand request
-            response_data, error_message = self._make_request(
-                "ValueSet/$expand",
-                params=params
-            )
-            
-            if not response_data:
-                return ExpansionResult(
-                    source_code=snomed_code,
-                    source_display="Unknown",
-                    children=[],
-                    total_count=0,
-                    expansion_timestamp=datetime.now(),
-                    error=error_message or "Unknown error"
-                )
-            
-            # Parse expansion results
-            children = []
-            total_count = 0
-            
-            if 'expansion' in response_data:
-                expansion = response_data['expansion']
-                total_count = expansion.get('total', 0)
-                
-                if 'contains' in expansion:
-                    for concept in expansion['contains']:
-                        # All concepts in the expansion are children (ECL < excludes the parent)
-                        children.append(ExpandedConcept(
-                            code=concept.get('code', ''),
-                            display=concept.get('display', ''),
-                            system=concept.get('system', 'http://snomed.info/sct'),
-                            inactive=concept.get('inactive', False),
-                            parent_code=snomed_code
-                        ))
-            
-            return ExpansionResult(
-                source_code=snomed_code,
-                source_display=source_display,
-                children=children,
-                total_count=len(children),
-                expansion_timestamp=datetime.now(),
-                error=None
-            )
-            
-        except Exception as e:
-            return ExpansionResult(
-                source_code=snomed_code,
-                source_display="Unknown",
-                children=[],
-                total_count=0,
-                expansion_timestamp=datetime.now(),
-                error=str(e)
-            )
+        # Delegate to the uncached version which now has pagination
+        return self._expand_concept_uncached(snomed_code, include_inactive)
     
     def _lookup_concept_uncached(self, snomed_code: str) -> Optional[Dict]:
         """Uncached version for worker threads - identical logic to lookup_concept"""

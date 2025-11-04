@@ -1235,53 +1235,72 @@ class ReportJSONExportGenerator:
         }
     
     def _format_date_operator(self, operator: str, value: str, unit: str) -> str:
-        """Format date operator for human readable descriptions (shared with search export)"""
-        if value.startswith('-'):
-            # Past dates
-            val_num = value[1:]
-            unit_text = unit.lower() + ('s' if val_num != '1' else '') if unit else 'days'
-            if operator == 'GTEQ':
-                return f"on or after {val_num} {unit_text} before the search date"
-            elif operator == 'GT':
-                return f"after {val_num} {unit_text} before the search date"
-            elif operator == 'LTEQ':
-                return f"on or before {val_num} {unit_text} before the search date"
-            elif operator == 'LT':
-                return f"before {val_num} {unit_text} before the search date"
-        elif value == '0' or not value:
-            # Current date/baseline
-            if operator == 'GTEQ':
-                return "on or after the search date"
-            elif operator == 'GT':
-                return "after the search date"
-            elif operator == 'LTEQ':
-                return "on or before the search date"
-            elif operator == 'LT':
-                return "before the search date"
+        """Format date operator for human readable descriptions with EMIS terminology"""
+        # Convert operator to EMIS format
+        if operator == 'GTEQ':
+            op_text = 'after or on'
+        elif operator == 'LTEQ':
+            op_text = 'before or on'
+        elif operator == 'GT':
+            op_text = 'after'
+        elif operator == 'LT':
+            op_text = 'before'
         else:
-            # Future dates or absolute dates
-            if '/' in value:  # Absolute date like "23/06/2025"
-                if operator == 'GTEQ':
-                    return f"on or after {value}"
-                elif operator == 'GT':
-                    return f"after {value}"
-                elif operator == 'LTEQ':
-                    return f"on or before {value}"
-                elif operator == 'LT':
-                    return f"before {value}"
-            else:
-                # Relative future dates
-                unit_text = unit.lower() + ('s' if value != '1' else '') if unit else 'days'
-                if operator == 'GTEQ':
-                    return f"on or after {value} {unit_text} from the search date"
-                elif operator == 'GT':
-                    return f"after {value} {unit_text} from the search date"
-                elif operator == 'LTEQ':
-                    return f"on or before {value} {unit_text} from the search date"
-                elif operator == 'LT':
-                    return f"before {value} {unit_text} from the search date"
+            op_text = 'on'
         
-        return f"{operator} {value} {unit}"
+        # Handle numeric offset patterns first (to catch -6, 7, etc.)
+        if value and value.lstrip('-').isdigit():
+            if value.startswith('-'):
+                # Negative relative date (before search date)
+                abs_value = value[1:]  # Remove the minus sign
+                unit_text = f"{unit.lower()}s" if abs_value != '1' else unit.lower()
+                return f"and the Date is {op_text} {abs_value} {unit_text} before the search date"
+            else:
+                # Positive relative date (after search date)
+                unit_text = f"{unit.lower()}s" if value != '1' else unit.lower()
+                return f"and the Date is {op_text} {value} {unit_text} after the search date"
+        
+        # Handle temporal variable patterns (Last/This/Next + time unit)
+        elif unit and unit.upper() in ['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'FISCALYEAR']:
+            if value.lower() == 'last':
+                if unit.upper() == 'FISCALYEAR':
+                    return "and the Date is last fiscal year"
+                elif unit.upper() == 'QUARTER':
+                    return "and the Date is last yearly quarter"
+                else:
+                    return f"and the Date is last {unit.lower()}"
+            elif value.lower() == 'this':
+                if unit.upper() == 'FISCALYEAR':
+                    return "and the Date is this fiscal year"
+                elif unit.upper() == 'QUARTER':
+                    return "and the Date is this yearly quarter"
+                else:
+                    return f"and the Date is this {unit.lower()}"
+            elif value.lower() == 'next':
+                if unit.upper() == 'FISCALYEAR':
+                    return "and the Date is next fiscal year"
+                elif unit.upper() == 'QUARTER':
+                    return "and the Date is next yearly quarter"
+                else:
+                    return f"and the Date is next {unit.lower()}"
+            else:
+                return f"and the Date is {value} {unit.lower()}"
+        
+        # Fallback for other date patterns
+        if '/' in value:  # Absolute date like "23/06/2025"
+            if operator == 'GTEQ':
+                return f"and the Date is on or after {value}"
+            elif operator == 'GT':
+                return f"and the Date is after {value}"
+            elif operator == 'LTEQ':
+                return f"and the Date is on or before {value}"
+            elif operator == 'LT':
+                return f"and the Date is before {value}"
+            else:
+                return f"and the Date is on {value}"
+        
+        # Default fallback
+        return f"and the Date is {op_text} {value} {unit.lower() if unit else 'date'}"
     
     def _determine_parameter_type(self, column: str) -> str:
         """Determine parameter data type for SQL recreation (shared with search export)"""

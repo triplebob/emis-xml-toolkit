@@ -15,7 +15,6 @@ This module handles rendering of all clinical data related tabs:
 from .common_imports import *
 from .base_tab import BaseTab, TabRenderer
 from .tab_helpers import (
-    _reprocess_with_new_mode,
     _lookup_snomed_for_ui,
     _deduplicate_clinical_data_by_emis_guid,
     _add_source_info_to_clinical_data,
@@ -172,17 +171,11 @@ def render_clinical_codes_tab(results=None):
             help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
         )
         
-        # Check if mode changed and trigger reprocessing
+        # Check if mode changed - no reprocessing needed, just update session state
         if dedup_mode != current_mode:
             st.session_state.current_deduplication_mode = dedup_mode
-            # Trigger reprocessing with new mode if we have the necessary data
-            if ('emis_guids' in st.session_state and 'lookup_df' in st.session_state):
-                _reprocess_with_new_mode(dedup_mode)
     
-    # Apply deduplication in unique codes mode only
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes' and clinical_data:
-        clinical_data = _deduplicate_clinical_data_by_emis_guid(clinical_data)
+    # Deduplication is now handled by render_section_with_data based on current mode
     
     # Standalone clinical codes section
     render_section_with_data(
@@ -227,12 +220,9 @@ def render_medications_tab(results):
             help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
         )
         
-        # Check if mode changed and trigger reprocessing
+        # Check if mode changed - no reprocessing needed, just update session state
         if dedup_mode != current_mode:
             st.session_state.current_deduplication_mode = dedup_mode
-            # Trigger reprocessing with new mode if we have the necessary data
-            if ('emis_guids' in st.session_state and 'lookup_df' in st.session_state):
-                _reprocess_with_new_mode(dedup_mode)
     
     # Switch to unified parsing approach using orchestrated analysis (like clinical codes tab)
     unified_results = get_unified_clinical_data()
@@ -243,16 +233,7 @@ def render_medications_tab(results):
     # Get medications data from unified analysis (already standardized and categorized with _original_fields)
     medications_data = unified_results.get('medications', [])
     
-    # Apply deduplication based on current mode
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes' and medications_data:
-        # Deduplicate by EMIS GUID - keep only one instance per medication code
-        unique_medications = {}
-        for medication in medications_data:
-            emis_guid = medication.get('EMIS GUID', '')
-            if emis_guid and emis_guid not in unique_medications:
-                unique_medications[emis_guid] = medication
-        medications_data = list(unique_medications.values())
+    # Deduplication is now handled by render_section_with_data based on current mode
         
     # Determine what medications we have
     has_standalone = len(medications_data) > 0
@@ -267,150 +248,18 @@ def render_medications_tab(results):
                 filtered_med = {k: v for k, v in medication.items() if k != 'Has Qualifier'}
                 medications_data_filtered.append(filtered_med)
             
-            # Show info text
-            st.info("These are medications that are NOT part of any pseudo-refset and can be used directly.")
-            
-            # Custom rendering for medications with simplified download options
-            df = pd.DataFrame(medications_data_filtered)
-            
-            # Apply column filtering like other sections
-            display_df = df.copy()
-            
-            # Always hide certain columns
-            always_hidden = ['ValueSet GUID', 'VALUESET GUID']
-            for col in always_hidden:
-                if col in display_df.columns:
-                    display_df = display_df.drop(columns=[col])
-            
-            # Hide raw duplicate columns that have formatted versions
-            raw_columns_to_hide = ['source_guid', 'source_name', 'source_container', 'source_type', 'report_type']
-            for col in raw_columns_to_hide:
-                if col in display_df.columns:
-                    display_df = display_df.drop(columns=[col])
-            
-            # Hide internal categorization flags
-            internal_flags_to_hide = ['is_refset', 'is_pseudo', 'is_medication', 'is_pseudorefset', 'is_pseudomember']
-            for col in internal_flags_to_hide:
-                if col in display_df.columns:
-                    display_df = display_df.drop(columns=[col])
-            
-            # Hide debug columns unless debug mode is enabled
-            show_debug = st.session_state.get('debug_mode', False)
-            if not show_debug and '_original_fields' in display_df.columns:
-                display_df = display_df.drop(columns=['_original_fields'])
-            
-            # Hide source columns in unique_codes mode for display only
-            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-            if current_mode == 'unique_codes':
-                columns_to_hide = ['Source Type', 'Source Name', 'Source Container', 'Source GUID']
-                for col in columns_to_hide:
-                    if col in display_df.columns:
-                        display_df = display_df.drop(columns=[col])
-            
-            # Add emojis for UI display
-            if 'EMIS GUID' in display_df.columns:
-                display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
-            if 'SNOMED Code' in display_df.columns:
-                display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
-            if 'Source Type' in display_df.columns:
-                display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 
-                    x if ('🔍' in str(x) or '📊' in str(x) or '📋' in str(x) or '📈' in str(x)) else (
-                        f"🔍 {x}" if x and x == "Search" else
-                        f"📊 {x}" if x and "Aggregate" in str(x) else
-                        f"📋 {x}" if x and "List" in str(x) else
-                        f"📈 {x}" if x and "Audit" in str(x) else
-                        f"📊 {x}" if x else x
-                    )
-                )
-            
-            # Apply highlighting and display
-            styled_df = display_df.style.apply(get_success_highlighting_function(), axis=1)
-            st.dataframe(styled_df, width='stretch', hide_index=True)
-            
-            # Simplified download options - say "medications" instead of "codes"
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                has_source_tracking = 'Source GUID' in df.columns or 'Source Type' in df.columns
-                
-                if has_source_tracking:
-                    export_filter = st.radio(
-                        "Download Options:",
-                        ["All Medications", "Only Matched", "Only Unmatched", "Only Medications from Searches", "Only Medications from Reports"],
-                        key="medications_export_filter"
-                    )
-                else:
-                    export_filter = st.radio(
-                        "Download Options:",
-                        ["All Medications", "Only Matched", "Only Unmatched"],
-                        key="medications_export_filter_simple"
-                    )
-            
-            with col2:
-                # LAZY CSV generation - only when button is clicked
-                if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="medications_generate_btn"):
-                    try:
-                        with st.spinner(f"Generating {export_filter.lower()}..."):
-                            # Filter data based on selection
-                            filtered_df = df.copy()
-                            
-                            if export_filter == "Only Matched":
-                                # Filter for codes with successful mapping
-                                if 'Mapping Found' in filtered_df.columns:
-                                    filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
-                            elif export_filter == "Only Unmatched":
-                                # Filter for codes without successful mapping
-                                if 'Mapping Found' in filtered_df.columns:
-                                    filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
-                            elif export_filter == "Only Medications from Searches" and has_source_tracking:
-                                # Filter for search sources
-                                if 'Source Type' in filtered_df.columns:
-                                    filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                                elif 'source_type' in filtered_df.columns:
-                                    filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-                            elif export_filter == "Only Medications from Reports" and has_source_tracking:
-                                # Filter for report sources 
-                                if 'Source Type' in filtered_df.columns:
-                                    filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                                elif 'source_type' in filtered_df.columns:
-                                    filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-                            
-                            # Generate filename
-                            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                            xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-                            
-                            if export_filter == "Only Matched":
-                                filename = f"medications_matched_{xml_filename}_{timestamp}.csv"
-                            elif export_filter == "Only Unmatched":
-                                filename = f"medications_unmatched_{xml_filename}_{timestamp}.csv"
-                            elif export_filter == "Only Medications from Searches":
-                                filename = f"medications_searches_{xml_filename}_{timestamp}.csv"
-                            elif export_filter == "Only Medications from Reports":
-                                filename = f"medications_reports_{xml_filename}_{timestamp}.csv"
-                            else:
-                                filename = f"medications_all_{xml_filename}_{timestamp}.csv"
-                            
-                            # Create download
-                            if not filtered_df.empty:
-                                csv_buffer = io.StringIO()
-                                filtered_df.to_csv(csv_buffer, index=False)
-                                
-                                st.download_button(
-                                    label=f"⬇️ Download {export_filter}",
-                                    data=csv_buffer.getvalue(),
-                                    file_name=filename,
-                                    mime="text/csv",
-                                    key="medications_download"
-                                )
-                                # Clear memory immediately after download
-                                del csv_buffer, filtered_df
-                                import gc
-                                gc.collect()
-                                st.success("✅ Medications export generated successfully")
-                            else:
-                                st.info(f"No data available for {export_filter}")
-                    except Exception as e:
-                        st.error(f"Export generation failed: {str(e)}")
+            # Use the same efficient rendering pattern as clinical codes
+            render_section_with_data(
+                title="",  # Empty title since we rendered it above
+                data=medications_data_filtered,
+                info_text="These are medications that are NOT part of any pseudo-refset and can be used directly. " + 
+                          ("Use the Mode toggle above to switch between 'Unique Codes' (show each medication once across entire XML) and 'Per Source' (show medications per search/report with source tracking)." if current_mode == 'unique_per_entity' else 
+                           "Currently showing unique medications only (one instance per medication across entire XML). Use the Mode toggle to show per-source tracking."),
+                empty_message="No standalone medications found in this XML file",
+                download_label="📥 Download Standalone Medications CSV",
+                filename_prefix="standalone_medications",
+                highlighting_function=get_success_highlighting_function()
+            )
         
         # Show pseudo-refset medications section if they exist
         if has_pseudo:
@@ -474,12 +323,9 @@ def render_refsets_tab(results):
             help="🔀 Unique Codes: Show each refset once\n📍 Per Source: Show refsets per search/report"
         )
         
-        # Check if mode changed and trigger reprocessing
+        # Check if mode changed - no reprocessing needed, just update session state
         if dedup_mode != current_mode:
             st.session_state.current_deduplication_mode = dedup_mode
-            # Trigger reprocessing with new mode if we have the necessary data
-            if ('emis_guids' in st.session_state and 'lookup_df' in st.session_state):
-                _reprocess_with_new_mode(dedup_mode)
     
     # Switch to unified parsing approach using orchestrated analysis (like clinical codes tab)
     unified_results = get_unified_clinical_data()
@@ -490,16 +336,7 @@ def render_refsets_tab(results):
     # Get refsets data from unified analysis (already standardized with _original_fields)
     refsets_data = unified_results.get('refsets', [])
     
-    # Apply deduplication based on current mode
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes' and refsets_data:
-        # Deduplicate by EMIS GUID - keep only one instance per refset code
-        unique_refsets = {}
-        for refset in refsets_data:
-            emis_guid = refset.get('EMIS GUID', '')
-            if emis_guid and emis_guid not in unique_refsets:
-                unique_refsets[emis_guid] = refset
-        refsets_data = list(unique_refsets.values())
+    # Deduplication is now handled by render_section_with_data based on current mode
     
     # Refsets section with proper source tracking display
     if refsets_data:
@@ -514,137 +351,18 @@ def render_refsets_tab(results):
         
         current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
         
-        # Show info text
-        if current_mode == 'unique_per_entity':
-            st.info("These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking.")
-        else:
-            st.info("These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. Currently showing unique refsets only. Use the Mode toggle to show per-source tracking.")
-        
-        # Custom rendering for refsets with simplified download options like pseudo-refsets
-        df = pd.DataFrame(refsets_data_filtered)
-        
-        # Apply column filtering like other sections
-        display_df = df.copy()
-        
-        # Always hide certain columns
-        always_hidden = ['ValueSet GUID', 'VALUESET GUID']
-        for col in always_hidden:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide raw duplicate columns that have formatted versions
-        raw_columns_to_hide = ['source_guid', 'source_name', 'source_container', 'source_type', 'report_type']
-        for col in raw_columns_to_hide:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide internal categorization flags
-        internal_flags_to_hide = ['is_refset', 'is_pseudo', 'is_medication', 'is_pseudorefset', 'is_pseudomember']
-        for col in internal_flags_to_hide:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide debug columns unless debug mode is enabled
-        show_debug = st.session_state.get('debug_mode', False)
-        if not show_debug and '_original_fields' in display_df.columns:
-            display_df = display_df.drop(columns=['_original_fields'])
-        
-        # Hide source columns in unique_codes mode for display only
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        if current_mode == 'unique_codes':
-            columns_to_hide = ['Source Type', 'Source Name', 'Source Container', 'Source GUID']
-            for col in columns_to_hide:
-                if col in display_df.columns:
-                    display_df = display_df.drop(columns=[col])
-        
-        # Add emojis for UI display
-        if 'EMIS GUID' in display_df.columns:
-            display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
-        if 'SNOMED Code' in display_df.columns:
-            display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
-        if 'Source Type' in display_df.columns:
-            display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 
-                x if ('🔍' in str(x) or '📊' in str(x) or '📋' in str(x) or '📈' in str(x)) else (
-                    f"🔍 {x}" if x and x == "Search" else
-                    f"📊 {x}" if x and "Aggregate" in str(x) else
-                    f"📋 {x}" if x and "List" in str(x) else
-                    f"📈 {x}" if x and "Audit" in str(x) else
-                    f"📊 {x}" if x else x
-                )
-            )
-        
-        # Apply highlighting and display
-        styled_df = display_df.style.apply(highlight_refsets, axis=1)
-        st.dataframe(styled_df, width='stretch', hide_index=True)
-        
-        # Simplified download options - only 3 options like pseudo-refsets tab
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            has_source_tracking = 'Source GUID' in df.columns or 'Source Type' in df.columns
-            
-            if has_source_tracking:
-                export_filter = st.radio(
-                    "Download Options:",
-                    ["All Refsets", "Only Refsets from Searches", "Only Refsets from Reports"],
-                    key="refsets_export_filter"
-                )
-            else:
-                export_filter = "All Refsets"
-        
-        with col2:
-            # LAZY CSV generation - only when button is clicked
-            if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="refsets_generate_btn"):
-                try:
-                    with st.spinner(f"Generating {export_filter.lower()}..."):
-                        # Filter data based on selection
-                        filtered_df = df.copy()
-                        
-                        if export_filter == "Only Refsets from Searches" and has_source_tracking:
-                            # Filter for search sources
-                            if 'Source Type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                            elif 'source_type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-                        elif export_filter == "Only Refsets from Reports" and has_source_tracking:
-                            # Filter for report sources 
-                            if 'Source Type' in filtered_df.columns:
-                                filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                            elif 'source_type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-                        
-                        # Generate filename
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-                        
-                        if export_filter == "Only Refsets from Searches":
-                            filename = f"refsets_searches_{xml_filename}_{timestamp}.csv"
-                        elif export_filter == "Only Refsets from Reports":
-                            filename = f"refsets_reports_{xml_filename}_{timestamp}.csv"
-                        else:
-                            filename = f"refsets_all_{xml_filename}_{timestamp}.csv"
-                        
-                        # Create download
-                        if not filtered_df.empty:
-                            csv_buffer = io.StringIO()
-                            filtered_df.to_csv(csv_buffer, index=False)
-                            
-                            st.download_button(
-                                label=f"⬇️ Download {export_filter}",
-                                data=csv_buffer.getvalue(),
-                                file_name=filename,
-                                mime="text/csv",
-                                key="refsets_download"
-                            )
-                            # Clear memory immediately after download
-                            del csv_buffer, filtered_df
-                            import gc
-                            gc.collect()
-                            st.success("✅ Refsets export generated successfully")
-                        else:
-                            st.info(f"No data available for {export_filter}")
-                except Exception as e:
-                    st.error(f"Export generation failed: {str(e)}")
+        # Use the same efficient rendering pattern as clinical codes and medications
+        render_section_with_data(
+            title="",  # Empty title since we rendered it above
+            data=refsets_data_filtered,
+            info_text="These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. " + 
+                      ("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                       "Currently showing unique refsets only. Use the Mode toggle to show per-source tracking."),
+            empty_message="No refsets found in this XML file",
+            download_label="📥 Download Refsets CSV",
+            filename_prefix="refsets",
+            highlighting_function=highlight_refsets
+        )
     else:
         st.info("No refsets found in this XML file")
 
@@ -688,12 +406,9 @@ def render_pseudo_refsets_tab(results):
             help="🔀 Unique Codes: Show each pseudo-refset once\n📍 Per Source: Show pseudo-refsets per search/report"
         )
         
-        # Check if mode changed and trigger reprocessing
+        # Check if mode changed - no reprocessing needed, just update session state
         if dedup_mode != current_mode:
             st.session_state.current_deduplication_mode = dedup_mode
-            # Trigger reprocessing with new mode if we have the necessary data
-            if ('emis_guids' in st.session_state and 'lookup_df' in st.session_state):
-                _reprocess_with_new_mode(dedup_mode)
     
     # Show appropriate dynamic message based on pseudo-refsets and mode
     if not pseudo_refsets_data:
@@ -705,23 +420,10 @@ def render_pseudo_refsets_tab(results):
         else:
             st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
     
-    # Pseudo-refsets are already generated in unified parsing
-    # Apply deduplication based on mode for pseudo-refsets
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    display_pseudo_refsets = pseudo_refsets_data.copy()
+    # Deduplication is now handled by render_section_with_data based on current mode
+    display_pseudo_refsets = pseudo_refsets_data
     
-    if current_mode == 'unique_codes' and display_pseudo_refsets:
-        # Deduplicate by ValueSet GUID
-        seen_guids = set()
-        unique_pseudo_refsets = []
-        for refset in display_pseudo_refsets:
-            vs_guid = refset.get('ValueSet GUID')
-            if vs_guid and vs_guid not in seen_guids:
-                seen_guids.add(vs_guid)
-                unique_pseudo_refsets.append(refset)
-        display_pseudo_refsets = unique_pseudo_refsets
-    
-    # Render pseudo-refsets section with simplified table and downloads
+    # Use efficient render_section_with_data pattern for pseudo-refsets
     if display_pseudo_refsets:
         # Filter out unnecessary columns for pseudo-refsets display
         display_data = []
@@ -729,133 +431,16 @@ def render_pseudo_refsets_tab(results):
             filtered_refset = {k: v for k, v in refset.items() if k not in ['Descendants', 'Has Qualifier']}
             display_data.append(filtered_refset)
         
-        # Custom rendering for pseudo-refsets with simplified download options
-        df = pd.DataFrame(display_data)
-        
-        # Apply column filtering like other sections
-        display_df = df.copy()
-        
-        # Always hide certain columns
-        always_hidden = ['ValueSet GUID', 'VALUESET GUID']
-        for col in always_hidden:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide raw duplicate columns that have formatted versions
-        raw_columns_to_hide = ['source_guid', 'source_name', 'source_container', 'source_type', 'report_type']
-        for col in raw_columns_to_hide:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide internal categorization flags
-        internal_flags_to_hide = ['is_refset', 'is_pseudo', 'is_medication', 'is_pseudorefset', 'is_pseudomember']
-        for col in internal_flags_to_hide:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-        
-        # Hide debug columns unless debug mode is enabled
-        show_debug = st.session_state.get('debug_mode', False)
-        if not show_debug and '_original_fields' in display_df.columns:
-            display_df = display_df.drop(columns=['_original_fields'])
-        
-        # Hide source columns in unique_codes mode for display only
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        if current_mode == 'unique_codes':
-            columns_to_hide = ['Source Type', 'Source Name', 'Source Container', 'Source GUID']
-            for col in columns_to_hide:
-                if col in display_df.columns:
-                    display_df = display_df.drop(columns=[col])
-        
-        # Add emojis for UI display
-        if 'EMIS GUID' in display_df.columns:
-            display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
-        if 'SNOMED Code' in display_df.columns:
-            display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
-        if 'Source Type' in display_df.columns:
-            display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 
-                x if ('🔍' in str(x) or '📊' in str(x) or '📋' in str(x) or '📈' in str(x)) else (
-                    f"🔍 {x}" if x and x == "Search" else
-                    f"📊 {x}" if x and "Aggregate" in str(x) else
-                    f"📋 {x}" if x and "List" in str(x) else
-                    f"📈 {x}" if x and "Audit" in str(x) else
-                    f"📊 {x}" if x else x
-                )
-            )
-        
-        # Apply highlighting and display
-        styled_df = display_df.style.apply(get_warning_highlighting_function(), axis=1)
-        st.dataframe(styled_df, width='stretch', hide_index=True)
-        
-        # Simplified download options - only 3 options instead of 5
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            has_source_tracking = 'Source GUID' in df.columns or 'Source Type' in df.columns
-            
-            if has_source_tracking:
-                export_filter = st.radio(
-                    "Download Options:",
-                    ["All Pseudo-Refsets", "All Pseudo from Searches", "All Pseudo from Reports"],
-                    key="pseudo_refsets_export_filter"
-                )
-            else:
-                export_filter = "All Pseudo-Refsets"
-        
-        with col2:
-            # LAZY CSV generation - only when button is clicked
-            if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="pseudo_refsets_generate_btn"):
-                try:
-                    with st.spinner(f"Generating {export_filter.lower()}..."):
-                        # Filter data based on selection
-                        filtered_df = df.copy()
-                        
-                        if export_filter == "All Pseudo from Searches" and has_source_tracking:
-                            # Filter for search sources
-                            if 'Source Type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                            elif 'source_type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-                        elif export_filter == "All Pseudo from Reports" and has_source_tracking:
-                            # Filter for report sources 
-                            if 'Source Type' in filtered_df.columns:
-                                filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                            elif 'source_type' in filtered_df.columns:
-                                filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-                        
-                        # Generate filename
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-                        
-                        if export_filter == "All Pseudo from Searches":
-                            filename = f"pseudo_refsets_searches_{xml_filename}_{timestamp}.csv"
-                        elif export_filter == "All Pseudo from Reports":
-                            filename = f"pseudo_refsets_reports_{xml_filename}_{timestamp}.csv"
-                        else:
-                            filename = f"pseudo_refsets_all_{xml_filename}_{timestamp}.csv"
-                        
-                        # Create download
-                        if not filtered_df.empty:
-                            csv_buffer = io.StringIO()
-                            filtered_df.to_csv(csv_buffer, index=False)
-                            
-                            st.download_button(
-                                label=f"⬇️ Download {export_filter}",
-                                data=csv_buffer.getvalue(),
-                                file_name=filename,
-                                mime="text/csv",
-                                key="pseudo_refsets_download"
-                            )
-                            # Clear memory immediately after download
-                            del csv_buffer, filtered_df
-                            import gc
-                            gc.collect()
-                            st.success("✅ Pseudo-refsets export generated successfully")
-                        else:
-                            st.info(f"No data available for {export_filter}")
-                except Exception as e:
-                    st.error(f"Export generation failed: {str(e)}")
-        
-        # Remove the render_section_with_data call since we handled it above
+        render_section_with_data(
+            title="",  # No title needed as it's already shown above
+            data=display_data,
+            info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                      "Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking."),
+            empty_message="✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).",
+            download_label="📥 Download Pseudo-Refsets CSV",
+            filename_prefix="pseudo_refsets",
+            highlighting_function=get_warning_highlighting_function()
+        )
         
         st.warning("""
         **Important Usage Notes:**
@@ -896,19 +481,11 @@ def render_pseudo_refset_members_tab(results):
             help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
         )
         
-        # Check if mode changed and trigger reprocessing
+        # Check if mode changed - no reprocessing needed, just update session state
         if dedup_mode != current_mode:
             st.session_state.current_deduplication_mode = dedup_mode
-            # Trigger reprocessing with new mode if we have the necessary data
-            if ('emis_guids' in st.session_state and 'lookup_df' in st.session_state):
-                from .tab_helpers import _reprocess_with_new_mode
-                _reprocess_with_new_mode(dedup_mode)
     
-    # Apply deduplication based on current mode
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes' and pseudo_members_data:
-        from .tab_helpers import _deduplicate_clinical_data_by_emis_guid
-        pseudo_members_data = _deduplicate_clinical_data_by_emis_guid(pseudo_members_data)
+    # Deduplication is now handled by render_section_with_data based on current mode
     
     # Show appropriate dynamic message based on pseudo-members and mode
     if not pseudo_members_data:
@@ -921,153 +498,17 @@ def render_pseudo_refset_members_tab(results):
         else:
             st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
     
-    # Custom rendering for pseudo-members with simplified download options like other tabs
-    df = pd.DataFrame(pseudo_members_data)
-    
-    # Apply column filtering like other sections
-    display_df = df.copy()
-    
-    # Always hide certain columns
-    always_hidden = ['ValueSet GUID', 'VALUESET GUID']
-    for col in always_hidden:
-        if col in display_df.columns:
-            display_df = display_df.drop(columns=[col])
-    
-    # Hide raw duplicate columns that have formatted versions
-    raw_columns_to_hide = ['source_guid', 'source_name', 'source_container', 'source_type', 'report_type']
-    for col in raw_columns_to_hide:
-        if col in display_df.columns:
-            display_df = display_df.drop(columns=[col])
-    
-    # Hide internal categorization flags
-    internal_flags_to_hide = ['is_refset', 'is_pseudo', 'is_medication', 'is_pseudorefset', 'is_pseudomember']
-    for col in internal_flags_to_hide:
-        if col in display_df.columns:
-            display_df = display_df.drop(columns=[col])
-    
-    # Hide debug columns unless debug mode is enabled
-    show_debug = st.session_state.get('debug_mode', False)
-    if not show_debug and '_original_fields' in display_df.columns:
-        display_df = display_df.drop(columns=['_original_fields'])
-    
-    # Hide source columns in unique_codes mode for display only
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes':
-        columns_to_hide = ['Source Type', 'Source Name', 'Source Container', 'Source GUID']
-        for col in columns_to_hide:
-            if col in display_df.columns:
-                display_df = display_df.drop(columns=[col])
-    
-    # Add emojis for UI display
-    if 'EMIS GUID' in display_df.columns:
-        display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
-    if 'SNOMED Code' in display_df.columns:
-        display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
-    if 'Source Type' in display_df.columns:
-        display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 
-            x if ('🔍' in str(x) or '📊' in str(x) or '📋' in str(x) or '📈' in str(x)) else (
-                f"🔍 {x}" if x and x == "Search" else
-                f"📊 {x}" if x and "Aggregate" in str(x) else
-                f"📋 {x}" if x and "List" in str(x) else
-                f"📈 {x}" if x and "Audit" in str(x) else
-                f"📊 {x}" if x else x
-            )
-        )
-    
-    # Apply highlighting and display
-    def highlight_pseudo_members(row):
-        if row['Mapping Found'] == 'Found':
-            return ['background-color: #fff3cd'] * len(row)  # Light yellow/orange
-        else:
-            return ['background-color: #f8cecc'] * len(row)  # Light red/orange
-    
-    styled_df = display_df.style.apply(highlight_pseudo_members, axis=1)
-    st.dataframe(styled_df, width='stretch', hide_index=True)
-    
-    # Simplified download options - only 3 options like other tabs
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        has_source_tracking = 'Source GUID' in df.columns or 'Source Type' in df.columns
-        
-        if has_source_tracking:
-            export_filter = st.radio(
-                "Download Options:",
-                ["All Pseudo-Member Codes", "Only Matched", "Only Unmatched", "Only Pseudo-Members from Searches", "Only Pseudo-Members from Reports"],
-                key="pseudo_members_export_filter"
-            )
-        else:
-            export_filter = st.radio(
-                "Download Options:",
-                ["All Pseudo-Member Codes", "Only Matched", "Only Unmatched"],
-                key="pseudo_members_export_filter_simple"
-            )
-    
-    with col2:
-        # LAZY CSV generation - only when button is clicked
-        if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="pseudo_members_generate_btn"):
-            try:
-                with st.spinner(f"Generating {export_filter.lower()}..."):
-                    # Filter data based on selection
-                    filtered_df = df.copy()
-                    
-                    if export_filter == "Only Matched":
-                        # Filter for codes with successful mapping
-                        if 'Mapping Found' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
-                    elif export_filter == "Only Unmatched":
-                        # Filter for codes without successful mapping
-                        if 'Mapping Found' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
-                    elif export_filter == "Only Pseudo-Members from Searches" and has_source_tracking:
-                        # Filter for search sources
-                        if 'Source Type' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                        elif 'source_type' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-                    elif export_filter == "Only Pseudo-Members from Reports" and has_source_tracking:
-                        # Filter for report sources 
-                        if 'Source Type' in filtered_df.columns:
-                            filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                        elif 'source_type' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-                    
-                    # Generate filename
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-                    
-                    if export_filter == "Only Matched":
-                        filename = f"pseudo_members_matched_{xml_filename}_{timestamp}.csv"
-                    elif export_filter == "Only Unmatched":
-                        filename = f"pseudo_members_unmatched_{xml_filename}_{timestamp}.csv"
-                    elif export_filter == "Only Pseudo-Members from Searches":
-                        filename = f"pseudo_members_searches_{xml_filename}_{timestamp}.csv"
-                    elif export_filter == "Only Pseudo-Members from Reports":
-                        filename = f"pseudo_members_reports_{xml_filename}_{timestamp}.csv"
-                    else:
-                        filename = f"pseudo_members_all_{xml_filename}_{timestamp}.csv"
-                    
-                    # Create download
-                    if not filtered_df.empty:
-                        csv_buffer = io.StringIO()
-                        filtered_df.to_csv(csv_buffer, index=False)
-                        
-                        st.download_button(
-                            label=f"⬇️ Download {export_filter}",
-                            data=csv_buffer.getvalue(),
-                            file_name=filename,
-                            mime="text/csv",
-                            key="pseudo_members_download"
-                        )
-                        # Clear memory immediately after download
-                        del csv_buffer, filtered_df
-                        import gc
-                        gc.collect()
-                        st.success("✅ Pseudo-member codes export generated successfully")
-                    else:
-                        st.info(f"No data available for {export_filter}")
-            except Exception as e:
-                st.error(f"Export generation failed: {str(e)}")
+    # Use efficient render_section_with_data pattern for pseudo-members
+    render_section_with_data(
+        title="",  # No title needed as it's already shown above
+        data=pseudo_members_data,
+        info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                  "Currently showing unique codes only. Use the Mode toggle to show per-source tracking."),
+        empty_message="✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).",
+        download_label="📥 Download Pseudo-Members CSV",
+        filename_prefix="pseudo_members",
+        highlighting_function=get_warning_highlighting_function()
+    )
     
     # Add helpful information about pseudo-refsets
     st.warning("""

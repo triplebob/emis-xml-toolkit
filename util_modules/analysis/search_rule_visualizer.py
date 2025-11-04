@@ -38,37 +38,26 @@ def _natural_sort_key(text):
 
 
 def _lookup_snomed_for_ui(emis_guid: str) -> str:
-    """Lookup SNOMED code for given EMIS GUID for UI display"""
-    # Get lookup table from session state
-    lookup_df = st.session_state.get('lookup_df')
-    emis_guid_col = st.session_state.get('emis_guid_col')
-    snomed_code_col = st.session_state.get('snomed_code_col')
-    
-    if lookup_df is None or emis_guid_col is None or snomed_code_col is None:
-        return 'Lookup unavailable'
-    
+    """Lookup SNOMED code for given EMIS GUID using XML-specific cached clinical data"""
     if not emis_guid or emis_guid == 'N/A':
         return 'N/A'
     
-    # Lookup the SNOMED code
+    # Use the XML-specific cached clinical data instead of going back to lookup table
+    from ..ui.tabs.tab_helpers import get_unified_clinical_data
+    
     try:
-        matching_rows = lookup_df[lookup_df[emis_guid_col].astype(str).str.strip() == str(emis_guid).strip()]
-        if not matching_rows.empty:
-            snomed_value = matching_rows.iloc[0][snomed_code_col]
-            # Handle float values from pandas (remove .0 suffix)
-            if pd.isna(snomed_value) or str(snomed_value).strip() in ['', 'nan']:
-                return 'Not found'
-            # Convert float to int to string to remove decimal point
-            try:
-                if isinstance(snomed_value, float) and snomed_value.is_integer():
-                    snomed_code = str(int(snomed_value))
-                else:
-                    snomed_code = str(snomed_value).strip()
-                return snomed_code
-            except (ValueError, AttributeError):
-                return str(snomed_value).strip()
-        else:
-            return 'Not found'
+        unified_results = get_unified_clinical_data()
+        if not unified_results:
+            return 'Analysis unavailable'
+        
+        # Search all clinical data categories for this EMIS GUID
+        for data_category in ['clinical_codes', 'medications', 'refsets', 'pseudo_refsets', 'clinical_pseudo_members']:
+            if data_category in unified_results:
+                for item in unified_results[data_category]:
+                    if item.get('EMIS GUID', '').strip() == str(emis_guid).strip():
+                        return item.get('SNOMED Code', 'Not found')
+        
+        return 'Not found'
     except Exception:
         return 'Lookup error'
 # Imports moved to top of file
@@ -109,8 +98,8 @@ def render_detailed_rules(reports, analysis=None):
     
     st.markdown("**📋 Navigate to Search for Detailed Rule Analysis:**")
     
-    # Use side-by-side layout like report browsers
-    col1, col2 = st.columns([1, 1])
+    # Three-column layout: folder selector, search selector, export buttons
+    col1, col2, col3 = st.columns([3, 4, 1.4])
     
     
     with col1:
@@ -168,28 +157,165 @@ def render_detailed_rules(reports, analysis=None):
             )
             selected_search_index = None
     
-    # Show All checkbox below the dropdowns
-    show_all_searches = st.checkbox(
-        "📋 Show All Searches in Folder",
-        value=False,
-        help="Display detailed breakdown for all searches in the selected folder at once",
-        key="detailed_rules_show_all"
-    )
+    # Determine selected search for export buttons
+    selected_search = None
+    if selected_search_index is not None and folder_searches:
+        selected_search = folder_searches[selected_search_index]
     
-    # Display selected search or all searches
-    if show_all_searches and folder_searches:
-        folder_name = selected_folder_path if selected_folder_path != "All Folders" else "All Folders"
-        st.markdown(f"### 📁 {folder_name} - All Search Rules")
-        if folder_hierarchy and selected_folder_path != "All Folders":
-            _render_folder_detailed_rules(folder_searches, reports)
-        else:
-            _render_all_detailed_rules_simple(folder_searches)
-    elif selected_search_index is not None and folder_searches:
+    with col3:
+        # All export buttons in one column
+        # Master JSON Export - Lazy generation with session state caching
+        master_json_cache_key = 'master_xml_json_export'
+        if master_json_cache_key not in st.session_state:
+            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+            if analysis:
+                try:
+                    # Dynamic import to avoid circular dependency
+                    import importlib
+                    json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
+                    JSONExportGenerator = json_module.JSONExportGenerator
+                    
+                    json_generator = JSONExportGenerator(analysis)
+                    master_filename, master_content = json_generator.generate_master_json(xml_filename, reports)
+                    st.session_state[master_json_cache_key] = (master_filename, master_content)
+                except Exception as e:
+                    st.error(f"Master JSON export generation failed: {str(e)}")
+                    st.session_state[master_json_cache_key] = None
+            else:
+                st.error("Analysis data not available for master export")
+                st.session_state[master_json_cache_key] = None
+        
+        # Add spacing to align with selectbox height
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Three export buttons in a row within this column - wider Export ALL, compact Excel/JSON
+        export_col1, export_col2, export_col3 = st.columns([1.5, 1, 1])
+        
+        with export_col1:
+            if st.session_state.get(master_json_cache_key):
+                master_filename, master_content = st.session_state[master_json_cache_key]
+                st.download_button(
+                    label="🗂️ Export ALL",
+                    data=master_content,
+                    file_name=master_filename,
+                    mime="application/json",
+                    help="Export ALL searches with folder structure as complete JSON",
+                    key="export_master_json"
+                )
+        
+        with export_col2:
+            if selected_search:
+                clean_name = SearchManager.clean_search_name(selected_search.name)
+                # Excel Export - Lazy generation with session state caching
+                excel_cache_key = f'detailed_excel_{selected_search.id}'
+                if excel_cache_key not in st.session_state:
+                    analysis = st.session_state.get('search_analysis')
+                    if analysis:
+                        try:
+                            # Dynamic import to avoid circular dependency
+                            import importlib
+                            export_module = importlib.import_module('util_modules.export_handlers.search_export')
+                            SearchExportHandler = export_module.SearchExportHandler
+                            
+                            export_handler = SearchExportHandler(analysis)
+                            
+                            # Determine if this is a child search
+                            include_parent_info = selected_search.parent_guid is not None
+                            
+                            filename, content = export_handler.generate_search_export(
+                                selected_search, 
+                                include_parent_info=include_parent_info
+                            )
+                            st.session_state[excel_cache_key] = (filename, content)
+                        except Exception as e:
+                            st.error(f"Excel export generation failed: {str(e)}")
+                            st.session_state[excel_cache_key] = None
+                    else:
+                        st.session_state[excel_cache_key] = None
+                
+                if st.session_state.get(excel_cache_key):
+                    filename, content = st.session_state[excel_cache_key]
+                    st.download_button(
+                        label="📊 Excel",
+                        data=content,
+                        file_name=filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        help=f"Export search logic to Excel: {clean_name}",
+                        key=f"export_excel_nav_{selected_search.id}"
+                    )
+                else:
+                    st.button(
+                        "📊 Excel",
+                        disabled=True,
+                        help="Analysis data not available",
+                        key=f"export_excel_nav_disabled_{selected_search.id if selected_search else 'none'}"
+                    )
+            else:
+                st.button(
+                    "📊 Excel",
+                    disabled=True,
+                    help="Select a search to export to Excel",
+                    key="export_excel_nav_no_search"
+                )
+        
+        with export_col3:
+            if selected_search:
+                clean_name = SearchManager.clean_search_name(selected_search.name)
+                # JSON Export - Lazy generation with session state caching
+                json_cache_key = f'detailed_json_{selected_search.id}'
+                if json_cache_key not in st.session_state:
+                    analysis = st.session_state.get('search_analysis')
+                    xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                    if analysis:
+                        try:
+                            # Dynamic import to avoid circular dependency
+                            import importlib
+                            json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
+                            JSONExportGenerator = json_module.JSONExportGenerator
+                            
+                            json_generator = JSONExportGenerator(analysis)
+                            json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
+                            st.session_state[json_cache_key] = (json_filename, json_content)
+                        except Exception as e:
+                            st.error(f"JSON export generation failed: {str(e)}")
+                            st.session_state[json_cache_key] = None
+                    else:
+                        st.session_state[json_cache_key] = None
+                
+                if st.session_state.get(json_cache_key):
+                    json_filename, json_content = st.session_state[json_cache_key]
+                    st.download_button(
+                        label="📋 JSON",
+                        data=json_content,
+                        file_name=json_filename,
+                        mime="application/json",
+                        help=f"Export search logic as JSON: {clean_name}",
+                        key=f"export_json_nav_{selected_search.id}"
+                    )
+                else:
+                    st.button(
+                        "📋 JSON",
+                        disabled=True,
+                        help="Analysis data not available",
+                        key=f"export_json_nav_disabled_{selected_search.id if selected_search else 'none'}"
+                    )
+            else:
+                st.button(
+                    "📋 JSON",
+                    disabled=True,
+                    help="Select a search to export to JSON",
+                    key="export_json_nav_no_search"
+                )
+    
+    # Remove the "Show All Searches in Folder" checkbox as it's not useful on large files
+    
+    # Display selected search only
+    if selected_search_index is not None and folder_searches:
         # Display individual search details
         selected_search = folder_searches[selected_search_index]
         render_individual_search_details(selected_search, reports, show_dependencies=False)
     else:
-        st.info("👆 Select a search from the dropdown above or check 'Show All Searches' to see detailed rule analysis")
+        st.info("👆 Select a search from the dropdown above to see detailed rule analysis")
     
 
 
@@ -217,82 +343,8 @@ def _render_single_detailed_rule(selected_search, reports):
     clean_name = SearchManager.clean_search_name(selected_search.name)
     classification = "🔍"  # All items in search analysis are searches
     
-    # Header with export options
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        st.markdown(f"### {classification} {clean_name}")
-    
-    with col2:
-        # Excel Export - LAZY generation only when clicked
-        if st.button("📥 Excel", help=f"Generate Excel export for: {clean_name}", key=f"excel_btn_{selected_search.id}"):
-            analysis = st.session_state.get('search_analysis')
-            if analysis:
-                try:
-                    with st.spinner("Generating Excel export..."):
-                        # Dynamic import to avoid circular dependency
-                        import importlib
-                        export_module = importlib.import_module('util_modules.export_handlers.search_export')
-                        SearchExportHandler = export_module.SearchExportHandler
-                        
-                        export_handler = SearchExportHandler(analysis)
-                        
-                        # Determine if this is a child search
-                        include_parent_info = selected_search.parent_guid is not None
-                        
-                        filename, content = export_handler.generate_search_export(
-                            selected_search, 
-                            include_parent_info=include_parent_info
-                        )
-                        
-                        st.download_button(
-                            label="⬇️ Download Excel",
-                            data=content,
-                            file_name=filename,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"export_excel_dl_{selected_search.id}"
-                        )
-                        # Clear large content from memory immediately after download
-                        del content
-                        import gc
-                        gc.collect()
-                        st.success("✅ Excel export generated successfully")
-                except Exception as e:
-                    st.error(f"Excel export failed: {str(e)}")
-            else:
-                st.error("Analysis data not available for Excel export")
-    
-    with col3:
-        # JSON Export - LAZY generation only when clicked
-        if st.button("📥 JSON", help=f"Generate JSON export for: {clean_name}", key=f"json_btn_{selected_search.id}"):
-            analysis = st.session_state.get('search_analysis')
-            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-            if analysis:
-                try:
-                    with st.spinner("Generating JSON export..."):
-                        # Dynamic import to avoid circular dependency
-                        import importlib
-                        json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
-                        JSONExportGenerator = json_module.JSONExportGenerator
-                        
-                        json_generator = JSONExportGenerator(analysis)
-                        json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
-                        
-                        st.download_button(
-                            label="⬇️ Download JSON",
-                            data=json_content,
-                            file_name=json_filename,
-                            mime="application/json",
-                            key=f"export_json_dl_{selected_search.id}"
-                        )
-                        # Clear large content from memory immediately after download
-                        del json_content
-                        import gc
-                        gc.collect()
-                        st.success("✅ JSON export generated successfully")
-                except Exception as e:
-                    st.error(f"JSON export failed: {str(e)}")
-            else:
-                st.error("Analysis data not available for JSON export")
+    # Header - export buttons are now in main navigation
+    st.markdown(f"### {classification} {clean_name}")
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
@@ -346,59 +398,7 @@ def render_individual_search_details(selected_search, reports, show_dependencies
     from ..core import SearchManager
     # Searches don't need report classification
     
-    # Export functionality for individual search
-    if selected_search:
-        clean_name = SearchManager.clean_search_name(selected_search.name)
-        
-        col1, col2, col3 = st.columns([2, 1, 1])
-        
-        with col2:
-            # Excel Export - dynamic import
-            try:
-                import importlib
-                export_module = importlib.import_module('util_modules.export_handlers.search_export')
-                SearchExportHandler = export_module.SearchExportHandler
-                export_handler = SearchExportHandler(None)  # Analysis not needed for single search
-                filename, content = export_handler.generate_search_export(selected_search, include_parent_info=True)
-                
-                st.download_button(
-                    label="📥 Excel",
-                    data=content,
-                    file_name=filename,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help=f"Export search logic to Excel: {clean_name}",
-                    key=f"individual_export_excel_{selected_search.id}"
-                )
-            except Exception as e:
-                st.error(f"Excel export not available: {str(e)}")
-        
-        with col3:
-            # JSON Export - dynamic import
-            try:
-                import importlib
-                json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
-                JSONExportGenerator = json_module.JSONExportGenerator
-                
-                # We need analysis for JSON export
-                analysis = st.session_state.get('search_analysis')
-                xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-                
-                if analysis:
-                    json_generator = JSONExportGenerator(analysis)
-                    json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
-                    
-                    st.download_button(
-                        label="📥 JSON",
-                        data=json_content,
-                        file_name=json_filename,
-                        mime="application/json",
-                        help=f"Export search logic as JSON: {clean_name}",
-                        key=f"individual_export_json_{selected_search.id}"
-                    )
-                else:
-                    st.error("Analysis not available for JSON export")
-            except Exception as e:
-                st.error(f"JSON export not available: {str(e)}")
+    # Export functionality is now handled in main navigation row
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
@@ -562,6 +562,114 @@ def render_criteria_group(group: CriteriaGroup, rule_name: str):
     st.markdown("---")
 
 
+@st.cache_data(ttl=1800, max_entries=5000)  # Cache for 30 minutes with max 5000 entries (supports multiple large XMLs)
+def _generate_code_data_for_value_set(vs_values, vs_description, emis_guids, snomed_lookup_cache_key):
+    """Generate code data for a value set using the XML-specific cached clinical data"""
+    # Use the XML-specific cached clinical data instead of going back to lookup table
+    from ..ui.tabs.tab_helpers import get_unified_clinical_data
+    
+    # Get the already-processed clinical data for this XML
+    unified_results = get_unified_clinical_data()
+    if not unified_results:
+        # Fallback to basic format if no unified data available
+        return _generate_basic_code_data(vs_values, vs_description)
+    
+    # Build a lookup from all clinical data categories
+    emis_to_clinical_data = {}
+    
+    # Index all clinical data by EMIS GUID for fast lookup
+    for data_category in ['clinical_codes', 'medications', 'refsets', 'pseudo_refsets', 'clinical_pseudo_members']:
+        if data_category in unified_results:
+            for item in unified_results[data_category]:
+                emis_guid = item.get('EMIS GUID', '').strip()
+                if emis_guid:
+                    emis_to_clinical_data[emis_guid] = item
+    
+    code_data = []
+    for j, value in enumerate(vs_values):
+        code_value = value['value'] if value['value'] else "No code specified"
+        code_name = value.get('display_name', '')
+        
+        # Special handling for library items
+        if value.get('is_library_item', False):
+            code_data.append({
+                'EMIS Code': code_value,
+                'SNOMED Code': 'Library Item',
+                'Description': value['display_name'],
+                'Scope': '📚 Library',
+                'Is Refset': 'No'
+            })
+        else:
+            # Handle refsets differently - they have direct SNOMED codes
+            if value['is_refset']:
+                # For refsets: EMIS Code = SNOMED Code, Description from XML
+                snomed_code = code_value  # Refset codes are direct SNOMED codes
+                scope = '🎯 Refset'
+                # Use the valueset description as the code description for refsets
+                description = vs_description if vs_description != code_name else code_name
+            else:
+                # Look up in the already-processed XML clinical data
+                clinical_item = emis_to_clinical_data.get(str(code_value).strip())
+                if clinical_item:
+                    snomed_code = clinical_item.get('SNOMED Code', 'Not found')
+                    # Use description from XML first, fall back to lookup description
+                    description = code_name if code_name else clinical_item.get('SNOMED Description', 'No description')
+                else:
+                    snomed_code = 'Not found' if code_value != "No code specified" else 'N/A'
+                    description = code_name
+                
+                if value['include_children']:
+                    scope = '👥 + Children'
+                else:
+                    scope = '🎯 Exact'
+            
+            code_data.append({
+                'EMIS Code': code_value,
+                'SNOMED Code': snomed_code,
+                'Description': description,
+                'Scope': scope,
+                'Is Refset': 'Yes' if value['is_refset'] else 'No'
+            })
+    
+    return code_data
+
+
+def _generate_basic_code_data(vs_values, vs_description):
+    """Fallback function for when unified clinical data is not available"""
+    code_data = []
+    for value in vs_values:
+        code_value = value['value'] if value['value'] else "No code specified"
+        code_name = value.get('display_name', '')
+        
+        if value.get('is_library_item', False):
+            code_data.append({
+                'EMIS Code': code_value,
+                'SNOMED Code': 'Library Item',
+                'Description': value['display_name'],
+                'Scope': '📚 Library',
+                'Is Refset': 'No'
+            })
+        else:
+            if value['is_refset']:
+                snomed_code = code_value
+                scope = '🎯 Refset'
+                description = vs_description if vs_description != code_name else code_name
+            else:
+                snomed_code = 'Analysis unavailable'
+                description = code_name
+                scope = '👥 + Children' if value['include_children'] else '🎯 Exact'
+            
+            code_data.append({
+                'EMIS Code': code_value,
+                'SNOMED Code': snomed_code,
+                'Description': description,
+                'Scope': scope,
+                'Is Refset': 'Yes' if value['is_refset'] else 'No'
+            })
+    
+    return code_data
+
+
 def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
     """Render individual search criterion with all its details"""
     try:
@@ -636,69 +744,23 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                         if vs['id']:
                             st.caption(f"**ID:** {vs['id']}")
                         
-                        # Display codes as scrollable dataframe with icons
+                        # Display codes as scrollable dataframe with icons - using cached function
                         import pandas as pd
-                        code_data = []
                         
-                        # PERFORMANCE OPTIMIZATION: Batch SNOMED lookups instead of individual lookups
-                        # Get lookup table from session state
-                        lookup_df = st.session_state.get('lookup_df')
-                        emis_guid_col = st.session_state.get('emis_guid_col')
-                        snomed_code_col = st.session_state.get('snomed_code_col')
+                        # PERFORMANCE OPTIMIZATION: Use cached function for SNOMED lookups
+                        # Extract all non-library EMIS GUIDs from the value set for cache key
+                        emis_guids = [value['value'] for value in vs['values'] if value['value'] and not value.get('is_library_item', False)]
                         
-                        # Create lookup dictionary for batch processing
-                        snomed_lookup = {}
-                        if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
-                            try:
-                                # Extract all non-library EMIS GUIDs from the value set
-                                emis_guids = [value['value'] for value in vs['values'] if value['value'] and not value.get('is_library_item', False)]
-                                
-                                if emis_guids:
-                                    # Single DataFrame operation to lookup all codes at once
-                                    matching_rows = lookup_df[lookup_df[emis_guid_col].astype(str).str.strip().isin([str(guid).strip() for guid in emis_guids])]
-                                    snomed_lookup = dict(zip(matching_rows[emis_guid_col].astype(str).str.strip(), matching_rows[snomed_code_col]))
-                            except Exception:
-                                # Fallback to individual lookups if batch fails
-                                pass
+                        # Create cache key based on the value set and lookup availability
+                        cache_key = f"{vs.get('id', 'unknown')}_{len(vs['values'])}_{len(emis_guids)}"
                         
-                        for j, value in enumerate(vs['values']):
-                            code_value = value['value'] if value['value'] else "No code specified"
-                            code_name = value.get('display_name', '')
-                            
-                            # Special handling for library items
-                            if value.get('is_library_item', False):
-                                code_data.append({
-                                    'EMIS Code': code_value,
-                                    'SNOMED Code': 'Library Item',
-                                    'Description': value['display_name'],
-                                    'Scope': '📚 Library',
-                                    'Is Refset': 'No'
-                                })
-                            else:
-                                # Handle refsets differently - they have direct SNOMED codes
-                                if value['is_refset']:
-                                    # For refsets: EMIS Code = SNOMED Code, Description from XML
-                                    snomed_code = code_value  # Refset codes are direct SNOMED codes
-                                    scope = '🎯 Refset'
-                                    # Use the valueset description as the code description for refsets
-                                    description = vs.get('description', code_name) if vs.get('description') != code_name else code_name
-                                else:
-                                    # Use batch lookup result or fallback for regular codes
-                                    snomed_code = snomed_lookup.get(str(code_value).strip(), 'Not found' if code_value != "No code specified" else 'N/A')
-                                    description = code_name
-                                    
-                                    if value['include_children']:
-                                        scope = '👥 + Children'
-                                    else:
-                                        scope = '🎯 Exact'
-                                
-                                code_data.append({
-                                    'EMIS Code': code_value,
-                                    'SNOMED Code': snomed_code,
-                                    'Description': description,
-                                    'Scope': scope,
-                                    'Is Refset': 'Yes' if value['is_refset'] else 'No'
-                                })
+                        # Use cached function to generate code data
+                        code_data = _generate_code_data_for_value_set(
+                            vs['values'], 
+                            vs.get('description', ''),
+                            emis_guids,
+                            cache_key
+                        )
                         
                         if code_data:
                             # Create and display dataframe
@@ -819,13 +881,17 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                     else:
                         filter_context = "internal classification"
                     
-                    # Find the corresponding column filter to get the correct in_not_in value
+                    # Find the corresponding column filter to get the correct in_not_in value and column context
                     column_filter_in_not_in = "IN"  # Default
+                    column_name = ""
+                    column_display_name = ""
                     for cf in main_column_filters:
                         cf_value_sets = cf.get('value_sets', [])
                         for cf_vs in cf_value_sets:
                             if cf_vs.get('id') == vs.get('id'):
                                 column_filter_in_not_in = cf.get('in_not_in', 'IN')
+                                column_name = cf.get('column', '').upper()
+                                column_display_name = cf.get('display_name', '').lower()
                                 break
                     
                     for value in vs['values']:
@@ -835,24 +901,38 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                         # Determine action based on in_not_in value
                         action = "Include" if column_filter_in_not_in == "IN" else "Exclude"
                         
+                        # Determine proper context based on column name
+                        if column_name == 'ISSUE_METHOD':
+                            context = "issue method"
+                        elif column_name == 'IS_PRIVATE':
+                            context = "private prescriptions"
+                        elif column_name in ['AUTHOR', 'CURRENTLY_CONTRACTED']:
+                            context = "user authorization"
+                        elif 'consultation' in column_display_name or 'heading' in column_display_name:
+                            context = "consultation heading"
+                        else:
+                            context = column_display_name if column_display_name else filter_context
+                        
                         # Use display name when available, fall back to code
                         if display_name and display_name.strip():
-                            # Map common EMISINTERNAL codes to user-friendly descriptions
-                            if code_value.upper() == 'PROBLEM' and ('consultation' in filter_context or 'heading' in filter_context):
-                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} Consultations where the consultation heading is: {display_name}")
+                            # Special handling for specific column types
+                            if column_name == 'ISSUE_METHOD':
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {context}: {display_name}")
+                            elif code_value.upper() == 'PROBLEM' and 'consultation' in context:
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} consultations where the consultation heading is: {display_name}")
                             elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
                                 status_descriptions = {
                                     'COMPLICATION': f"{action} complications only: {display_name}",
                                     'ONGOING': f"{action} ongoing conditions: {display_name}",
                                     'RESOLVED': f"{action} resolved conditions: {display_name}"
                                 }
-                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {filter_context}: {display_name}')}")
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {context}: {display_name}')}")
                             else:
-                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {filter_context}: {display_name}")
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {context}: {display_name}")
                         elif code_value:
                             st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal code: {code_value}")
-                    else:
-                        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} EMIS internal classification")
+                        else:
+                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} EMIS internal classification")
             
             # Restrictions (Latest 1, etc.)
             if criterion.restrictions:
@@ -979,67 +1059,168 @@ def render_column_filter(column_filter):
             relative_to = range_info.get('relative_to', 'search date')
             column_display = display_name if display_name != column_display else "Date"
             
-            
             # Handle date range from
             if range_info.get('from'):
                 from_info = range_info['from']
                 op_text = format_operator_text(from_info['operator'], is_numeric=False)
                 
-                date_value = from_info['value']
-                unit = from_info.get('unit', 'DATE')
-                
-                
-                # Handle absolute dates (including empty unit which should default to DATE format)
-                if (unit == 'DATE' or not unit) and date_value:
-                    date_filters.append(f"{column_display} {op_text} {date_value} (Hardcoded Date)")
-                elif unit and date_value:
-                    # Handle relative dates like -6 MONTH or 6 MONTH
-                    if date_value.startswith('-'):
-                        # Negative relative date (e.g., -6 MONTH means "6 months ago")
-                        abs_value = date_value[1:]  # Remove the minus sign
-                        unit_text = pluralize_unit(abs_value, unit)
-                        
-                        # Handle different operators with negative values
-                        if op_text == 'after':
-                            date_filters.append(f"{column_display} is after {abs_value} {unit_text} before the search date")
-                        elif op_text == 'on or after':
-                            date_filters.append(f"{column_display} is on or after {abs_value} {unit_text} before the search date")
-                        elif op_text == 'before':
-                            date_filters.append(f"{column_display} is before {abs_value} {unit_text} before the search date")
-                        elif op_text == 'on or before':
-                            date_filters.append(f"{column_display} is on or before {abs_value} {unit_text} before the search date")
+                date_value = from_info.get('value')
+                if date_value:  # Only process if value exists
+                    unit = from_info.get('unit', 'DATE')
+                    
+                    # Handle numeric offset patterns first (to catch -6, 7, etc.)
+                    if unit and date_value and (date_value.lstrip('-').isdigit()):
+                        # Handle numeric offset patterns to match EMIS exactly
+                        if date_value.startswith('-'):
+                            # Negative relative date (before search date)
+                            abs_value = date_value[1:]  # Remove the minus sign
+                            unit_text = pluralize_unit(abs_value, unit)
+                            if op_text == 'on or after':
+                                date_filters.append(f"and the {column_display} is after or on {abs_value} {unit_text} before the search date")
+                            elif op_text == 'on or before':
+                                date_filters.append(f"and the {column_display} is before or on {abs_value} {unit_text} before the search date")
+                            else:
+                                date_filters.append(f"and the {column_display} is on {abs_value} {unit_text} before the search date")
                         else:
-                            date_filters.append(f"{column_display} {op_text} {abs_value} {unit_text} ago")
-                    else:
-                        # Positive relative date (e.g., 6 MONTH means "6 months from now")
-                        abs_value = date_value
-                        unit_text = pluralize_unit(abs_value, unit)
-                        
-                        # Handle different operators with positive values
-                        if op_text == 'after':
-                            date_filters.append(f"{column_display} is after {abs_value} {unit_text} from the search date")
-                        elif op_text == 'on or after':
-                            date_filters.append(f"{column_display} is on or after {abs_value} {unit_text} from the search date")
-                        elif op_text == 'before':
-                            date_filters.append(f"{column_display} is before {abs_value} {unit_text} from the search date")
-                        elif op_text == 'on or before':
-                            date_filters.append(f"{column_display} is on or before {abs_value} {unit_text} from the search date")
+                            # Positive relative date (after search date) or zero (on search date)
+                            unit_text = pluralize_unit(date_value, unit)
+                            if date_value == '0':
+                                # Special case for zero offset - means "on the search date"
+                                if op_text == 'on or after':
+                                    date_filters.append(f"and the {column_display} is after or on the search date")
+                                elif op_text == 'on or before':
+                                    date_filters.append(f"and the {column_display} is before or on the search date")
+                                else:
+                                    date_filters.append(f"and the {column_display} is on the search date")
+                            else:
+                                # Non-zero positive relative date (after search date)
+                                if op_text == 'on or after':
+                                    date_filters.append(f"and the {column_display} is after or on {date_value} {unit_text} after the search date")
+                                elif op_text == 'on or before':
+                                    date_filters.append(f"and the {column_display} is before or on {date_value} {unit_text} after the search date")
+                                else:
+                                    date_filters.append(f"and the {column_display} is on {date_value} {unit_text} after the search date")
+                    # Handle temporal variable patterns (Last/This/Next + time unit)
+                    elif unit and unit.upper() in ['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'FISCALYEAR']:
+                        if date_value.lower() == 'last':
+                            if unit.upper() == 'FISCALYEAR':
+                                date_filters.append(f"and the {column_display} is last fiscal year")
+                            elif unit.upper() == 'QUARTER':
+                                date_filters.append(f"and the {column_display} is last yearly quarter")
+                            else:
+                                date_filters.append(f"and the {column_display} is last {unit.lower()}")
+                        elif date_value.lower() == 'this':
+                            if unit.upper() == 'FISCALYEAR':
+                                date_filters.append(f"and the {column_display} is this fiscal year")
+                            elif unit.upper() == 'QUARTER':
+                                date_filters.append(f"and the {column_display} is this yearly quarter")
+                            else:
+                                date_filters.append(f"and the {column_display} is this {unit.lower()}")
+                        elif date_value.lower() == 'next':
+                            if unit.upper() == 'FISCALYEAR':
+                                date_filters.append(f"and the {column_display} is next fiscal year")
+                            elif unit.upper() == 'QUARTER':
+                                date_filters.append(f"and the {column_display} is next yearly quarter")
+                            else:
+                                date_filters.append(f"and the {column_display} is next {unit.lower()}")
                         else:
-                            date_filters.append(f"{column_display} {op_text} {date_value} {unit_text}")
+                            date_filters.append(f"and the {column_display} is {date_value} {unit.lower()}")
+                    # Handle absolute dates (including empty unit which should default to DATE format)
+                    elif (unit == 'DATE' or not unit) and date_value:
+                        date_filters.append(f"{column_display} {op_text} {date_value} (Hardcoded Date)")
             
-            # Handle date range to  
+            # Handle date range to with full temporal variable support
             if range_info.get('to'):
                 to_info = range_info['to']
-                if to_info['operator'] == 'LTEQ':
-                    if relative_to == 'BASELINE':
-                        date_filters.append(f"{column_display} is before or on the search date")
+                op_text = format_operator_text(to_info['operator'], is_numeric=False)
+                
+                date_value = to_info.get('value', '')  # Get value or empty string
+                unit = to_info.get('unit', '').strip()
+                
+                # Handle case where range boundary has no value (operator-only)
+                if not date_value:
+                    if op_text == 'on or before':
+                        date_filters.append(f"and the {column_display} is on or before the search date")
+                    elif op_text == 'on or after':
+                        date_filters.append(f"and the {column_display} is on or after the search date")
+                    elif op_text == 'before':
+                        date_filters.append(f"and the {column_display} is before the search date")
+                    elif op_text == 'after':
+                        date_filters.append(f"and the {column_display} is after the search date")
                     else:
-                        date_filters.append(f"{column_display} is before or on {relative_to}")
-                elif to_info['operator'] == 'LT':
-                    if relative_to == 'BASELINE':
-                        date_filters.append(f"{column_display} is before the search date")
+                        date_filters.append(f"and the {column_display} is on the search date")
+                # Handle numeric offset patterns first (to catch -6, 7, etc.)  
+                elif unit and date_value and (date_value.lstrip('-').isdigit()):
+                    # Handle numeric offset patterns to match EMIS exactly
+                    if date_value.startswith('-'):
+                        # Negative relative date (before search date)
+                        abs_value = date_value[1:]  # Remove the minus sign
+                        unit_text = pluralize_unit(abs_value, unit)
+                        if op_text == 'on or before':
+                            date_filters.append(f"and the {column_display} is before or on {abs_value} {unit_text} before the search date")
+                        elif op_text == 'on or after':
+                            date_filters.append(f"and the {column_display} is after or on {abs_value} {unit_text} before the search date")
+                        else:
+                            date_filters.append(f"and the {column_display} {op_text} {abs_value} {unit_text} before the search date")
                     else:
-                        date_filters.append(f"{column_display} is before {relative_to}")
+                        # Positive relative date (after search date) or zero (on search date)
+                        unit_text = pluralize_unit(date_value, unit)
+                        if date_value == '0':
+                            # Special case for zero offset - means "on the search date"
+                            if op_text == 'on or before':
+                                date_filters.append(f"and the {column_display} is before or on the search date")
+                            elif op_text == 'on or after':
+                                date_filters.append(f"and the {column_display} is after or on the search date")
+                            else:
+                                date_filters.append(f"and the {column_display} is on the search date")
+                        else:
+                            # Non-zero positive relative date (after search date)
+                            if op_text == 'on or before':
+                                date_filters.append(f"and the {column_display} is before or on {date_value} {unit_text} after the search date")
+                            elif op_text == 'on or after':
+                                date_filters.append(f"and the {column_display} is after or on {date_value} {unit_text} after the search date")
+                            else:
+                                date_filters.append(f"and the {column_display} {op_text} {date_value} {unit_text} after the search date")
+                # Handle temporal variable patterns (Last/This/Next + time unit) in 'to' range
+                elif unit and unit.upper() in ['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'FISCALYEAR']:
+                    if date_value.lower() == 'last':
+                        if unit.upper() == 'FISCALYEAR':
+                            date_filters.append(f"and the {column_display} {op_text} last fiscal year")
+                        elif unit.upper() == 'QUARTER':
+                            date_filters.append(f"and the {column_display} {op_text} last yearly quarter")
+                        else:
+                            date_filters.append(f"and the {column_display} {op_text} last {unit.lower()}")
+                    elif date_value.lower() == 'this':
+                        if unit.upper() == 'FISCALYEAR':
+                            date_filters.append(f"and the {column_display} {op_text} this fiscal year")
+                        elif unit.upper() == 'QUARTER':
+                            date_filters.append(f"and the {column_display} {op_text} this yearly quarter")
+                        else:
+                            date_filters.append(f"and the {column_display} {op_text} this {unit.lower()}")
+                    elif date_value.lower() == 'next':
+                        if unit.upper() == 'FISCALYEAR':
+                            date_filters.append(f"and the {column_display} {op_text} next fiscal year")
+                        elif unit.upper() == 'QUARTER':
+                            date_filters.append(f"and the {column_display} {op_text} next yearly quarter")
+                        else:
+                            date_filters.append(f"and the {column_display} {op_text} next {unit.lower()}")
+                    else:
+                        date_filters.append(f"and the {column_display} {op_text} {date_value} {unit.lower()}")
+                # Handle absolute dates in 'to' range
+                elif (unit == 'DATE' or not unit) and date_value:
+                    date_filters.append(f"{column_display} {op_text} {date_value} (Hardcoded Date)")
+                else:
+                    # Fallback for 'to' range
+                    if to_info['operator'] == 'LTEQ':
+                        if relative_to == 'BASELINE':
+                            date_filters.append(f"{column_display} is before or on the search date")
+                        else:
+                            date_filters.append(f"{column_display} is before or on {relative_to}")
+                    elif to_info['operator'] == 'LT':
+                        if relative_to == 'BASELINE':
+                            date_filters.append(f"{column_display} is before the search date")
+                        else:
+                            date_filters.append(f"{column_display} is before {relative_to}")
             
             if date_filters:
                 return " and ".join(date_filters)

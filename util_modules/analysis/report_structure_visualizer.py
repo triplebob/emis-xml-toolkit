@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+import json
 from datetime import datetime
 from ..core import ReportClassifier, SearchManager
 
@@ -34,66 +35,256 @@ def render_folder_structure(folder_tree, folders, reports):
     
     st.markdown("**📁 Directory structure with search reports:**")
     
-    # Create folder and report maps for quick lookup
+    # Create cache key for this specific folder structure
+    import hashlib
+    cache_key = hashlib.md5(str(folder_tree).encode()).hexdigest()
+    
+    # Create folder and report maps for quick lookup (not cached since objects aren't serializable)
     folder_map = {f.id: f for f in folders}
     report_map = {r.id: r for r in reports}
     
-    # Tree View (collapsible)
-    with st.expander("🌳 Tree View", expanded=True):
-        tree_text = generate_folder_tree_ascii(folder_tree, folder_map, report_map)
-        st.code(tree_text, language="")
+    # Tree View - cache the tree generation in session state
+    if f'tree_text_{cache_key}' not in st.session_state:
+        st.session_state[f'tree_text_{cache_key}'] = generate_folder_tree_ascii(folder_tree, folder_map, report_map)
+    st.code(st.session_state[f'tree_text_{cache_key}'], language="")
     
-    # Detailed View (collapsible)
-    with st.expander("📋 Detailed View", expanded=False):
-        render_folder_list_view(folder_tree, folder_map, report_map)
-    
-    # Export buttons at bottom
+    # Export options for tree view - TXT and JSON
     st.markdown("---")
     st.markdown("**📥 Export Options:**")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📄 Download Tree View (TXT)", key="download_tree_txt"):
-            _download_tree_as_txt(tree_text)
+        # TXT export using cached tree text
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        xml_filename = st.session_state.get('xml_filename', 'unknown')
+        clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
+        
+        # Generate summary statistics to match JSON export
+        from ..export_handlers.json_export_generator import JSONExportGenerator
+        from ..ui.tabs.tab_helpers import ensure_analysis_cached
+        
+        analysis = ensure_analysis_cached(None)
+        json_generator = JSONExportGenerator(analysis)
+        summary_stats = json_generator._calculate_folder_summary(folder_tree, folder_map, report_map)
+        
+        # Build TXT content with summary
+        txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        txt_content += "=" * 80 + "\n\n"
+        txt_content += st.session_state[f'tree_text_{cache_key}']
+        txt_content += "\n\n" + "=" * 80 + "\n"
+        txt_content += "SUMMARY STATISTICS\n"
+        txt_content += "=" * 80 + "\n"
+        txt_content += f"Total Folders: {summary_stats.get('folders', 0)}\n"
+        txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
+        txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
+        txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
+        txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
+        
+        st.download_button(
+            label="📄 Download as TXT",
+            data=txt_content,
+            file_name=f"{clean_xml_name}_folder_structure_{timestamp}.txt",
+            mime="text/plain",
+            key="tree_download_txt"
+        )
     
     with col2:
-        if st.button("📊 Download Detailed View (CSV)", key="download_detailed_csv"):
-            _download_detailed_as_csv(folder_tree, folder_map, report_map)
+        # JSON export using cached folder structure - generate JSON representation lazily
+        if f'tree_json_{cache_key}' not in st.session_state:
+            # Use the proper JSON export generator
+            from ..export_handlers.json_export_generator import JSONExportGenerator
+            from ..ui.tabs.tab_helpers import ensure_analysis_cached
+            
+            # Get analysis object for the JSON generator
+            analysis = ensure_analysis_cached(None)  # Use cached analysis
+            json_generator = JSONExportGenerator(analysis)
+            
+            filename, json_content = json_generator.generate_folder_structure_json(
+                folder_tree, folder_map, report_map, xml_filename
+            )
+            st.session_state[f'tree_json_{cache_key}'] = (filename, json_content)
+        
+        # Get cached JSON data
+        filename, json_content = st.session_state[f'tree_json_{cache_key}']
+        
+        st.download_button(
+            label="📊 Download as JSON",
+            data=json_content,
+            file_name=filename,
+            mime="application/json",
+            key="tree_download_json"
+        )
 
 
-def _download_tree_as_txt(tree_text):
-    """Download tree view as TXT file"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    txt_content += "=" * 80 + "\n\n"
-    txt_content += tree_text
+# Deprecated - JSON exports now handled by JSONExportGenerator
+def _convert_folder_structure_to_json_DEPRECATED(folder_tree, folder_map, report_map):
+    """Convert folder structure to hierarchical JSON format matching the ASCII tree structure"""
     
-    st.download_button(
-        label="📥 Download Tree (TXT)",
-        data=txt_content,
-        file_name=f"folder_structure_{timestamp}.txt",
-        mime="text/plain",
-        key="tree_download_btn"
-    )
-
-
-def _download_detailed_as_csv(folder_tree, folder_map, report_map):
-    """Download detailed view as CSV file"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_data = _generate_folder_csv_data(folder_tree, folder_map, report_map)
-    df = pd.DataFrame(csv_data)
+    if not folder_map or not report_map:
+        return {
+            "error": "Missing data",
+            "total_folders": len(folder_map) if folder_map else 0,
+            "total_reports": len(report_map) if report_map else 0
+        }
     
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    
-    st.download_button(
-        label="📥 Download Detailed (CSV)",
-        data=csv_buffer.getvalue(),
-        file_name=f"folder_details_{timestamp}.csv",
-        mime="text/csv",
-        key="csv_download_btn"
-    )
+    try:
+        def convert_folder_node(folder_node):
+            """Recursively convert a folder node to JSON with all its children and reports"""
+            try:
+                folder_id = folder_node['id']
+                folder = folder_map.get(folder_id)
+            except Exception as e:
+                raise Exception(f"Error accessing folder_node structure: {e}. Type: {type(folder_node)}, Content: {str(folder_node)[:200]}")
+            
+            # Build folder JSON structure
+            folder_json = {
+                "id": folder_id,
+                "name": folder_node['name'],
+                "type": "folder",
+                "children": [],
+                "reports": []
+            }
+            
+            # Add reports in this folder with proper classification
+            if folder and folder.report_ids:
+                reports = [report_map.get(report_id) for report_id in folder.report_ids if report_map.get(report_id)]
+                
+                # Group reports by type like the ASCII tree does
+                search_reports = []
+                output_reports = []  # List, Audit, and Aggregate reports
+                
+                for report in reports:
+                    report_type = ReportClassifier.classify_report_type(report)
+                    
+                    report_json = {
+                        "id": report.id,
+                        "name": getattr(report, 'name', 'Unknown'),
+                        "type": report_type,
+                        "type_clean": report_type.strip('[]')
+                    }
+                    
+                    # Add metadata
+                    for attr in ['parent_guid', 'description']:
+                        if hasattr(report, attr):
+                            report_json[attr] = getattr(report, attr)
+                    
+                    if report_type == "[Search]":
+                        search_reports.append(report_json)
+                    else:
+                        output_reports.append(report_json)
+                
+                # Create parent-child relationships like the ASCII tree
+                parent_to_reports = {}
+                for output_report in output_reports:
+                    parent_guid = output_report.get('parent_guid')
+                    if parent_guid:
+                        if parent_guid not in parent_to_reports:
+                            parent_to_reports[parent_guid] = []
+                        parent_to_reports[parent_guid].append(output_report)
+                
+                # Add search reports with their children
+                for search_report in search_reports:
+                    search_guid = search_report['id']
+                    child_reports = parent_to_reports.get(search_guid, [])
+                    
+                    if child_reports:
+                        search_report['child_reports'] = child_reports
+                    
+                    folder_json['reports'].append(search_report)
+                
+                # Add orphaned output reports (no parent found)
+                for output_report in output_reports:
+                    parent_guid = output_report.get('parent_guid')
+                    if not parent_guid or parent_guid not in [s['id'] for s in search_reports]:
+                        folder_json['reports'].append(output_report)
+            
+            # Recursively add child folders
+            for child_folder in folder_node['children']:
+                child_json = convert_folder_node(child_folder)
+                folder_json['children'].append(child_json)
+            
+            return folder_json
+        
+        # Convert the root folder tree - same structure as ASCII tree
+        if folder_tree and folder_tree.get('roots'):
+            # Multiple root folders
+            root_structure = {
+                "type": "root",
+                "children": []
+            }
+            
+            for root_folder in folder_tree['roots']:
+                root_structure['children'].append(convert_folder_node(root_folder))
+        else:
+            # No folder tree or invalid structure
+            root_structure = {"error": "No folder tree found or invalid structure"}
+        
+        # Calculate summary statistics
+        def count_items(node):
+            """Recursively count folders and reports by type"""
+            counts = {
+                'folders': 0,
+                'searches': 0,
+                'list_reports': 0,
+                'audit_reports': 0,
+                'aggregate_reports': 0
+            }
+            
+            if node.get('type') == 'folder':
+                counts['folders'] += 1
+                
+                # Count reports in this folder
+                for report in node.get('reports', []):
+                    report_type = report.get('type_clean', '').lower().replace(' ', '_')
+                    if report_type == 'search':
+                        counts['searches'] += 1
+                        # Count child reports
+                        for child in report.get('child_reports', []):
+                            child_type = child.get('type_clean', '').lower().replace(' ', '_')
+                            if child_type in counts:
+                                counts[child_type] += 1
+                    elif report_type in counts:
+                        counts[report_type] += 1
+                
+                # Recursively count children
+                for child in node.get('children', []):
+                    child_counts = count_items(child)
+                    for key in counts:
+                        counts[key] += child_counts[key]
+            elif node.get('type') == 'root':
+                # Handle root node
+                for child in node.get('children', []):
+                    child_counts = count_items(child)
+                    for key in counts:
+                        counts[key] += child_counts[key]
+            
+            return counts
+        
+        summary_counts = count_items(root_structure) if root_structure.get('type') != 'error' else {}
+        
+        return {
+            "folder_structure": root_structure,
+            "summary": summary_counts
+        }
+        
+    except Exception as e:
+        # Comprehensive debugging
+        return {
+            "error": f"JSON conversion failed: {str(e)}",
+            "debug_info": {
+                "folder_map_keys": list(folder_map.keys())[:5],
+                "report_map_keys": list(report_map.keys())[:5],
+                "sample_folder": {
+                    "type": str(type(next(iter(folder_map.values())))) if folder_map else "none",
+                    "attributes": list(vars(next(iter(folder_map.values()))).keys()) if folder_map and hasattr(next(iter(folder_map.values())), '__dict__') else "no __dict__"
+                },
+                "sample_report": {
+                    "type": str(type(next(iter(report_map.values())))) if report_map else "none", 
+                    "attributes": list(vars(next(iter(report_map.values()))).keys()) if report_map and hasattr(next(iter(report_map.values())), '__dict__') else "no __dict__"
+                }
+            }
+        }
 
 
 
@@ -325,7 +516,7 @@ def render_folder_list_view(folder_tree, folder_map, report_map):
 
 
 def render_dependency_tree(dependency_tree, reports):
-    """Render report dependency relationships"""
+    """Render report dependency relationships with caching and lazy exports"""
     if not dependency_tree or not dependency_tree['roots']:
         st.info("No dependency relationships found")
         return
@@ -339,46 +530,86 @@ def render_dependency_tree(dependency_tree, reports):
     
     report_map = {r.id: r for r in reports}
     
+    # Generate cache key for dependency tree
+    cache_key = f"dep_tree_{len(reports)}_{show_circular}"
+    
+    # Generate and cache dependency tree text
+    if f'dep_tree_text_{cache_key}' not in st.session_state:
+        st.session_state[f'dep_tree_text_{cache_key}'] = generate_dependency_tree_ascii(dependency_tree, report_map, show_circular)
+    
     # Tree View (collapsible)
     with st.expander("🌳 Dependency Tree", expanded=True):
-        tree_text = generate_dependency_tree_ascii(dependency_tree, report_map, show_circular)
-        st.code(tree_text, language="")
+        st.code(st.session_state[f'dep_tree_text_{cache_key}'], language="")
     
-    # Detailed View (collapsible)
-    with st.expander("📋 Detailed Dependency View", expanded=False):
-        render_dependency_list_view(dependency_tree, report_map, show_circular)
-    
-    # Direct Export Buttons
+    # Export options for tree view - TXT and JSON
     st.markdown("---")
-    st.subheader("📤 Export Dependency Analysis")
+    st.markdown("**📥 Export Options:**")
     
     col1, col2 = st.columns(2)
+    
     with col1:
-        # Complete analysis (TXT) - includes both tree and detailed view
-        complete_analysis = _generate_complete_dependency_analysis(dependency_tree, report_map, show_circular, tree_text)
-        complete_filename = f"dependency_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+        # TXT export using cached tree text
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        xml_filename = st.session_state.get('uploaded_filename', 'dependency_tree')
+        clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
+        
+        # Generate summary statistics to match JSON export
+        from ..export_handlers.json_export_generator import JSONExportGenerator
+        from ..ui.tabs.tab_helpers import ensure_analysis_cached
+        
+        analysis = ensure_analysis_cached(None)
+        json_generator = JSONExportGenerator(analysis)
+        summary_stats = json_generator._calculate_dependency_summary(dependency_tree, report_map, show_circular)
+        
+        # Build TXT content with summary
+        dep_txt_content = f"Dependency Tree - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        dep_txt_content += f"Show Circular Dependencies: {show_circular}\n"
+        dep_txt_content += "=" * 80 + "\n\n"
+        dep_txt_content += st.session_state[f'dep_tree_text_{cache_key}']
+        dep_txt_content += "\n\n" + "=" * 80 + "\n"
+        dep_txt_content += "SUMMARY STATISTICS\n"
+        dep_txt_content += "=" * 80 + "\n"
+        dep_txt_content += f"Total Nodes: {summary_stats.get('total_nodes', 0)}\n"
+        dep_txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
+        dep_txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
+        dep_txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
+        dep_txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
+        dep_txt_content += f"Circular Dependencies: {summary_stats.get('circular_dependencies', 0)}\n"
+        
         st.download_button(
-            label="📄 Complete Analysis (TXT)",
-            data=complete_analysis,
-            file_name=complete_filename,
+            label="📄 Download as TXT",
+            data=dep_txt_content,
+            file_name=f"{clean_xml_name}_dependency_tree_{timestamp}.txt",
             mime="text/plain",
-            key="export_dependency_complete",
-            help="Includes both tree view and detailed information"
+            key="dep_tree_download_txt"
         )
     
     with col2:
-        # Structured data (CSV) - for data processing
-        csv_data = _generate_dependency_csv_data(dependency_tree, report_map, show_circular)
-        df = pd.DataFrame(csv_data)
-        csv_content = df.to_csv(index=False)
-        csv_filename = f"dependency_data_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+        # JSON export using cached dependency structure - generate JSON representation lazily
+        dep_cache_key = f'dep_tree_json_{cache_key}'
+        if dep_cache_key not in st.session_state:
+            # Use the proper JSON export generator
+            from ..export_handlers.json_export_generator import JSONExportGenerator
+            from ..ui.tabs.tab_helpers import ensure_analysis_cached
+            
+            # Get analysis object for the JSON generator
+            analysis = ensure_analysis_cached(None)  # Use cached analysis
+            json_generator = JSONExportGenerator(analysis)
+            
+            filename, json_content = json_generator.generate_dependency_tree_json(
+                dependency_tree, report_map, show_circular, xml_filename
+            )
+            st.session_state[dep_cache_key] = (filename, json_content)
+        
+        # Get cached JSON data
+        filename, json_content = st.session_state[dep_cache_key]
+        
         st.download_button(
-            label="📊 Structured Data (CSV)", 
-            data=csv_content,
-            file_name=csv_filename,
-            mime="text/csv",
-            key="export_dependency_csv",
-            help="Machine-readable dependency data"
+            label="📊 Download as JSON",
+            data=json_content,
+            file_name=filename,
+            mime="application/json",
+            key="dep_tree_download_json"
         )
 
 
@@ -594,41 +825,12 @@ def render_dependency_list_view(dependency_tree, report_map, show_circular):
         render_dependency_node(root_dep)
 
 
-def _handle_folder_export(export_format, folder_tree, folder_map, report_map, tree_text):
-    """Handle export of folder structure in various formats"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    if export_format == "Tree (TXT)":
-        # Export ASCII tree
-        txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        txt_content += "=" * 80 + "\n\n"
-        txt_content += tree_text
-        
-        st.download_button(
-            label="📥 Download Tree (TXT)",
-            data=txt_content,
-            file_name=f"folder_structure_{timestamp}.txt",
-            mime="text/plain"
-        )
-    
-    elif export_format == "Detailed (CSV)":
-        # Export detailed data as CSV
-        csv_data = _generate_folder_csv_data(folder_tree, folder_map, report_map)
-        df = pd.DataFrame(csv_data)
-        
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        
-        st.download_button(
-            label="📥 Download Detailed (CSV)",
-            data=csv_buffer.getvalue(),
-            file_name=f"folder_details_{timestamp}.csv",
-            mime="text/csv"
-        )
+# REMOVED: Legacy export handler - no longer used since TXT/JSON exports are handled directly
     
 
 
-def _generate_folder_csv_data(folder_tree, folder_map, report_map):
+# REMOVED: Legacy CSV export function - no longer needed since we use TXT/JSON exports
+def _generate_folder_csv_data_REMOVED(folder_tree, folder_map, report_map):
     """Generate CSV data for folder structure"""
     csv_data = []
     
@@ -815,37 +1017,7 @@ def _generate_complete_dependency_analysis(dependency_tree, report_map, show_cir
 
 
 
-def _handle_dependency_export(export_format, dependency_tree, report_map, show_circular, tree_text):
-    """Handle export of dependency structure in various formats"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    if export_format == "Tree (TXT)":
-        # Export ASCII tree
-        txt_content = f"Dependency Tree - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        txt_content += "=" * 80 + "\n\n"
-        txt_content += tree_text
-        
-        st.download_button(
-            label="📥 Download Tree (TXT)",
-            data=txt_content,
-            file_name=f"dependency_tree_{timestamp}.txt",
-            mime="text/plain"
-        )
-    
-    elif export_format == "Detailed (CSV)":
-        # Export detailed dependency data as CSV
-        csv_data = _generate_dependency_csv_data(dependency_tree, report_map, show_circular)
-        df = pd.DataFrame(csv_data)
-        
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        
-        st.download_button(
-            label="📥 Download Detailed (CSV)",
-            data=csv_buffer.getvalue(),
-            file_name=f"dependency_details_{timestamp}.csv",
-            mime="text/csv"
-        )
+# REMOVED: Legacy export handler - no longer used since TXT/JSON exports are handled directly
     
 
 
@@ -944,7 +1116,8 @@ def _format_dependency_name_with_context(node, report_map):
         return f"[{clean_classification}].[{clean_name}]"
 
 
-def _generate_dependency_csv_data(dependency_tree, report_map, show_circular):
+# REMOVED: Legacy CSV export function - no longer needed since we use TXT/JSON exports  
+def _generate_dependency_csv_data_REMOVED(dependency_tree, report_map, show_circular):
     """Generate CSV data for dependency structure"""
     csv_data = []
     
@@ -1009,3 +1182,122 @@ def _generate_dependency_csv_data(dependency_tree, report_map, show_circular):
         process_dependency_node(root_dep)
     
     return csv_data
+
+
+# Deprecated - JSON exports now handled by JSONExportGenerator
+def _convert_dependency_tree_to_json_DEPRECATED(dependency_tree, report_map, show_circular, xml_filename):
+    """Convert dependency tree to hierarchical JSON format matching the ASCII tree structure"""
+    
+    if not dependency_tree or not dependency_tree.get('roots'):
+        return {
+            "error": "No dependency tree found",
+            "total_reports": len(report_map) if report_map else 0
+        }
+    
+    try:
+        def convert_dependency_node(dep_node):
+            """Recursively convert a dependency node to JSON with all its children"""
+            report = report_map.get(dep_node['id'])
+            report_type = ReportClassifier.classify_report_type(report) if report else "[Search]"
+            
+            # Build dependency JSON structure
+            dep_json = {
+                "id": dep_node['id'],
+                "name": dep_node['name'],
+                "type": report_type,
+                "type_clean": report_type.strip('[]'),
+                "is_circular": dep_node.get('circular', False),
+                "dependencies": []
+            }
+            
+            # Add metadata if available
+            if report:
+                for attr in ['parent_guid', 'description']:
+                    if hasattr(report, attr):
+                        dep_json[attr] = getattr(report, attr)
+            
+            # Add folder path if available
+            if dep_node.get('folder_path'):
+                dep_json['folder_path'] = dep_node['folder_path']
+            
+            # Only include circular dependencies if show_circular is True
+            children = dep_node.get('children', []) or dep_node.get('dependencies', [])
+            for child_dep in children:
+                if not child_dep.get('circular', False) or show_circular:
+                    child_json = convert_dependency_node(child_dep)
+                    dep_json['dependencies'].append(child_json)
+            
+            return dep_json
+        
+        # Convert all root dependencies
+        root_dependencies = []
+        for root_dep in dependency_tree['roots']:
+            root_json = convert_dependency_node(root_dep)
+            root_dependencies.append(root_json)
+        
+        # Calculate summary statistics
+        def count_dependency_items(node):
+            """Recursively count dependencies by type"""
+            counts = {
+                'total_nodes': 0,
+                'searches': 0,
+                'list_reports': 0,
+                'audit_reports': 0,
+                'aggregate_reports': 0,
+                'circular_dependencies': 0
+            }
+            
+            counts['total_nodes'] += 1
+            
+            # Count by type
+            report_type = node.get('type_clean', '').lower().replace(' ', '_')
+            if report_type in counts:
+                counts[report_type] += 1
+            
+            # Count circular dependencies
+            if node.get('is_circular', False):
+                counts['circular_dependencies'] += 1
+            
+            # Recursively count children
+            for child in node.get('dependencies', []):
+                child_counts = count_dependency_items(child)
+                for key in counts:
+                    counts[key] += child_counts[key]
+            
+            return counts
+        
+        # Calculate total counts across all roots
+        total_counts = {
+            'total_nodes': 0,
+            'searches': 0,
+            'list_reports': 0,
+            'audit_reports': 0,
+            'aggregate_reports': 0,
+            'circular_dependencies': 0
+        }
+        
+        for root in root_dependencies:
+            root_counts = count_dependency_items(root)
+            for key in total_counts:
+                total_counts[key] += root_counts[key]
+        
+        return {
+            "generated": datetime.now().isoformat(),
+            "xml_filename": xml_filename,
+            "show_circular_dependencies": show_circular,
+            "dependency_tree": {
+                "type": "dependency_root",
+                "roots": root_dependencies
+            },
+            "summary": total_counts
+        }
+        
+    except Exception as e:
+        return {
+            "error": f"JSON conversion failed: {str(e)}",
+            "debug_info": {
+                "dependency_tree_keys": list(dependency_tree.keys()) if dependency_tree else [],
+                "report_map_size": len(report_map) if report_map else 0,
+                "show_circular": show_circular
+            }
+        }

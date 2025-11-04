@@ -2,7 +2,7 @@ import streamlit as st
 from ..xml_parsers.xml_utils import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
 from ..utils.lookup import create_lookup_dictionaries
 
-@st.cache_data(ttl=1800, max_entries=100)  # Cache translations for 30 minutes
+@st.cache_data(ttl=1800, max_entries=5000, show_spinner=False)  # Cache translations for 30 minutes - sized for large clinical datasets
 def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col, deduplication_mode='unique_codes'):
     """
     Translate EMIS GUIDs to SNOMED codes using lookup DataFrame.

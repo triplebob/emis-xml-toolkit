@@ -33,6 +33,8 @@ def load_lookup_table():
         
         # If we have session data, return it immediately
         if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
+            # Ensure version_info is returned even if it's empty - this prevents the issue
+            # where version info gets lost when loading from session data
             return lookup_df, emis_guid_col, snomed_code_col, version_info
         
         # Try to load from local cache first (without needing GitHub data)
@@ -43,6 +45,13 @@ def load_lookup_table():
                 lookup_df, emis_guid_col, snomed_code_col, version_info = cached_result
                 # Mark that we loaded from cache
                 version_info['load_source'] = 'cache'
+                
+                # Store in session state immediately to ensure it persists
+                st.session_state.lookup_df = lookup_df
+                st.session_state.emis_guid_col = emis_guid_col
+                st.session_state.snomed_code_col = snomed_code_col
+                st.session_state.lookup_version_info = version_info
+                
                 return lookup_df, emis_guid_col, snomed_code_col, version_info
             else:
                 # No cache available, will load from GitHub
@@ -75,6 +84,12 @@ def load_lookup_table():
         if version_info is None:
             version_info = {}
         version_info['load_source'] = 'github'
+        
+        # Store in session state immediately to ensure it persists
+        st.session_state.lookup_df = lookup_df
+        st.session_state.emis_guid_col = emis_guid_col
+        st.session_state.snomed_code_col = snomed_code_col
+        st.session_state.lookup_version_info = version_info
         
         # After loading from GitHub, try to build cache for next time
         if lookup_df is not None and version_info:

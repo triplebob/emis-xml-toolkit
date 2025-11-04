@@ -200,11 +200,15 @@ class SearchExportHandler:
         }
     
     def _collect_clinical_codes(self, criterion, codes_list, rule_number):
-        """Collect all clinical codes from a criterion"""
+        """Collect all clinical codes from a criterion - EXCLUDE EMISINTERNAL codes"""
         if not criterion.value_sets:
             return
             
         for vs in criterion.value_sets:
+            # Skip EMISINTERNAL value sets - they're not clinical codes
+            if vs.get('code_system') == 'EMISINTERNAL':
+                continue
+                
             if not vs.get('values'):
                 continue
                 
@@ -329,11 +333,16 @@ class SearchExportHandler:
                 main_column_filters = filter_linked_column_filters_from_main(criterion)
                 main_value_sets = filter_linked_value_sets_from_main(criterion)
                 additional_filters_count = len(main_column_filters)
-                clinical_code_sets_count = len(main_value_sets)
+                # Count only non-EMISINTERNAL value sets as clinical codes
+                clinical_code_sets_count = len([vs for vs in main_value_sets if vs.get('code_system') != 'EMISINTERNAL'])
             except ImportError:
                 # Fallback to original logic if import fails
                 additional_filters_count = len(criterion.column_filters) if criterion.column_filters else 0
-                clinical_code_sets_count = len(criterion.value_sets) if criterion.value_sets else 0
+                # Count only non-EMISINTERNAL value sets as clinical codes
+                if criterion.value_sets:
+                    clinical_code_sets_count = len([vs for vs in criterion.value_sets if vs.get('code_system') != 'EMISINTERNAL'])
+                else:
+                    clinical_code_sets_count = 0
             
             data.extend([
                 [criterion_label, criterion.display_name or ''],
@@ -375,14 +384,27 @@ class SearchExportHandler:
                     if not is_linked_filter:
                         main_filters.append(col_filter)
                 
-                # Show main criterion filters only
-                for j, col_filter in enumerate(main_filters, 1):
-                    filter_summary = self._format_filter_summary(col_filter)
-                    data.extend([
-                        [f'  Filter {j}', filter_summary],
-                    ])
-                    
+                # Mirror UI two-tier filter structure
                 if main_filters:
+                    # First tier: Main Filters (aggregated summaries)
+                    main_filter_summaries = self._generate_main_filter_summaries(main_filters)
+                    for j, summary in enumerate(main_filter_summaries, 1):
+                        data.extend([
+                            [f'  Filter {j}', summary],
+                        ])
+                    
+                    # Second tier: Additional Filters (individual EMISINTERNAL breakdown)
+                    additional_filters = self._generate_additional_filter_details(main_filters)
+                    if additional_filters:
+                        data.append(['', ''])  # Spacer
+                        data.extend([
+                            ['  Additional Filters', ''],
+                        ])
+                        for k, detail in enumerate(additional_filters, 1):
+                            data.extend([
+                                [f'    Detail {k}', detail],
+                            ])
+                    
                     data.append(['', ''])  # Spacer
             
             # Add simplified linked criteria details
@@ -405,7 +427,7 @@ class SearchExportHandler:
                     # Add linked criterion's column filters
                     if linked_crit.column_filters:
                         for k, col_filter in enumerate(linked_crit.column_filters, 1):
-                            filter_summary = self._format_filter_summary(col_filter)
+                            filter_summary = self._render_column_filter_for_export(col_filter)
                             data.extend([
                                 [f'    Filter {k}', filter_summary],
                             ])
@@ -428,6 +450,10 @@ class SearchExportHandler:
                 continue
                 
             for vs in criterion.value_sets:
+                # Skip EMISINTERNAL value sets - they're not clinical codes
+                if vs.get('code_system') == 'EMISINTERNAL':
+                    continue
+                    
                 if not vs.get('values'):
                     continue
                     
@@ -457,6 +483,10 @@ class SearchExportHandler:
                 for j, linked_crit in enumerate(criterion.linked_criteria, 1):
                     if linked_crit.value_sets:
                         for vs in linked_crit.value_sets:
+                            # Skip EMISINTERNAL value sets - they're not clinical codes
+                            if vs.get('code_system') == 'EMISINTERNAL':
+                                continue
+                                
                             if not vs.get('values'):
                                 continue
                                 
@@ -497,6 +527,10 @@ class SearchExportHandler:
                     continue
                     
                 for vs in criterion.value_sets:
+                    # Skip EMISINTERNAL value sets - they're not clinical codes
+                    if vs.get('code_system') == 'EMISINTERNAL':
+                        continue
+                        
                     if not vs.get('values'):
                         continue
                         
@@ -525,6 +559,10 @@ class SearchExportHandler:
                     for j, linked_crit in enumerate(criterion.linked_criteria, 1):
                         if linked_crit.value_sets:
                             for vs in linked_crit.value_sets:
+                                # Skip EMISINTERNAL value sets - they're not clinical codes
+                                if vs.get('code_system') == 'EMISINTERNAL':
+                                    continue
+                                    
                                 if not vs.get('values'):
                                     continue
                                     
@@ -759,11 +797,59 @@ class SearchExportHandler:
             if 'SCT_DRGGRP' in code_system:
                 details.append("Drug group classification")
             elif 'EMISINTERNAL' in code_system:
-                details.append("EMIS internal classification")
+                # Extract specific EMISINTERNAL context
+                emisinternal_context = self._get_emisinternal_context(col_filter)
+                details.append(emisinternal_context)
             elif 'SNOMED_CONCEPT' in code_system:
                 details.append("SNOMED clinical terminology")
         
         return ' | '.join(details) if details else 'No filter details available'
+    
+    def _get_emisinternal_context(self, col_filter):
+        """Extract specific context for EMISINTERNAL codes"""
+        column_name = col_filter.get('column', '').upper()
+        column_display = col_filter.get('display_name', '').lower()
+        in_not_in = col_filter.get('in_not_in', 'IN')
+        action = "Include" if in_not_in == "IN" else "Exclude"
+        
+        # Get the actual values being filtered
+        value_sets = col_filter.get('value_sets', [])
+        if value_sets:
+            # Get first value set for context
+            vs = value_sets[0]
+            values = vs.get('values', [])
+            if values:
+                value = values[0]
+                code_value = value.get('value', '').lower()
+                display_name = value.get('display_name', '')
+                
+                # Specific column context mapping
+                if column_name == 'ISSUE_METHOD':
+                    return f"{action} issue method: {display_name}" if display_name else f"{action} issue methods"
+                elif column_name == 'IS_PRIVATE':
+                    if code_value == 'false':
+                        return f"{action} NHS prescriptions: False (not privately paid)"
+                    elif code_value == 'true':
+                        return f"{action} private prescriptions: True (patient paid)"
+                    else:
+                        return f"{action} prescription funding type: {display_name or code_value}"
+                elif column_name in ['AUTHOR', 'CURRENTLY_CONTRACTED']:
+                    return f"{action} user authorization: {display_name}" if display_name else f"{action} user authorization"
+                elif 'consultation' in column_display or 'heading' in column_display:
+                    return f"{action} consultation heading: {display_name}" if display_name else f"{action} consultation headings"
+                else:
+                    context = column_display if column_display else "internal classification"
+                    return f"{action} {context}: {display_name}" if display_name else f"{action} {context}"
+        
+        # Fallback for column-level context
+        if column_name == 'ISSUE_METHOD':
+            return f"{action} issue methods"
+        elif column_name == 'IS_PRIVATE':
+            return f"{action} prescription funding type (NHS vs private)"
+        elif column_name in ['AUTHOR', 'CURRENTLY_CONTRACTED']:
+            return f"{action} user authorization filters"
+        else:
+            return f"{action} EMIS internal classification"
     
     def _format_range_description(self, col_filter):
         """Format range information into human-readable descriptions"""
@@ -771,34 +857,64 @@ class SearchExportHandler:
         
         
         # Helper function to format relative dates
-        def format_relative_date(value_dict):
+        def format_relative_date_emis(value_dict, operator='GTEQ'):
             val = value_dict.get('value', '')
             unit = value_dict.get('unit', '').lower()
             
-            # Handle negative values (past dates)
-            if val.startswith('-'):
-                val_num = val[1:]  # Remove minus sign
-                if unit == 'month':
-                    unit_str = 'months' if val_num != '1' else 'month'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit == 'day':
-                    unit_str = 'days' if val_num != '1' else 'day'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit == 'year':
-                    unit_str = 'years' if val_num != '1' else 'year'
-                    return f"{val_num} {unit_str} before the search date"
+            # Convert operator to EMIS format
+            if operator == 'GTEQ':
+                op_text = 'after or on'
+            elif operator == 'LTEQ':
+                op_text = 'before or on'
+            elif operator == 'GT':
+                op_text = 'after'
+            elif operator == 'LT':
+                op_text = 'before'
             else:
-                if unit == 'day':
-                    unit_str = 'days' if val != '1' else 'day'
-                    return f"{val} {unit_str}"
-                elif unit == 'month':
-                    unit_str = 'months' if val != '1' else 'month'
-                    return f"{val} {unit_str}"
-                elif unit == 'year':
-                    unit_str = 'years' if val != '1' else 'year'
-                    return f"{val} {unit_str}"
+                op_text = 'on'
             
-            return f"{val} {unit}"
+            # Handle numeric offset patterns first (to catch -6, 7, etc.)
+            if val and val.lstrip('-').isdigit():
+                if val.startswith('-'):
+                    # Negative relative date (before search date)
+                    abs_value = val[1:]  # Remove the minus sign
+                    from ..utils.text_utils import pluralize_unit
+                    unit_text = pluralize_unit(abs_value, unit)
+                    return f"and the Date is {op_text} {abs_value} {unit_text} before the search date"
+                else:
+                    # Positive relative date (after search date)
+                    from ..utils.text_utils import pluralize_unit
+                    unit_text = pluralize_unit(val, unit)
+                    return f"and the Date is {op_text} {val} {unit_text} after the search date"
+            
+            # Handle temporal variable patterns (Last/This/Next + time unit)  
+            elif unit.lower() in ['day', 'week', 'month', 'quarter', 'year', 'fiscalyear']:
+                if val.lower() == 'last':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is last fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is last yearly quarter"
+                    else:
+                        return f"and the Date is last {unit.lower()}"
+                elif val.lower() == 'this':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is this fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is this yearly quarter"
+                    else:
+                        return f"and the Date is this {unit.lower()}"
+                elif val.lower() == 'next':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is next fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is next yearly quarter"
+                    else:
+                        return f"and the Date is next {unit.lower()}"
+                else:
+                    return f"and the Date is {val} {unit.lower()}"
+            
+            # Fallback for unrecognized patterns
+            return f"Date filter: {val} {unit}"
         
         # Process range_from
         if 'range_from' in col_filter:
@@ -808,7 +924,7 @@ class SearchExportHandler:
             value = from_val.get('value', {})
             
             if isinstance(value, dict) and value.get('relation') == 'RELATIVE':
-                date_desc = format_relative_date(value)
+                date_desc = format_relative_date_emis(value, operator)
                 range_parts.append(f"{op_text} {date_desc}")
             else:
                 range_parts.append(f"{op_text} {value}")
@@ -821,7 +937,7 @@ class SearchExportHandler:
             value = to_val.get('value', {})
             
             if isinstance(value, dict) and value.get('relation') == 'RELATIVE':
-                date_desc = format_relative_date(value)
+                date_desc = format_relative_date_emis(value, operator)
                 range_parts.append(f"{op_text} {date_desc}")
             elif not value:  # Empty value for "up to baseline"
                 range_parts.append(f"{op_text} the search date")
@@ -845,66 +961,68 @@ class SearchExportHandler:
         def format_relative_date(value, unit, relation=None, operator=None):
             unit = unit.lower()
             
+            # Convert operator to EMIS format
+            if operator == 'GTEQ':
+                op_text = 'after or on'
+            elif operator == 'LTEQ':
+                op_text = 'before or on'
+            elif operator == 'GT':
+                op_text = 'after'
+            elif operator == 'LT':
+                op_text = 'before'
+            else:
+                op_text = 'on'
+            
+            # Handle numeric offset patterns first (to catch -6, 7, etc.)
+            if value and value.lstrip('-').isdigit():
+                if value.startswith('-'):
+                    # Negative relative date (before search date)
+                    abs_value = value[1:]  # Remove the minus sign
+                    unit_text = pluralize_unit(abs_value, unit)
+                    return f"and the Date is {op_text} {abs_value} {unit_text} before the search date"
+                else:
+                    # Positive relative date (after search date)
+                    unit_text = pluralize_unit(value, unit)
+                    return f"and the Date is {op_text} {value} {unit_text} after the search date"
+            
+            # Handle temporal variable patterns (Last/This/Next + time unit)  
+            elif unit.lower() in ['day', 'week', 'month', 'quarter', 'year', 'fiscalyear']:
+                if value.lower() == 'last':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is last fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is last yearly quarter"
+                    else:
+                        return f"and the Date is last {unit.lower()}"
+                elif value.lower() == 'this':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is this fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is this yearly quarter"
+                    else:
+                        return f"and the Date is this {unit.lower()}"
+                elif value.lower() == 'next':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is next fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is next yearly quarter"
+                    else:
+                        return f"and the Date is next {unit.lower()}"
+                else:
+                    return f"and the Date is {value} {unit.lower()}"
+            
             # Handle absolute dates (like 01/04/2023)
-            if relation == 'ABSOLUTE' or unit == 'date':
-                return f"the absolute date {value}"
+            elif relation == 'ABSOLUTE' or unit == 'date':
+                return f"absolute date {value}"
             
             # Handle age values (for demographics)
-            if unit in ['year', 'years'] and relation == 'RELATIVE':
+            elif unit in ['year', 'years'] and relation == 'RELATIVE':
                 unit_str = 'years old' if value != '1' else 'year old'
                 return f"{value} {unit_str}"
             
-            # Handle negative values (past dates) with EMIS-style operator interpretation
-            if value.startswith('-'):
-                val_num = value[1:]  # Remove minus sign
-                
-                # Format according to EMIS conventions
-                if unit in ['month', 'months']:
-                    unit_str = 'months' if val_num != '1' else 'month'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['day', 'days']:
-                    unit_str = 'days' if val_num != '1' else 'day'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['year', 'years']:
-                    unit_str = 'years' if val_num != '1' else 'year'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['week', 'weeks']:
-                    unit_str = 'weeks' if val_num != '1' else 'week'
-                    return f"{val_num} {unit_str} before the search date"
-                
-                # Default interpretation for other operators
-                if unit in ['month', 'months']:
-                    unit_str = 'months' if val_num != '1' else 'month'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['day', 'days']:
-                    unit_str = 'days' if val_num != '1' else 'day'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['year', 'years']:
-                    unit_str = 'years' if val_num != '1' else 'year'
-                    return f"{val_num} {unit_str} before the search date"
-                elif unit in ['week', 'weeks']:
-                    unit_str = 'weeks' if val_num != '1' else 'week'
-                    return f"{val_num} {unit_str} before the search date"
-            # Handle positive values (future dates or age)
-            elif value and not value.startswith('0'):
-                if unit in ['month', 'months']:
-                    unit_str = 'months' if value != '1' else 'month'
-                    return f"{value} {unit_str} after the search date"
-                elif unit in ['day', 'days']:
-                    unit_str = 'days' if value != '1' else 'day' 
-                    # Special case for vaccination schedules
-                    if value == '248':
-                        return f"{value} days (8 months)"
-                    return f"{value} {unit_str} after the search date"
-                elif unit in ['year', 'years']:
-                    unit_str = 'years' if value != '1' else 'year'
-                    return f"{value} {unit_str} after the search date"
-                elif unit in ['week', 'weeks']:
-                    unit_str = 'weeks' if value != '1' else 'week'
-                    return f"{value} {unit_str} after the search date"
-            
-            # Handle current/baseline (value is 0 or empty)
-            return "the search date"
+            # Fallback for any unhandled patterns
+            else:
+                return f"Date filter: {value} {unit}"
         
         # Process range from
         if range_data.get('from'):
@@ -1145,12 +1263,12 @@ class SearchExportHandler:
             else:
                 return f"{action} specified clinical codes"
                 
-        elif column.upper() == 'DATE':
+        elif column.upper() in ['DATE', 'ISSUE_DATE']:
             # Check for range information
             if 'range' in col_filter and col_filter['range']:
                 range_desc = self._format_range_emis_style(col_filter['range'])
                 return range_desc if range_desc else "Date is after/before search date"
-            return "Date filter applied"
+            return f"{display_name} filter applied"
             
         elif column.upper() == 'AGE':
             # Age range information
@@ -1191,8 +1309,8 @@ class SearchExportHandler:
             # Numeric value ranges
             if 'range' in col_filter and col_filter['range']:
                 range_desc = self._format_range_emis_style(col_filter['range'], is_numeric=True)
-                return range_desc if range_desc else "Numeric value filter applied"
-            return "Numeric value filter applied"
+                return range_desc if range_desc else "Numeric value range filter"
+            return "Numeric value range filter"
             
         elif column.upper() == 'EPISODE':
             # Episode type filtering
@@ -1214,6 +1332,13 @@ class SearchExportHandler:
             else:
                 return "Include specified medication codes"
         else:
+            # Check if this is an EMISINTERNAL filter for enhanced context
+            if col_filter.get('value_sets'):
+                is_emisinternal = any(vs.get('code_system') == 'EMISINTERNAL' for vs in col_filter['value_sets'])
+                if is_emisinternal:
+                    # Use the enhanced EMISINTERNAL context
+                    return self._get_emisinternal_context(col_filter)
+            
             return f"{display_name} filter applied"
     
     def _format_range_simple(self, range_data):
@@ -1258,6 +1383,45 @@ class SearchExportHandler:
         if not range_data:
             return None
         
+        # Debug: Check what structure we're getting for numeric filters
+        if is_numeric:
+            # Check for direct operator/value structure (alternative format)
+            if 'operator' in range_data and 'value' in range_data:
+                operator = range_data.get('operator', 'GTEQ')
+                value = range_data.get('value', '')
+                if value:
+                    op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                    return f"Value {op_text} {value}"
+            
+            # Check for alternative range structures (rangeTo, rangeFrom, etc.)
+            if 'rangeTo' in range_data or 'range_to' in range_data:
+                to_data = range_data.get('rangeTo') or range_data.get('range_to')
+                if to_data and isinstance(to_data, dict):
+                    operator = to_data.get('operator', 'LTEQ')
+                    value = to_data.get('value', '')
+                    if value:
+                        op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+            
+            if 'rangeFrom' in range_data or 'range_from' in range_data:
+                from_data = range_data.get('rangeFrom') or range_data.get('range_from')
+                if from_data and isinstance(from_data, dict):
+                    operator = from_data.get('operator', 'GTEQ')
+                    value = from_data.get('value', '')
+                    if value:
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+            
+            # Check for any nested value that might contain operator/value directly
+            for key in range_data:
+                if isinstance(range_data[key], dict) and 'operator' in range_data[key] and 'value' in range_data[key]:
+                    nested = range_data[key]
+                    operator = nested.get('operator', 'GTEQ')
+                    value = nested.get('value', '')
+                    if value:
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+        
         # Process range from
         if range_data.get('from'):
             from_data = range_data['from']
@@ -1265,27 +1429,45 @@ class SearchExportHandler:
             value = from_data.get('value', '')
             unit = from_data.get('unit', '')
             
-            if value and unit:
+            # Handle numeric values without units (common for NUMERIC_VALUE filters)
+            if value and (unit or is_numeric):
                 if value.startswith('-'):
                     # Past dates/ages
                     val_num = value[1:]
                     if is_age:
-                        return f"Age is more than {val_num} {unit.lower()}s old"
-                    elif unit.upper() == 'YEAR':
-                        return f"Date is after {val_num} year{'s' if val_num != '1' else ''} before the search date"
-                    elif unit.upper() == 'MONTH':
-                        return f"Date is after {val_num} month{'s' if val_num != '1' else ''} before the search date"
-                    elif unit.upper() == 'DAY':
-                        return f"Date is after {val_num} day{'s' if val_num != '1' else ''} before the search date"
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
+                        return f"Age {op_text} {val_num} {unit.lower()}s"
+                    elif unit and unit.upper() == 'YEAR':
+                        date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                        return f"Date is {date_op} {val_num} year{'s' if val_num != '1' else ''} before the search date"
+                    elif unit and unit.upper() == 'MONTH':
+                        date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                        return f"Date is {date_op} {val_num} month{'s' if val_num != '1' else ''} before the search date"
+                    elif unit and unit.upper() == 'DAY':
+                        date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                        return f"Date is {date_op} {val_num} day{'s' if val_num != '1' else ''} before the search date"
                 else:
                     # Future dates or positive values
                     if is_numeric:
                         op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
-                        return f"Numeric value is {op_text} {value}"
+                        return f"Value {op_text} {value}"
                     elif is_age:
-                        return f"Age is more than {value} {unit.lower()}s"
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
+                        return f"Age {op_text} {value} {unit.lower()}s"
                     else:
-                        return f"Date is after {value} {unit.lower()}s from the search date"
+                        # Check if this is a hardcoded date (contains slashes or dashes) vs relative offset
+                        if '/' in value or '-' in value and not value.isdigit():
+                            # Hardcoded date format
+                            date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                            return f"Date {date_op} {value} (Hardcoded Date)"
+                        else:
+                            # Relative date offset - handle zero case
+                            if value == '0':
+                                date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                                return f"Date is {date_op} the search date"
+                            else:
+                                date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
+                                return f"Date is {date_op} {value} {unit.lower()}s from the search date"
         
         # Process range to
         if range_data.get('to'):
@@ -1294,28 +1476,309 @@ class SearchExportHandler:
             value = to_data.get('value', '')
             unit = to_data.get('unit', '')
             
-            if value and unit:
+            # Handle numeric values without units (common for NUMERIC_VALUE filters)
+            if value and (unit or is_numeric):
                 if value.startswith('-'):
                     val_num = value[1:]
                     if is_age:
-                        return f"Age is less than {val_num} {unit.lower()}s old"
-                    elif unit.upper() == 'YEAR':
-                        return f"Date is before {val_num} year{'s' if val_num != '1' else ''} before the search date"
+                        op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Age {op_text} {val_num} {unit.lower()}s"
+                    elif unit and unit.upper() == 'YEAR':
+                        date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                        return f"Date is {date_op} {val_num} year{'s' if val_num != '1' else ''} before the search date"
                     else:
-                        return f"Date is before {val_num} {unit.lower()}{'s' if val_num != '1' else ''} before the search date"
+                        date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                        return f"Date is {date_op} {val_num} {unit.lower()}{'s' if val_num != '1' else ''} before the search date"
                 else:
                     if is_numeric:
                         op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
-                        return f"Numeric value is {op_text} {value}"
+                        return f"Value {op_text} {value}"
                     elif is_age:
-                        return f"Age is less than {value} {unit.lower()}s"
+                        op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Age {op_text} {value} {unit.lower()}s"
                     else:
-                        return f"Date is before {value} {unit.lower()}s from the search date"
+                        # Check if this is a hardcoded date (contains slashes or dashes) vs relative offset
+                        if '/' in value or '-' in value and not value.isdigit():
+                            # Hardcoded date format
+                            date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                            return f"Date {date_op} {value} (Hardcoded Date)"
+                        else:
+                            # Relative date offset - handle zero case
+                            if value == '0':
+                                date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                                return f"Date is {date_op} the search date"
+                            else:
+                                date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                                return f"Date is {date_op} {value} {unit.lower()}s from the search date"
             else:
                 # Empty value for "up to baseline"
                 return "Date is before the search date"
         
-        return "Date/value range filter applied"
+        # If we reach here, the range structure wasn't processed successfully
+        if is_numeric:
+            return "Numeric value range filter"
+        else:
+            return "Date/value range filter applied"
+    
+    def _generate_main_filter_summaries(self, main_filters):
+        """Generate main filter summaries matching UI aggregated view"""
+        summaries = []
+        
+        # Group filters by column type to generate aggregated summaries
+        filter_groups = {}
+        for cf in main_filters:
+            column = cf.get('column', 'Unknown')
+            # Convert list to tuple for hashing if needed
+            column_key = tuple(column) if isinstance(column, list) else column
+            if column_key not in filter_groups:
+                filter_groups[column_key] = []
+            filter_groups[column_key].append(cf)
+        
+        for column_key, filters in filter_groups.items():
+            # Convert tuple back to list if needed for processing
+            column = list(column_key) if isinstance(column_key, tuple) else column_key
+            
+            # Handle both single column (string) and multiple columns (list)
+            if isinstance(column, list):
+                column_upper_list = [col.upper() for col in column]
+                column_display = " + ".join(column)
+            else:
+                column_upper_list = [column.upper()]
+                column_display = column
+            
+            # Get all value sets from all filters in this group
+            all_value_sets = []
+            for filter_item in filters:
+                all_value_sets.extend(filter_item.get('value_sets', []))
+            
+            # Separate EMISINTERNAL from clinical value sets for main summary
+            clinical_value_sets = [vs for vs in all_value_sets if vs.get('code_system') != 'EMISINTERNAL']
+            emisinternal_value_sets = [vs for vs in all_value_sets if vs.get('code_system') == 'EMISINTERNAL']
+            
+            # Generate main filter summary based on column type
+            if any(col in ['READCODE', 'SNOMEDCODE'] for col in column_upper_list):
+                total_clinical_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+                if total_clinical_codes > 0:
+                    summaries.append(f"Include {total_clinical_codes} specified clinical codes")
+                else:
+                    summaries.append("Include specified clinical codes")
+                    
+            elif any(col in ['DRUGCODE'] for col in column_upper_list):
+                total_medication_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+                if total_medication_codes > 0:
+                    summaries.append(f"Include {total_medication_codes} specified medication codes")
+                else:
+                    summaries.append("Include specified medication codes")
+                    
+            elif any(col in ['DATE', 'ISSUE_DATE', 'AGE'] for col in column_upper_list):
+                # For date/age filters, use the specific range description
+                range_info = filters[0].get('range')
+                if range_info:
+                    is_age = any(col == 'AGE' for col in column_upper_list)
+                    range_desc = self._format_range_emis_style(range_info, is_age=is_age)
+                    if range_desc:
+                        # Customize the prefix for specific column types
+                        if any(col == 'ISSUE_DATE' for col in column_upper_list):
+                            if range_desc.startswith('Date '):
+                                range_desc = range_desc.replace('Date ', 'Date of Issue ', 1)
+                        summaries.append(range_desc)
+                    else:
+                        summaries.append(f"{column_display} filtering")
+                else:
+                    generic_desc = {
+                        'DATE': 'Date filtering',
+                        'ISSUE_DATE': 'Issue date filtering', 
+                        'AGE': 'Patient age filtering'
+                    }.get(column_upper_list[0], f'{column_display} filtering')
+                    summaries.append(generic_desc)
+                    
+            elif any(col == 'NUMERIC_VALUE' for col in column_upper_list):
+                # For NUMERIC_VALUE filters, use the specific range description
+                range_info = filters[0].get('range')
+                if range_info:
+                    range_desc = self._format_range_emis_style(range_info, is_numeric=True)
+                    if range_desc:
+                        summaries.append(range_desc)
+                    else:
+                        summaries.append("Numeric value range filter")
+                else:
+                    summaries.append("Numeric value range filter")
+                    
+            elif emisinternal_value_sets:
+                # For EMISINTERNAL columns, show aggregated summary
+                total_internal_values = sum(len(vs.get('values', [])) for vs in emisinternal_value_sets)
+                
+                # Special handling for known EMISINTERNAL column types
+                column_name = column_upper_list[0] if column_upper_list else ''
+                if column_name == 'ISSUE_METHOD':
+                    if total_internal_values > 0:
+                        summaries.append(f"Include {total_internal_values} specified issue methods")
+                    else:
+                        summaries.append("Include specified issue methods")
+                elif column_name == 'IS_PRIVATE':
+                    # Check if this is for private or NHS prescriptions
+                    is_private_filter = any(
+                        any(v.get('value', '').lower() == 'true' for v in vs.get('values', []))
+                        for vs in emisinternal_value_sets
+                    )
+                    if is_private_filter:
+                        summaries.append("Include privately prescribed")
+                    else:
+                        summaries.append("Include privately prescribed")
+                else:
+                    summaries.append(f"Include internal classification: {column_display}")
+            else:
+                # Fallback for other column types
+                summaries.append(f"{column_display} filter applied")
+        
+        return summaries
+    
+    def _generate_additional_filter_details(self, main_filters):
+        """Generate detailed breakdown of EMISINTERNAL filters matching UI Additional Filters section"""
+        details = []
+        
+        # Collect all EMISINTERNAL value sets from all filters
+        emisinternal_data = []
+        for cf in main_filters:
+            column = cf.get('column', '')
+            column_name = column.upper() if isinstance(column, str) else column[0].upper() if column else ''
+            in_not_in = cf.get('in_not_in', 'IN')
+            column_display_name = cf.get('display_name', '').lower()
+            
+            value_sets = cf.get('value_sets', [])
+            for vs in value_sets:
+                if vs.get('code_system') == 'EMISINTERNAL':
+                    for value in vs.get('values', []):
+                        emisinternal_data.append({
+                            'column_name': column_name,
+                            'column_display_name': column_display_name,
+                            'in_not_in': in_not_in,
+                            'value': value,
+                            'vs_description': vs.get('description', '')
+                        })
+        
+        # Generate individual filter descriptions
+        for item in emisinternal_data:
+            display_name = item['value'].get('display_name', '')
+            code_value = item['value'].get('value', '')
+            column_name = item['column_name']
+            column_display_name = item['column_display_name']
+            in_not_in = item['in_not_in']
+            
+            # Determine action based on in_not_in value
+            action = "Include" if in_not_in == "IN" else "Exclude"
+            
+            # Determine proper context based on column name
+            if column_name == 'ISSUE_METHOD':
+                context = "issue method"
+            elif column_name == 'IS_PRIVATE':
+                context = "private prescriptions"
+            elif column_name in ['AUTHOR', 'CURRENTLY_CONTRACTED']:
+                context = "user authorization"
+            elif 'consultation' in column_display_name or 'heading' in column_display_name:
+                context = "consultation heading"
+            else:
+                context = column_display_name if column_display_name else "internal classification"
+            
+            # Generate description matching UI format
+            if display_name and display_name.strip():
+                if column_name == 'ISSUE_METHOD':
+                    details.append(f"{action} {context}: {display_name}")
+                elif code_value.upper() == 'PROBLEM' and 'consultation' in context:
+                    details.append(f"{action} consultations where the consultation heading is: {display_name}")
+                elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
+                    status_descriptions = {
+                        'COMPLICATION': f"{action} complications only: {display_name}",
+                        'ONGOING': f"{action} ongoing conditions: {display_name}",
+                        'RESOLVED': f"{action} resolved conditions: {display_name}"
+                    }
+                    details.append(status_descriptions.get(code_value.upper(), f'{action} {context}: {display_name}'))
+                else:
+                    details.append(f"{action} {context}: {display_name}")
+            elif code_value:
+                details.append(f"{action} internal code: {code_value}")
+            else:
+                details.append(f"{action} EMIS internal classification")
+        
+        return details
+    
+    def _render_column_filter_for_export(self, column_filter):
+        """Mirror the UI search visualizer column filter logic for all exports (Excel and JSON)"""
+        if not column_filter:
+            return "No filter"
+        
+        column = column_filter.get('column', 'Unknown')
+        
+        # Handle both single column (string) and multiple columns (list)
+        if isinstance(column, list):
+            column_display = " + ".join(column)
+            column_check = [col.upper() for col in column]
+        else:
+            column_display = column
+            column_check = [column.upper()]
+        
+        in_not_in = column_filter.get('in_not_in', 'IN')
+        range_info = column_filter.get('range')
+        display_name = column_filter.get('display_name', column_display)
+        value_sets = column_filter.get('value_sets', [])
+        
+        # Separate EMISINTERNAL from clinical value sets
+        clinical_value_sets = [vs for vs in value_sets if vs.get('code_system') != 'EMISINTERNAL']
+        emisinternal_value_sets = [vs for vs in value_sets if vs.get('code_system') == 'EMISINTERNAL']
+        
+        # Mirror the UI logic exactly
+        if any(col in ['READCODE', 'SNOMEDCODE'] for col in column_check):
+            total_clinical_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+            if total_clinical_codes > 0:
+                return f"Include {total_clinical_codes} specified clinical codes"
+            else:
+                return "Include specified clinical codes"
+                
+        elif any(col in ['DRUGCODE'] for col in column_check):
+            total_medication_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+            if total_medication_codes > 0:
+                return f"Include {total_medication_codes} specified medication codes"
+            else:
+                return "Include specified medication codes"
+                
+        elif any(col == 'NUMERIC_VALUE' for col in column_check):
+            if range_info:
+                range_desc = self._format_range_emis_style(range_info, is_numeric=True)
+                return range_desc if range_desc else "Numeric value range filter"
+            else:
+                return "Numeric value range filter"
+                
+        elif any(col in ['DATE', 'ISSUE_DATE', 'AGE'] for col in column_check):
+            if range_info:
+                is_age = any(col == 'AGE' for col in column_check)
+                range_desc = self._format_range_emis_style(range_info, is_age=is_age)
+                if range_desc:
+                    # Customize the prefix for specific column types
+                    if any(col == 'ISSUE_DATE' for col in column_check):
+                        # Replace "Date" with "Date of Issue" for issue date columns
+                        if range_desc.startswith('Date '):
+                            range_desc = range_desc.replace('Date ', 'Date of Issue ', 1)
+                    return range_desc
+                else:
+                    return f"{display_name} filtering"
+            else:
+                generic_desc = {
+                    'DATE': 'Date filtering',
+                    'ISSUE_DATE': 'Issue date filtering', 
+                    'AGE': 'Patient age filtering'
+                }.get(column_check[0], f'{column_display} filtering')
+                return generic_desc
+                
+        elif any(col in ['AUTHOR', 'CURRENTLY_CONTRACTED'] for col in column_check):
+            return "User authorization: Active users only"
+            
+        else:
+            # Check for EMISINTERNAL filters and use enhanced context
+            if emisinternal_value_sets:
+                return self._get_emisinternal_context(column_filter)
+            
+            # Default fallback using display name
+            return f"{display_name} filter applied"
     
     def _generate_list_report_export(self, list_report, include_parent_info=True):
         """Generate export for List Report type"""

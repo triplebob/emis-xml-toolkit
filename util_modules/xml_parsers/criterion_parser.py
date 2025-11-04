@@ -261,6 +261,29 @@ class CriterionParser(XMLParserBase):
             if range_elem is not None:
                 result['range'] = self._parse_range_value(range_elem)
             
+            # Parse singleValue for temporal variable patterns (like <singleValue><variable>...)
+            single_value_elem = self.find_element_both(column_elem, 'singleValue')
+            if single_value_elem is not None:
+                variable_elem = self.find_element_both(single_value_elem, 'variable')
+                if variable_elem is not None:
+                    # Create a range-like structure for temporal variables
+                    result['range'] = {
+                        'from': {
+                            'operator': 'IN',  # Default operator for temporal variables
+                            'value': self.parse_child_text(variable_elem, 'value'),
+                            'unit': self.parse_child_text(variable_elem, 'unit'),
+                            'relation': self.parse_child_text(variable_elem, 'relation')
+                        }
+                    }
+                else:
+                    # Fallback: treat singleValue content directly as value
+                    result['range'] = {
+                        'from': {
+                            'operator': 'IN',
+                            'value': self.get_text(single_value_elem)
+                        }
+                    }
+            
             # Parse parameter information - handle both namespaced and non-namespaced
             param_elem = self.find_element_both(column_elem, 'parameter')
             if param_elem is not None:
@@ -331,28 +354,52 @@ class CriterionParser(XMLParserBase):
             # Parse value element - handle nested structure that can contain multiple values
             # Handle both namespaced and non-namespaced
             value_elem = self.find_element_both(boundary_elem, 'value')
+            singleValue_elem = self.find_element_both(boundary_elem, 'singleValue')
+            
             if value_elem is not None:
-                # First try to get direct text
-                value_text = self.get_text(value_elem)
+                # Check if we have the nested structure: <value><value>...</value><unit>...</unit><relation>...</relation></value>
+                nested_value_elem = self.find_element_both(value_elem, 'value')
+                nested_unit_elem = self.find_element_both(value_elem, 'unit')
+                nested_relation_elem = self.find_element_both(value_elem, 'relation')
                 
-                # If direct text is empty, look for nested value elements (can be multiple for ranges)
-                if not value_text or not value_text.strip():
-                    # Handle both namespaced and non-namespaced nested values
-                    namespaced_nested = self.find_elements(value_elem, 'emis:value')
-                    non_namespaced_nested = value_elem.findall('value')
-                    nested_values = non_namespaced_nested + [v for v in namespaced_nested if v not in non_namespaced_nested]
+                if nested_value_elem is not None:
+                    # Nested structure pattern: parse from nested elements
+                    result['value'] = self.get_text(nested_value_elem)
+                    result['unit'] = self.get_text(nested_unit_elem) if nested_unit_elem is not None else None
+                    result['relation'] = self.get_text(nested_relation_elem) if nested_relation_elem is not None else None
+                else:
+                    # Original pattern: try to get direct text first
+                    value_text = self.get_text(value_elem)
                     
-                    if nested_values:
-                        value_texts = [self.get_text(nv) for nv in nested_values if self.get_text(nv)]
-                        if value_texts:
-                            # For single value, use just the value; for multiple, join with comma
-                            value_text = value_texts[0] if len(value_texts) == 1 else ', '.join(value_texts)
-                
-                result['value'] = value_text
-                result['values'] = value_texts if 'value_texts' in locals() and len(value_texts) > 1 else None
-                # Parse unit and relation as child elements (not attributes)
-                result['unit'] = self.parse_child_text(value_elem, 'unit')
-                result['relation'] = self.parse_child_text(value_elem, 'relation')
+                    # If direct text is empty, look for nested value elements (can be multiple for ranges)
+                    if not value_text or not value_text.strip():
+                        # Handle both namespaced and non-namespaced nested values
+                        namespaced_nested = self.find_elements(value_elem, 'emis:value')
+                        non_namespaced_nested = value_elem.findall('value')
+                        nested_values = non_namespaced_nested + [v for v in namespaced_nested if v not in non_namespaced_nested]
+                        
+                        if nested_values:
+                            value_texts = [self.get_text(nv) for nv in nested_values if self.get_text(nv)]
+                            if value_texts:
+                                # For single value, use just the value; for multiple, join with comma
+                                value_text = value_texts[0] if len(value_texts) == 1 else ', '.join(value_texts)
+                    
+                    result['value'] = value_text
+                    result['values'] = value_texts if 'value_texts' in locals() and len(value_texts) > 1 else None
+                    # Parse unit and relation as child elements (not attributes)
+                    result['unit'] = self.parse_child_text(value_elem, 'unit')
+                    result['relation'] = self.parse_child_text(value_elem, 'relation')
+            
+            elif singleValue_elem is not None:
+                # Handle singleValue/variable pattern for temporal date patterns
+                variable_elem = self.find_element_both(singleValue_elem, 'variable')
+                if variable_elem is not None:
+                    result['value'] = self.parse_child_text(variable_elem, 'value')
+                    result['unit'] = self.parse_child_text(variable_elem, 'unit')
+                    result['relation'] = self.parse_child_text(variable_elem, 'relation')
+                else:
+                    # Fallback: treat singleValue content directly as value
+                    result['value'] = self.get_text(singleValue_elem)
             
             return result
         except Exception as e:

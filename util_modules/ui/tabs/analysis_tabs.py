@@ -66,7 +66,12 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
             search_count = len(search_reports)
         folder_count = len(analysis.folders) if analysis.folders else 0
         
-        st.toast(f"Search Analysis: {search_count} search{'es' if search_count != 1 else ''} across {folder_count} folder{'s' if folder_count != 1 else ''}", icon="🔍")
+        # Only show toast on first load or when data actually changes
+        from .tab_helpers import is_data_processing_needed, cache_processed_data
+        toast_cache_key = 'search_analysis_toast_shown'
+        if is_data_processing_needed(toast_cache_key):
+            st.toast(f"Search Analysis: {search_count} search{'es' if search_count != 1 else ''} across {folder_count} folder{'s' if folder_count != 1 else ''}", icon="🔍")
+            cache_processed_data(toast_cache_key, True)
         
         # Search-focused metrics
         col1, col2, col3 = st.columns(3)
@@ -430,8 +435,9 @@ def render_detailed_rules_tab(analysis, xml_filename):
         if st.button("📥 Rule Analysis (TXT)", help="Generate detailed rule analysis as text file", key="rule_analysis_export"):
             try:
                 with st.spinner("Generating rule analysis report..."):
-                    from ...analysis.search_rule_visualizer import generate_rule_analysis_report
-                    report_text, filename = generate_rule_analysis_report(analysis, xml_filename)
+                    from ...export_handlers.rule_export import RuleExportHandler
+                    rule_handler = RuleExportHandler()
+                    filename, report_text = rule_handler.generate_comprehensive_analysis_report(analysis, xml_filename)
                     
                     st.download_button(
                         label="⬇️ Download Rule Analysis",

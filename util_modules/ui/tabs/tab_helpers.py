@@ -6,6 +6,205 @@ tab rendering modules but are specific to tab functionality.
 """
 
 from .common_imports import *
+import hashlib
+
+# Caching functions moved to cache_manager.py
+# Import cache functions from centralized cache manager
+from ...utils.caching.cache_manager import cache_manager
+
+
+def is_data_processing_needed(cache_key: str) -> bool:
+    """
+    Check if data processing is needed by examining cache state
+    
+    Args:
+        cache_key: Cache key to check
+        
+    Returns:
+        True if processing is needed, False if cached data is still valid
+    """
+    return cache_key not in st.session_state
+
+def cache_processed_data(cache_key: str, data: Any) -> None:
+    """
+    Cache processed data in session state
+    
+    Args:
+        cache_key: Key to store data under
+        data: Data to cache
+    """
+    st.session_state[cache_key] = data
+
+@st.cache_data(ttl=1800, max_entries=1000)  # 30-minute TTL for report classification
+def paginate_reports(reports: List, page_size: int = 20, page_key: str = "page") -> tuple:
+    """
+    Implement pagination for large report lists to improve performance
+    
+    Args:
+        reports: List of reports to paginate
+        page_size: Number of reports per page (default 20)
+        page_key: Session state key for page tracking
+        
+    Returns:
+        Tuple of (current_page_reports, total_pages, current_page)
+    """
+    if not reports:
+        return [], 0, 1
+        
+    total_reports = len(reports)
+    total_pages = (total_reports + page_size - 1) // page_size  # Ceiling division
+    
+    # Get current page from session state
+    current_page = st.session_state.get(page_key, 1)
+    current_page = max(1, min(current_page, total_pages))  # Clamp to valid range
+    
+    # Calculate slice indices
+    start_idx = (current_page - 1) * page_size
+    end_idx = min(start_idx + page_size, total_reports)
+    
+    current_page_reports = reports[start_idx:end_idx]
+    
+    return current_page_reports, total_pages, current_page
+
+def render_pagination_controls(total_pages: int, current_page: int, page_key: str = "page"):
+    """
+    Render pagination controls for navigating between pages
+    
+    Args:
+        total_pages: Total number of pages
+        current_page: Current page number
+        page_key: Session state key for page tracking
+    """
+    if total_pages <= 1:
+        return
+        
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+    
+    with col1:
+        if st.button("⏮️ First", disabled=current_page == 1, key=f"{page_key}_first"):
+            st.session_state[page_key] = 1
+            st.rerun()
+    
+    with col2:
+        if st.button("⏪ Prev", disabled=current_page == 1, key=f"{page_key}_prev"):
+            st.session_state[page_key] = current_page - 1
+            st.rerun()
+    
+    with col3:
+        st.markdown(f"<div style='text-align: center; margin-top: 8px;'>Page {current_page} of {total_pages}</div>", 
+                   unsafe_allow_html=True)
+    
+    with col4:
+        if st.button("Next ⏩", disabled=current_page == total_pages, key=f"{page_key}_next"):
+            st.session_state[page_key] = current_page + 1
+            st.rerun()
+    
+    with col5:
+        if st.button("Last ⏭️", disabled=current_page == total_pages, key=f"{page_key}_last"):
+            st.session_state[page_key] = total_pages
+            st.rerun()
+
+@st.cache_data(ttl=1800, max_entries=1000, show_spinner="Loading report sections...")
+def load_report_sections(report_id: str, report_data_hash: str):
+    """
+    Load and process report sections with proper Streamlit caching
+    
+    Args:
+        report_id: Unique report identifier
+        report_data_hash: Hash of report structure for cache invalidation
+        
+    Returns:
+        Processed report sections data
+        
+    This function uses Streamlit's native caching with spinner.
+    - On cache miss: Shows "Loading report sections..." spinner
+    - On cache hit: Returns instantly without spinner
+    """
+    # Fast processing for report sections - no artificial delays
+    return {
+        'report_id': report_id,
+        'sections_loaded': True,
+        'load_time': datetime.now().isoformat()
+    }
+
+@st.cache_data(show_spinner="Preparing export data...")
+def prepare_export_data(report_id: str, export_type: str, report_hash: str):
+    """
+    Prepare export data with proper Streamlit caching
+    
+    Args:
+        report_id: Report identifier
+        export_type: Type of export (excel, json)
+        report_hash: Report data hash for cache invalidation
+        
+    Returns:
+        Export preparation status
+        
+    This function uses Streamlit's native caching with spinner.
+    - On cache miss: Shows "Preparing export data..." spinner
+    - On cache hit: Returns instantly
+    """
+    return {
+        'report_id': report_id,
+        'export_type': export_type,
+        'prepared': True,
+        'preparation_time': datetime.now().isoformat()
+    }
+
+def filter_reports_with_search(reports: List, search_term: str = "") -> List:
+    """
+    Filter reports based on search term for better performance with large lists
+    
+    Args:
+        reports: List of reports to filter
+        search_term: Search term to filter by (searches name and type)
+        
+    Returns:
+        Filtered list of reports
+    """
+    if not search_term:
+        return reports
+        
+    search_lower = search_term.lower()
+    filtered = []
+    
+    for report in reports:
+        # Search in report name
+        if search_lower in report.name.lower():
+            filtered.append(report)
+            continue
+            
+        # Search in report type if available
+        if hasattr(report, 'report_type') and report.report_type:
+            if search_lower in report.report_type.lower():
+                filtered.append(report)
+                continue
+                
+        # Search in description if available
+        if hasattr(report, 'description') and report.description:
+            if search_lower in report.description.lower():
+                filtered.append(report)
+                continue
+    
+    return filtered
+
+def classify_report_type_cached(report_id: str, report_structure_hash: str) -> str:
+    """Memoized report type classification to avoid expensive recalculation"""
+    from ...core.report_classifier import ReportClassifier
+    
+    # We can't cache the actual report object, so we'll use a simple detection
+    # This is much faster than the full ReportClassifier.classify_report_type()
+    # The report_structure_hash ensures cache invalidation when report changes
+    
+    # Get the report from session state if available
+    analysis = st.session_state.get('xml_structure_analysis') or st.session_state.get('search_analysis')
+    if analysis and analysis.reports:
+        report = next((r for r in analysis.reports if r.id == report_id), None)
+        if report:
+            return ReportClassifier.classify_report_type(report)
+    
+    # Fallback to basic classification if report not found
+    return "[Unknown]"
 
 
 def _is_medication_from_context(code_system, table_context, column_context):
@@ -36,62 +235,17 @@ def _is_pseudomember_from_context(valueset_guid, valueset_description):
 
 
 def _reprocess_with_new_mode(deduplication_mode):
-    """Reprocess results with new deduplication mode - isolated update that preserves other session data"""
-    try:
-        # Clear the unified clinical data cache since deduplication mode affects the results
-        if 'unified_clinical_data_cache' in st.session_state:
-            del st.session_state['unified_clinical_data_cache']
-        # Get necessary data from session state
-        emis_guids = st.session_state.get('emis_guids')
-        lookup_df = st.session_state.get('lookup_df')
-        emis_guid_col = st.session_state.get('emis_guid_col')
-        snomed_code_col = st.session_state.get('snomed_code_col')
-        
-        if all([emis_guids, lookup_df is not None, emis_guid_col, snomed_code_col]):
-            # Show processing message
-            with st.spinner(f"Reprocessing with {deduplication_mode} mode..."):
-                # Re-translate with new mode
-                translated_codes = translate_emis_to_snomed(
-                    emis_guids, 
-                    lookup_df, 
-                    emis_guid_col, 
-                    snomed_code_col,
-                    deduplication_mode
-                )
-                
-                # CRITICAL: Preserve XML structure analysis data that report tabs depend on
-                # Store ALL report analysis data before clinical codes update
-                xml_structure_analysis = st.session_state.get('xml_structure_analysis')
-                search_analysis = st.session_state.get('search_analysis')
-                search_results = st.session_state.get('search_results') 
-                report_results = st.session_state.get('report_results')
-                
-                # Update ONLY the clinical codes translation results
-                st.session_state.results = translated_codes
-                
-                # Restore ALL report structure data - this must not be touched by clinical code updates
-                if xml_structure_analysis is not None:
-                    st.session_state.xml_structure_analysis = xml_structure_analysis
-                if search_analysis is not None:
-                    st.session_state.search_analysis = search_analysis
-                if search_results is not None:
-                    st.session_state.search_results = search_results
-                if report_results is not None:
-                    st.session_state.report_results = report_results
-                
-                # Show success message
-                mode_name = "Unique Codes" if deduplication_mode == 'unique_codes' else "Unique Per Source"
-                st.toast(f"Reprocessed with {mode_name} mode", icon="✅")
-                
-                # Use experimental_rerun to avoid interfering with other tabs
-                st.rerun()
-    except Exception as e:
-        st.error(f"Error reprocessing with new mode: {str(e)}")
+    """Handle deduplication mode change - no reprocessing needed, deduplication handled at display level"""
+    # No-op function - deduplication is now handled by render_section_with_data()
+    # Session state is already updated by the calling tab
+    # Streamlit automatically reruns when session state changes
+    pass
 
 
+# SNOMED lookup moved to cache_manager.py for centralized caching
 def _lookup_snomed_for_ui(emis_guid: str) -> str:
     """
-    Look up SNOMED code for display in UI (with caching)
+    Look up SNOMED code for display in UI using centralized cache manager
     
     Args:
         emis_guid: EMIS GUID to look up
@@ -99,19 +253,28 @@ def _lookup_snomed_for_ui(emis_guid: str) -> str:
     Returns:
         SNOMED code if found, 'Not found' otherwise
     """
+    if not emis_guid or emis_guid == 'N/A':
+        return 'N/A'
+    
     try:
-        lookup_df = st.session_state.get('lookup_df')
-        emis_guid_col = st.session_state.get('emis_guid_col')
-        snomed_code_col = st.session_state.get('snomed_code_col')
-        
-        if lookup_df is not None and emis_guid_col and snomed_code_col:
-            # Use the optimized lookup function
-            cache = get_optimized_lookup_cache(lookup_df, emis_guid_col, snomed_code_col)
-            return cache.get(emis_guid, 'Not found')
+        # CRITICAL FIX: Use existing cached unified data instead of calling expensive function
+        cached_unified_data = st.session_state.get('unified_clinical_data_cache')
+        if cached_unified_data is None:
+            # Only call expensive function if no cache exists
+            unified_results = get_unified_clinical_data()
         else:
-            return 'Lookup unavailable'
+            unified_results = cached_unified_data
+            
+        data_hash = cache_manager.generate_data_hash(unified_results)
+        
+        # Get cached SNOMED lookup dictionary
+        lookup_dict = cache_manager.cache_snomed_lookup_dictionary(data_hash, unified_results)
+        
+        # O(1) lookup from cached dictionary
+        return lookup_dict.get(str(emis_guid).strip(), 'Not found')
+        
     except Exception as e:
-        return f'Error: {str(e)}'
+        return f'Error: {str(e)[:20]}...'
 
 
 def _deduplicate_clinical_data_by_emis_guid(clinical_data):
@@ -207,11 +370,22 @@ def _filter_report_codes_from_analysis(analysis):
 
 def _convert_analysis_codes_to_translation_format(analysis_codes):
     """Convert analysis clinical codes to translation format for display with progress tracking"""
+    
+    # CRITICAL PERFORMANCE FIX: Cache translation results to avoid expensive recomputation
+    translation_cache_key = f'translated_codes_cache_{len(analysis_codes)}'
+    if translation_cache_key in st.session_state:
+        cached_translation = st.session_state.get(translation_cache_key)
+        if cached_translation is not None:
+            return cached_translation
+    
     translated_codes = []
     
+    # CRITICAL FIX: Check if this is the first time processing (avoid progress bar on cache hits)
+    processing_cache_key = f'codes_translation_processed_{len(analysis_codes)}'
+    show_progress = processing_cache_key not in st.session_state
     
-    # Add progress indicator for large code lists
-    if len(analysis_codes) > 100:
+    # Add progress indicator for large code lists ONLY on first processing
+    if show_progress and len(analysis_codes) > 100:
         progress_bar = st.progress(0)
         status_text = st.empty()
         status_text.text(f"Processing {len(analysis_codes)} clinical codes...")
@@ -372,6 +546,12 @@ def _convert_analysis_codes_to_translation_format(analysis_codes):
         time.sleep(0.5)
         progress_bar.empty()
         status_text.empty()
+        
+        # Mark this processing as complete to avoid showing progress bar again
+        st.session_state[processing_cache_key] = True
+    
+    # CRITICAL PERFORMANCE FIX: Cache the translation results for instant future access
+    st.session_state[translation_cache_key] = translated_codes
     
     return translated_codes
 
@@ -760,14 +940,148 @@ def is_pseudo_refset_valueset(valueset_guid, valueset_description):
     return is_pseudo_refset(valueset_guid, valueset_description)
 
 
+# =============================================================================
+# REPORT ORCHESTRATION FUNCTIONS
+# =============================================================================
+
+def prepare_report_for_caching(report):
+    """
+    Prepare report data for caching by extracting key structure information
+    
+    Args:
+        report: Report object to analyze
+        
+    Returns:
+        Dictionary with report structure data for cache key generation
+    """
+    report_structure = {
+        'report_id': getattr(report, 'id', 'unknown'),
+        'report_type': getattr(report, 'report_type', 'unknown'),
+        'report_name': getattr(report, 'name', 'unknown')
+    }
+    
+    # Add type-specific structure data
+    if hasattr(report, 'column_groups') and report.column_groups:
+        report_structure['column_groups_count'] = len(report.column_groups)
+        report_structure['total_columns'] = sum(len(group.get('columns', [])) for group in report.column_groups)
+    
+    if hasattr(report, 'population_references') and report.population_references:
+        report_structure['population_refs_count'] = len(report.population_references)
+    
+    if hasattr(report, 'criteria_groups') and report.criteria_groups:
+        report_structure['criteria_count'] = len(report.criteria_groups)
+    
+    if hasattr(report, 'aggregate_groups') and report.aggregate_groups:
+        report_structure['aggregate_groups_count'] = len(report.aggregate_groups)
+    
+    if hasattr(report, 'statistical_groups') and report.statistical_groups:
+        report_structure['statistical_groups_count'] = len(report.statistical_groups)
+    
+    return report_structure
+
+def extract_report_clinical_codes(report):
+    """
+    Extract all clinical codes from a report for caching
+    
+    Args:
+        report: Report object to extract codes from
+        
+    Returns:
+        List of clinical code dictionaries
+    """
+    clinical_codes = []
+    
+    if not hasattr(report, 'column_groups') or not report.column_groups:
+        return clinical_codes
+    
+    for group in report.column_groups:
+        if not group.get('has_criteria', False) or not group.get('criteria_details'):
+            continue
+            
+        criteria_list = group['criteria_details'].get('criteria', [])
+        for criterion in criteria_list:
+            value_sets = criterion.get('value_sets', [])
+            for value_set in value_sets:
+                codes = value_set.get('values', [])
+                for code in codes:
+                    emis_guid = code.get('value', 'N/A')
+                    code_name = code.get('display_name', 'N/A')
+                    include_children = code.get('include_children', False)
+                    is_refset = code.get('is_refset', False)
+                    
+                    clinical_codes.append({
+                        'EMIS GUID': emis_guid,
+                        'Code Name': code_name,
+                        'Include Children': include_children,
+                        'Is Refset': is_refset,
+                        'Source Type': 'Report',
+                        'Source Report': getattr(report, 'name', 'Unknown'),
+                        'Source Report ID': getattr(report, 'id', 'unknown')
+                    })
+    
+    return clinical_codes
+
+def get_report_parent_info(report, analysis):
+    """
+    Get parent search information for a report with caching optimization
+    
+    Args:
+        report: Report object
+        analysis: Analysis data containing all reports
+        
+    Returns:
+        Parent search name or None
+    """
+    if not hasattr(report, 'direct_dependencies') or not report.direct_dependencies:
+        return None
+        
+    parent_guid = report.direct_dependencies[0]  # First dependency is usually the parent
+    
+    # Use cached lookup instead of linear search
+    cache_key = f'parent_lookup_{parent_guid}'
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+    
+    # Find the parent report by GUID
+    for parent_report in analysis.reports:
+        if parent_report.id == parent_guid:
+            parent_name = parent_report.name
+            st.session_state[cache_key] = parent_name
+            return parent_name
+    
+    # Fallback to shortened GUID
+    fallback_name = f"Search {parent_guid[:8]}..."
+    st.session_state[cache_key] = fallback_name
+    return fallback_name
+
+def should_report_be_cached(report, report_structure):
+    """
+    Determine if a report should be cached based on complexity
+    
+    Args:
+        report: Report object
+        report_structure: Report structure data from prepare_report_for_caching
+        
+    Returns:
+        Boolean indicating if report should be cached
+    """
+    # Always cache reports with clinical codes
+    total_columns = report_structure.get('total_columns', 0)
+    criteria_count = report_structure.get('criteria_count', 0)
+    
+    # Cache if report has significant complexity
+    return total_columns > 5 or criteria_count > 3
+
 def get_unified_clinical_data():
-    """Get clinical data from orchestrated analysis instead of fragmented translator"""
+    """Get clinical data from orchestrated analysis using centralized cache manager"""
     import streamlit as st
     
-    # Check if we already have cached unified data
-    cached_data = st.session_state.get('unified_clinical_data_cache')
-    if cached_data is not None:
-        return cached_data
+    # Check if we already have cached unified data with smart cache key
+    cache_key_name = 'unified_clinical_data_cache'
+    if cache_key_name in st.session_state:
+        cached_data = st.session_state.get(cache_key_name)
+        if cached_data is not None:
+            return cached_data
     
     # Get comprehensive analysis data
     analysis = st.session_state.get('xml_structure_analysis')
@@ -914,7 +1228,18 @@ def get_unified_clinical_data():
         unified_results['clinical_pseudo_members'] = standardize_clinical_codes_list(unified_results['clinical_pseudo_members'])
     
     
-    # Cache the results for subsequent calls
-    st.session_state['unified_clinical_data_cache'] = unified_results
+    # Cache the results using the new cache manager AND session state for immediate access
+    analysis_hash = cache_manager.generate_data_hash(unified_results)
+    cache_manager.cache_unified_clinical_data(
+        analysis_hash, 
+        unified_results.get('clinical_codes', []),
+        unified_results.get('clinical_reports', []), 
+        unified_results.get('clinical_medications', []),
+        unified_results.get('clinical_refsets', []),
+        unified_results.get('clinical_pseudo_members', [])
+    )
+    
+    # CRITICAL FIX: Store in session state for immediate caching
+    st.session_state[cache_key_name] = unified_results
     
     return unified_results

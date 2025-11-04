@@ -659,32 +659,185 @@ class ReportExportHandler:
                 range_desc = self._format_range_emis_style(col_filter['range'])
                 return range_desc if range_desc else "Date is after/before search date"
             return "Date filter applied"
+        elif column.upper() == 'NUMERIC_VALUE':
+            # Numeric value ranges
+            if 'range' in col_filter and col_filter['range']:
+                range_desc = self._format_range_emis_style(col_filter['range'], is_numeric=True)
+                return range_desc if range_desc else "Numeric value range filter"
+            return "Numeric value range filter"
         else:
             return f"{column} filter applied"
     
-    def _format_range_emis_style(self, range_data):
-        """Format range information in EMIS clinical style (simplified)"""
+    def _format_range_emis_style(self, range_data, is_numeric=False):
+        """Format range information in EMIS clinical style with full temporal pattern support"""
         if not range_data:
             return None
+        
+        # Handle NUMERIC_VALUE filters with direct operator/value structure
+        if is_numeric:
+            # Check for direct operator/value structure (alternative format)
+            if 'operator' in range_data and 'value' in range_data:
+                operator = range_data.get('operator', 'GTEQ')
+                value = range_data.get('value', '')
+                if value:
+                    op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                    return f"Value {op_text} {value}"
+            
+            # Check for alternative range structures (rangeTo, rangeFrom, etc.)
+            if 'rangeTo' in range_data or 'range_to' in range_data:
+                to_data = range_data.get('rangeTo') or range_data.get('range_to')
+                if to_data and isinstance(to_data, dict):
+                    operator = to_data.get('operator', 'LTEQ')
+                    value = to_data.get('value', '')
+                    if value:
+                        op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+            
+            if 'rangeFrom' in range_data or 'range_from' in range_data:
+                from_data = range_data.get('rangeFrom') or range_data.get('range_from')
+                if from_data and isinstance(from_data, dict):
+                    operator = from_data.get('operator', 'GTEQ')
+                    value = from_data.get('value', '')
+                    if value:
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+            
+            # Check for any nested value that might contain operator/value directly
+            for key in range_data:
+                if isinstance(range_data[key], dict) and 'operator' in range_data[key] and 'value' in range_data[key]:
+                    nested = range_data[key]
+                    operator = nested.get('operator', 'GTEQ')
+                    value = nested.get('value', '')
+                    if value:
+                        op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                        return f"Value {op_text} {value}"
+        
+        date_filters = []
+        
+        # Helper function for temporal pattern formatting with EMIS terminology
+        def format_relative_date(value, unit, relation=None, operator=None):
+            unit = unit.lower()
+            
+            # Convert operator to EMIS format
+            if operator == 'GTEQ':
+                op_text = 'after or on'
+            elif operator == 'LTEQ':
+                op_text = 'before or on'
+            elif operator == 'GT':
+                op_text = 'after'
+            elif operator == 'LT':
+                op_text = 'before'
+            else:
+                op_text = 'on'
+            
+            # Handle numeric offset patterns first (to catch -6, 7, etc.)
+            if value and value.lstrip('-').isdigit():
+                if value.startswith('-'):
+                    # Negative relative date (before search date)
+                    abs_value = value[1:]  # Remove the minus sign
+                    unit_text = f"{unit.lower()}s" if abs_value != '1' else unit.lower()
+                    return f"and the Date is {op_text} {abs_value} {unit_text} before the search date"
+                else:
+                    # Positive relative date (after search date)
+                    unit_text = f"{unit.lower()}s" if value != '1' else unit.lower()
+                    return f"and the Date is {op_text} {value} {unit_text} after the search date"
+            
+            # Handle temporal variable patterns (Last/This/Next + time unit)  
+            elif unit.lower() in ['day', 'week', 'month', 'quarter', 'year', 'fiscalyear']:
+                if value.lower() == 'last':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is last fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is last yearly quarter"
+                    else:
+                        return f"and the Date is last {unit.lower()}"
+                elif value.lower() == 'this':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is this fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is this yearly quarter"
+                    else:
+                        return f"and the Date is this {unit.lower()}"
+                elif value.lower() == 'next':
+                    if unit.lower() == 'fiscalyear':
+                        return "and the Date is next fiscal year"
+                    elif unit.lower() == 'quarter':
+                        return "and the Date is next yearly quarter"
+                    else:
+                        return f"and the Date is next {unit.lower()}"
+                else:
+                    return f"and the Date is {value} {unit.lower()}"
+            
+            # Handle absolute dates (like 01/04/2023)
+            elif relation == 'ABSOLUTE' or unit == 'date':
+                return f"absolute date {value}"
+            
+            # Handle age values (for demographics)
+            elif unit in ['year', 'years'] and relation == 'RELATIVE':
+                unit_str = 'years old' if value != '1' else 'year old'
+                return f"{value} {unit_str}"
+            
+            # Fallback for unhandled patterns
+            else:
+                return f"Date filter: {value} {unit}"
         
         # Process range from
         if range_data.get('from'):
             from_data = range_data['from']
             value = from_data.get('value', '')
             unit = from_data.get('unit', '')
+            relation = from_data.get('relation', '')
+            operator = from_data.get('operator', 'GTEQ')
             
-            if value and unit:
-                if value.startswith('-'):
-                    # Past dates
-                    val_num = value[1:]
-                    if unit.upper() == 'YEAR':
-                        return f"Date is after {val_num} year{'s' if val_num != '1' else ''} before the search date"
-                    elif unit.upper() == 'MONTH':
-                        return f"Date is after {val_num} month{'s' if val_num != '1' else ''} before the search date"
-                    elif unit.upper() == 'DAY':
-                        return f"Date is after {val_num} day{'s' if val_num != '1' else ''} before the search date"
+            # Handle numeric values without units (common for NUMERIC_VALUE filters)
+            if value and (unit or is_numeric):
+                if is_numeric and not unit:
+                    # Pure numeric value without unit
+                    op_text = "greater than" if operator == "GT" else "greater than or equal to" if operator == "GTEQ" else "equal to"
+                    return f"Value {op_text} {value}"
+                else:
+                    # Date/time value with unit
+                    date_str = format_relative_date(value, unit, relation, operator)
+                    op_text = "on or after" if operator == 'GTEQ' else "after" if operator == 'GT' else "on"
+                    # Handle zero case for dates
+                    if value == '0' and relation == 'RELATIVE':
+                        op_text_zero = "on or after" if operator == 'GTEQ' else "after" if operator == 'GT' else "on"
+                        date_filters.append(f"Date is {op_text_zero} the search date")
+                    else:
+                        date_filters.append(f"Date is {op_text} {date_str}")
         
-        return "Date/value range filter applied"
+        # Process range to
+        if range_data.get('to'):
+            to_data = range_data['to']
+            value = to_data.get('value', '')
+            unit = to_data.get('unit', '')
+            relation = to_data.get('relation', '')
+            operator = to_data.get('operator', 'LTEQ')
+            
+            # Handle numeric values without units (common for NUMERIC_VALUE filters)
+            if value and (unit or is_numeric):
+                if is_numeric and not unit:
+                    # Pure numeric value without unit
+                    op_text = "less than" if operator == "LT" else "less than or equal to" if operator == "LTEQ" else "equal to"
+                    return f"Value {op_text} {value}"
+                else:
+                    # Date/time value with unit
+                    date_str = format_relative_date(value, unit, relation, operator)
+                    op_text = "on or before" if operator == 'LTEQ' else "before" if operator == 'LT' else "on"
+                    # Handle zero case for dates
+                    if value == '0' and relation == 'RELATIVE':
+                        op_text_zero = "on or before" if operator == 'LTEQ' else "before" if operator == 'LT' else "on"
+                        date_filters.append(f"Date is {op_text_zero} the search date")
+                    else:
+                        date_filters.append(f"Date is {op_text} {date_str}")
+        
+        # Return results or appropriate fallback
+        if date_filters:
+            return " and ".join(date_filters)
+        elif is_numeric:
+            return "Numeric value range filter"
+        else:
+            return "Date/value range filter applied"
     
     def _get_main_criterion_filters(self, criterion):
         """Get filters that belong to main criterion (excluding linked ones)"""

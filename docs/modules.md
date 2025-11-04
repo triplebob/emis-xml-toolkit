@@ -33,11 +33,14 @@ util_modules.export_handlers (specialized export handling)
 - Progress tracking and user feedback
 - Session state management with caching
 - Dual-mode deduplication support (unique codes vs per-source)
-- Unified clinical data caching for performance
+- Performance controls and debug features
+- Memory optimization and Streamlit Cloud compatibility
 
 **Key Functions:**
-- `extract_codes_with_separate_parsers()` - Maintains search/report parser separation
-- Session state management with cache invalidation
+- File upload and processing workflow
+- Session state cache management for file switching
+- Performance monitoring and debug logging integration
+- Safe execution patterns with error handling
 
 **When to modify:** UI layout changes, main workflow changes, parser coordination updates.
 
@@ -316,16 +319,21 @@ util_modules.export_handlers (specialized export handling)
 **When to modify:** Report-specific enhancements, new report patterns.
 
 #### `tab_helpers.py` - Shared Tab Utilities
-**Purpose:** Common functionality shared across all tab modules with unified pipeline support.
+**Purpose:** Common functionality shared across all tab modules with centralized cache integration.
 
 **Key Functions:**
-- `get_unified_clinical_data()` - Unified pipeline data access with caching
-- `_add_source_info_to_clinical_data()` - GUID mapping and source tracking
-- `_deduplicate_clinical_data_by_emis_guid()` - Deduplication logic
-- `_reprocess_with_new_mode()` - Mode switching logic with cache invalidation
-- `_lookup_snomed_for_ui()` - SNOMED lookup integration
+- `is_data_processing_needed()` - Cache state validation
+- `cache_processed_data()` - Session state data caching
+- `paginate_reports()` - Report pagination with @st.cache_data (30-minute TTL, 1K entries)
+- `render_pagination_controls()` - Navigation controls for paginated content
+- Import integration with cache_manager for centralized caching strategies
 
-**When to modify:** Shared tab functionality, GUID mapping logic, deduplication improvements.
+**Cache Integration:**
+- Imports cache_manager for unified caching patterns
+- Session state management for processed data
+- Performance optimization through pagination caching
+
+**When to modify:** Shared tab functionality, pagination improvements, cache integration updates.
 
 #### `base_tab.py` - Tab Base Classes
 **Purpose:** Base classes and common patterns for tab implementations.
@@ -355,11 +363,12 @@ util_modules.export_handlers (specialized export handling)
 
 **Responsibilities:**
 - Cache-first lookup table loading and status reporting
-- Version information display with cache metadata
+- Version information display with load source attribution (cache/GitHub/API)
 - Token health monitoring and expiry warnings
 - Error state handling and fallback status
+- Integration with lookup.py cache-first loading strategy
 
-**When to modify:** Status display changes, new health checks.
+**When to modify:** Status display changes, new health checks, cache source reporting.
 
 #### `ui_helpers.py` - Reusable UI Components
 **Purpose:** Common UI functions used across the application.
@@ -553,16 +562,16 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 **Responsibilities:**
 - Cache-first loading strategy (session state → local cache → GitHub API)
-- Fast lookup dictionary creation and caching
-- Optimized lookup cache management with hit/miss tracking
-- Batch translation operations for improved performance
-- Lookup table statistics and health monitoring
+- Fast lookup dictionary creation with @st.cache_resource
+- Lookup table loading with automatic session state persistence
+- Version information tracking and load source attribution
+- Integration with lookup_cache module for persistent caching
 
 **Key Functions:**
 - `load_lookup_table()` - Primary loader with cache-first approach
-- `get_optimized_lookup_cache()` - High-performance cache instance
-- `batch_translate_emis_guids()` - Optimized batch translations
+- `get_cached_lookup_dictionaries()` - Cached dictionary access with 2-hour TTL
 - `create_lookup_dictionaries()` - Dictionary creation for O(1) lookups
+- Session state management for lookup persistence
 
 ### `audit.py` - Processing Statistics and Validation
 **Purpose:** Creates comprehensive stats about translation success rates and processing time.
@@ -588,17 +597,45 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 **Responsibilities:**
 - Cache-first loading strategy (local cache → GitHub cache → API fallback)
-- Persistent cache file management with hash validation
+- Persistent cache file management with hash validation and encryption
 - Lookup record storage with complete metadata preservation
 - Cache health monitoring and automatic validation
 - Memory-efficient cache building and retrieval
+- Encrypted cache support using GZIP_TOKEN from Streamlit secrets
 
 **Key Functions:**
 - `get_cached_emis_lookup()` - Primary cache access with fallback strategy
+- `get_latest_cached_emis_lookup()` - Latest cache retrieval for session state
 - `build_emis_lookup_cache()` - Cache building with GitHub fallback
-- `generate_cache_for_github()` - Cache file generation for distribution
+- `_encrypt_data()` / `_decrypt_data()` - Cache encryption/decryption
 
 **When to modify:** Cache strategy changes, performance optimization, new fallback mechanisms.
+
+### `caching/cache_manager.py` - Centralized Caching Architecture  
+**Purpose:** Centralized cache management with type-aware strategies and proper capacity limits.
+
+**Responsibilities:**
+- SNOMED lookup dictionary caching (10K entries, 1-hour TTL)
+- Unified clinical data caching (5K entries, 1-hour TTL)
+- Report visualization caching (1K entries, 30-minute TTL) for List/Audit/Aggregate reports
+- UI component caching (200 entries, 10-minute TTL) for DataFrames and exports
+- XML code extraction caching (1K entries, 30-minute TTL)
+- Memory management utilities with garbage collection
+- Session state cleanup and monitoring
+
+**Key Cache Functions:**
+- `cache_snomed_lookup_dictionary()` - O(1) GUID→SNOMED lookups
+- `cache_unified_clinical_data()` - Processed clinical data with deduplication
+- `cache_list_report_visualization()` / `cache_audit_report_visualization()` / `cache_aggregate_report_visualization()` - Report-specific caching
+- `cache_xml_code_extraction()` - Expensive XML parsing results
+- `cleanup_dataframe_memory()` - Memory cleanup with gc.collect()
+
+**Memory Management:**
+- `clear_export_cache()` - Export data cleanup for memory efficiency
+- `manage_session_state_memory()` - Session state item limits (50 max items)
+- `get_memory_usage_stats()` - Memory monitoring and pressure detection
+
+**When to modify:** Cache performance tuning, new data types, memory optimization.
 
 ### `caching/generate_github_cache.py` - Cache Generation Utility
 **Purpose:** Standalone script for generating cache files for GitHub distribution.
@@ -709,14 +746,15 @@ util_modules/
 
 ## Key Architectural Features
 
-### Unified Pipeline Architecture
+### Centralized Caching Architecture
 **Purpose:** Consistent data handling across all UI components with performance optimization.
 
 **Implementation:**
-- **Analysis Orchestrator**: Central coordination of all analysis components
-- **Unified Clinical Data**: Cached pipeline results accessible via `get_unified_clinical_data()`
-- **Consistent Search Counts**: All tabs use same data source for accurate metrics
-- **Performance Caching**: Session state caching with automatic invalidation
+- **CacheManager**: Centralized cache management with type-aware strategies and proper capacity limits
+- **Multi-tier Caching**: Session state → Streamlit cache → persistent cache → GitHub/API fallback
+- **Type-specific TTLs**: 1-hour for SNOMED/clinical data, 30-minute for reports, 10-minute for UI components
+- **Memory Management**: Automatic cleanup, garbage collection, and session state limits
+- **Performance Monitoring**: Cache hit/miss tracking and memory pressure detection
 
 ### Dual-Mode Deduplication System
 **Purpose:** Allows users to toggle between unique codes vs per-source views.
@@ -751,11 +789,12 @@ util_modules/
 **Classification problems:** `util_modules/core/report_classifier.py`
 **Search rule logic:** `util_modules/analysis/search_analyzer.py`
 **Translation issues:** `util_modules/core/translator.py` or `xml_parsers/xml_utils.py`
-**Lookup table problems:** `util_modules/utils/lookup.py` or `utils/caching/`
-**Cache issues:** `util_modules/utils/caching/lookup_cache.py`
+**Lookup table problems:** `util_modules/utils/lookup.py` or `utils/caching/lookup_cache.py`
+**Cache performance:** `util_modules/utils/caching/cache_manager.py`
+**Memory issues:** Check memory management in `cache_manager.py` or session state cleanup
 **NHS Terminology Server:** `util_modules/terminology_server/`
 **SNOMED code expansion:** `util_modules/terminology_server/expansion_service.py`
-**Performance issues:** Check caching in `tab_helpers.py` or `utils/caching/`
+**Performance optimization:** Centralized caching in `cache_manager.py`, pagination in `tab_helpers.py`
 **Main app workflow:** `streamlit_app.py`
 **Error handling:** `util_modules/common/error_handling.py`
 **XML parsing:** `util_modules/xml_parsers/`

@@ -249,8 +249,7 @@ def render_terminology_server_status():
                         st.toast("✅ Connected to NHS Terminology Server!", icon="🎉")
                     else:
                         st.toast("❌ Failed to connect to NHS Terminology Server", icon="⚠️")
-                    # Force rerun to update the status display
-                    st.rerun()
+                    # Status display will update automatically when session state changes
             
             # Show connection status using shared session state
             if st.session_state.nhs_connection_status and st.session_state.nhs_connection_status.get('tested'):
@@ -1180,34 +1179,47 @@ def render_individual_code_lookup():
         if st.button("🔍 Lookup Code", key="perform_individual_lookup") and lookup_code:
             service = get_expansion_service()
             
-            with st.spinner(f"Looking up {lookup_code}..."):
+            with st.spinner(f"Looking up {lookup_code}... (may fetch multiple pages if >1000 results)"):
                 result = service.expand_snomed_code(lookup_code.strip(), include_inactive, use_cache=True)
             
             if result.error:
                 st.error(f"Lookup failed: {result.error}")
             else:
-                st.success(f"Found {len(result.children)} child concepts for {result.source_display}")
+                # Display parent information prominently
+                st.info(f"**Parent Code:** {lookup_code.strip()} | **Parent Term:** {result.source_display}")
+                
+                # Show result count with pagination indicator
+                if len(result.children) >= 1000:
+                    st.success(f"Found {len(result.children)} child concepts (fetched via automatic pagination)")
+                else:
+                    st.success(f"Found {len(result.children)} child concepts")
                 
                 if result.children:
                     child_data = []
                     for child in result.children:
                         child_data.append({
-                            'Code': child.code,
-                            'Display': child.display,
+                            'Parent Code': lookup_code.strip(),
+                            'Parent Term': result.source_display,
+                            'Child Code': child.code,
+                            'Child Display': child.display,
                             'Inactive': 'True' if child.inactive else 'False'
                         })
                     
                     df = pd.DataFrame(child_data)
                     # Add visual indicator for SNOMED codes
-                    df['Code'] = '🩺 ' + df['Code'].astype(str)
+                    df['Child Code'] = '🩺 ' + df['Child Code'].astype(str)
                     st.dataframe(df, width='stretch', hide_index=True)
                     
-                    # Quick export
+                    # Quick export with enhanced filename
                     csv_data = _clean_dataframe_for_export(df).to_csv(index=False)
+                    # Create descriptive filename with parent term
+                    safe_term = "".join(c for c in result.source_display if c.isalnum() or c in (' ', '-', '_')).rstrip()[:30]
+                    filename = f"lookup_{lookup_code.strip()}_{safe_term}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    
                     st.download_button(
                         label="📥 Download Results",
                         data=csv_data,
-                        file_name=f"lookup_{lookup_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        file_name=filename,
                         mime="text/csv"
                     )
                 else:

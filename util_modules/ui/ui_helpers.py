@@ -47,6 +47,13 @@ def render_download_button(
     if data.empty:
         return
     
+    # Create clean export version by removing emojis
+    clean_data = data.copy()
+    for col in clean_data.columns:
+        if clean_data[col].dtype == 'object':
+            # Remove all emojis and extra spaces from text columns
+            clean_data[col] = clean_data[col].astype(str).str.replace(r'[🔍📝🩺📊📋📈📄🏥💊⬇️✅❌🔄📥📈📋]+ ', '', regex=True)
+    
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
     if xml_filename and xml_filename.strip():
@@ -57,7 +64,7 @@ def render_download_button(
         filename = f"{filename_prefix}_{timestamp}.csv"
     
     csv_buffer = io.StringIO()
-    data.to_csv(csv_buffer, index=False)
+    clean_data.to_csv(csv_buffer, index=False)
     
     st.download_button(
         label=label,
@@ -130,14 +137,33 @@ def render_section_with_data(
         st.info(info_text)
     
     if data:
-        df = pd.DataFrame(data)
+        # Get current modes for cache key
+        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+        show_debug = st.session_state.get('debug_mode', False)
         
-        # Apply additional processing if provided
-        if additional_processing:
-            df = additional_processing(df)
+        # Create a cache key for this specific data processing
+        data_hash = hash(str(sorted(data[0].keys()) if data else "empty"))
+        cache_key = f"processed_df_{filename_prefix}_{data_hash}_{current_mode}_{show_debug}"
         
-        # Create display version with emojis for UI
-        display_df = df.copy()
+        # Check if we have cached processed data
+        if cache_key in st.session_state:
+            df, display_df = st.session_state[cache_key]
+        else:
+            df = pd.DataFrame(data)
+            
+            # Apply deduplication based on current mode BEFORE other processing
+            if current_mode == 'unique_codes' and df is not None and not df.empty:
+                # Apply deduplication by EMIS GUID for unique_codes mode
+                if 'EMIS GUID' in df.columns:
+                    # Group by EMIS GUID and keep the first occurrence
+                    df = df.drop_duplicates(subset=['EMIS GUID'], keep='first')
+            
+            # Apply additional processing if provided
+            if additional_processing:
+                df = additional_processing(df)
+            
+            # Create display version with emojis for UI
+            display_df = df.copy()
         
         # Apply proper column filtering and ordering like clinical codes tab
         from .tabs.field_mapping import get_display_columns, get_hidden_columns
@@ -210,6 +236,9 @@ def render_section_with_data(
                     f"📊 {x}" if x else x  # Don't add emoji to empty values
                 )
             )
+            
+            # Cache the processed dataframes for future use
+            st.session_state[cache_key] = (df.copy(), display_df.copy())
         
         # Apply highlighting if provided
         if highlighting_function:
@@ -252,17 +281,17 @@ def render_section_with_data(
                 filtered_df = None
                 
                 if export_filter == "Only Matched":
-                    filtered_df = df[df['Mapping Found'] == 'Found']
+                    filtered_df = display_df[display_df['Mapping Found'] == 'Found']
                     export_label = download_label.replace("📥", "📥 ✅")
                     export_suffix = "_matched"
                 elif export_filter == "Only Unmatched":
-                    filtered_df = df[df['Mapping Found'] != 'Found']
+                    filtered_df = display_df[display_df['Mapping Found'] != 'Found']
                     export_label = download_label.replace("📥", "📥 ❌")
                     export_suffix = "_unmatched"
                 elif export_filter == "Only Codes from Searches":
                     # Filter by source - check if Source Type column is available, otherwise look for source info in data
-                    if 'Source Type' in df.columns:
-                        filtered_df = df[df['Source Type'] == 'Search']
+                    if 'Source Type' in display_df.columns:
+                        filtered_df = display_df[display_df['Source Type'] == 'Search']
                     else:
                         # Filter based on original data source tracking
                         search_codes = []
@@ -274,8 +303,8 @@ def render_section_with_data(
                     export_suffix = "_searches"
                 elif export_filter == "Only Codes from Reports":
                     # Filter by source - check if Source Type column is available, otherwise look for source info in data
-                    if 'Source Type' in df.columns:
-                        filtered_df = df[df['Source Type'].str.contains('Report', na=False)]
+                    if 'Source Type' in display_df.columns:
+                        filtered_df = display_df[display_df['Source Type'].str.contains('Report', na=False)]
                     else:
                         # Filter based on original data source tracking
                         report_codes = []
@@ -286,7 +315,7 @@ def render_section_with_data(
                     export_label = download_label.replace("📥", "📥 📊")
                     export_suffix = "_reports"
                 else:  # All Codes
-                    filtered_df = df
+                    filtered_df = display_df
                     export_label = download_label
                     export_suffix = ""
                 
@@ -301,7 +330,7 @@ def render_section_with_data(
                 export_label = export_label.replace("📥", f"📥{mode_label}")
                 
                 # Show count of filtered items
-                st.caption(f"📊 {len(filtered_df)} of {len(df)} items selected for export")
+                st.caption(f"📊 {len(filtered_df)} of {len(display_df)} items selected for export")
                 
                 # Render download button with filtered data (clean version for export)
                 xml_filename = st.session_state.get('xml_filename')
@@ -313,10 +342,10 @@ def render_section_with_data(
                     key=f"download_{filename_prefix}_{export_filter.lower().replace(' ', '_')}"
                 )
         else:
-            # No Mapping Found column, render normal download button
+            # No Mapping Found column, render normal download button (use cleaned data)
             xml_filename = st.session_state.get('xml_filename')
             render_download_button(
-                data=df,
+                data=display_df,
                 label=download_label,
                 filename_prefix=filename_prefix,
                 xml_filename=xml_filename,

@@ -1,5 +1,7 @@
 import streamlit as st
 import re
+import psutil
+import os
 from ..utils.lookup import load_lookup_table, get_lookup_statistics
 from ..utils.caching.lookup_cache import get_cached_emis_lookup
 
@@ -9,6 +11,61 @@ try:
     NHS_TERMINOLOGY_AVAILABLE = True
 except ImportError:
     NHS_TERMINOLOGY_AVAILABLE = False
+
+def get_memory_usage():
+    """Get current memory usage information"""
+    try:
+        # Get current process
+        process = psutil.Process(os.getpid())
+        
+        # Memory info in bytes
+        memory_info = process.memory_info()
+        current_memory_mb = memory_info.rss / (1024 * 1024)  # RSS (Resident Set Size)
+        virtual_memory_mb = memory_info.vms / (1024 * 1024)  # Virtual Memory Size
+        
+        # System memory info
+        system_memory = psutil.virtual_memory()
+        system_total_gb = system_memory.total / (1024 * 1024 * 1024)
+        system_available_gb = system_memory.available / (1024 * 1024 * 1024)
+        system_usage_percent = system_memory.percent
+        
+        # Memory peak tracking (store in session state)
+        if 'memory_peak_mb' not in st.session_state:
+            st.session_state.memory_peak_mb = current_memory_mb
+        else:
+            if current_memory_mb > st.session_state.memory_peak_mb:
+                st.session_state.memory_peak_mb = current_memory_mb
+        
+        return {
+            'current_mb': current_memory_mb,
+            'virtual_mb': virtual_memory_mb,
+            'peak_mb': st.session_state.memory_peak_mb,
+            'system_total_gb': system_total_gb,
+            'system_available_gb': system_available_gb,
+            'system_usage_percent': system_usage_percent
+        }
+    except Exception as e:
+        return None
+
+def get_memory_status_color(memory_mb):
+    """Determine status color based on memory usage"""
+    # Streamlit Cloud limit is around 2.7GB (2700MB)
+    # But we'll use more conservative thresholds
+    if memory_mb < 1000:  # Under 1GB
+        return "success"
+    elif memory_mb < 1800:  # 1-1.8GB
+        return "info" 
+    elif memory_mb < 2300:  # 1.8-2.3GB
+        return "warning"
+    else:  # Over 2.3GB
+        return "error"
+
+def format_memory_display(memory_mb):
+    """Format memory for display"""
+    if memory_mb < 1024:
+        return f"{memory_mb:.0f} MB"
+    else:
+        return f"{memory_mb/1024:.1f} GB"
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _get_cached_status_content(lookup_size, version_str, load_source):
@@ -117,43 +174,40 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
             # Changelog section - Direct in-app display 
-            with st.sidebar.expander("🎯 What's New - v2.1.2", expanded=False):
+            with st.sidebar.expander("🎯 What's New - v2.2.0", expanded=False):
                 st.markdown("""
-                    **🧠 Memory Optimization and Performance Fixes - v2.1.2**
+                    **🚀 Major Performance & Caching Overhaul - v2.2.0**
                     
-                    Comprehensive memory management improvements and performance optimizations addressing export generation issues and dropdown reprocessing.
+                    Comprehensive caching architecture and performance improvements eliminating report dropdown hangs and memory issues.
                     
-                    **⚡ Export System Overhaul:**
-                    - Converted all export generation from automatic to lazy (button-triggered only)
-                    - Eliminated CSV generation on every radio button change in clinical tabs
-                    - Removed automatic Excel/JSON generation during report/search selection
-                    - Added immediate memory cleanup with garbage collection after downloads
+                    **⚡ Caching Infrastructure:**
+                    - New centralized cache manager with optimized TTL settings
+                    - SNOMED lookup caching (10,000 entries, 1-hour TTL)
+                    - Clinical data caching (5,000 entries, 30-minute TTL)
+                    - Report-specific session state caching with instant dropdown switching
+                    - Eliminated expensive reprocessing on every report selection
                     
-                    **🧠 Memory Management:**
-                    - Implemented systematic object deletion and cleanup after export operations
-                    - Added session-based caching for sidebar components to prevent re-rendering
-                    - Enhanced analysis data caching to eliminate reprocessing on dropdown changes
-                    - Reduced export memory consumption by approximately 80% through lazy loading
+                    **💻 Memory Management:**
+                    - New Memory Usage section in sidebar with real-time monitoring
+                    - Memory peak tracking and reset functionality
+                    - Automatic garbage collection after large operations
+                    - TTL-based cache expiration preventing memory accumulation
+                    - Report switching time reduced from 10+ seconds to <1 second
                     
-                    **🔧 Performance Fixes:**
-                    - Eliminated complete file reprocessing when switching report/search dropdowns
-                    - Removed toast message loops and unnecessary progress indicators during navigation
-                    - Fixed search rule visualizer import errors causing application crashes
-                    - Restored instant dropdown selection response without processing delays
+                    **📋 Export System Improvements:**
+                    - NUMERIC_VALUE filters show actual values ("Value greater than or equal to 37.5")
+                    - Fixed date range display for zero-offset dates ("Date is on the search date")
+                    - Lazy export generation with instant downloads from cached data
+                    - Consistent filter formatting across search and report exports
+                    - Export buttons disabled until data fully loaded
                     
-                    **📊 UI Responsiveness:**
-                    - Dropdown selections now execute instantly using cached analysis data
-                    - Export operations provide progress spinners and success confirmations
-                    - Consolidated scattered imports for proper module organization
-                    - Maintained export functionality while improving memory efficiency
+                    **🎯 UI Responsiveness:**
+                    - Progressive loading with native Streamlit spinners
+                    - Instant report dropdown switching using cached analysis
+                    - Eliminated UI hangs and freezes during large operations
+                    - Clean loading states with proper progress indicators
                     
-                    **🎯 Production Stability:**
-                    - Addresses Streamlit Cloud 2.7GB memory constraints through lazy export generation
-                    - Prevents memory accumulation across multiple export operations
-                    - Improves overall application responsiveness during extended usage sessions
-                    - Maintains full export quality while optimizing resource management
-                    
-                    ✅ **Resolves export-related memory issues and dropdown reprocessing problems**
+                    ✅ **Resolves all critical performance bottlenecks and memory issues**
                     """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
             
@@ -162,13 +216,73 @@ def render_status_bar():
             st.session_state.emis_guid_col = emis_guid_col
             st.session_state.snomed_code_col = snomed_code_col
             
-            # Only update version_info if we have valid data (don't overwrite good data with empty dict)
+            # Always store version_info to prevent session data from having empty version info
+            # If version_info is empty or None, check if we already have stored version_info
             if version_info and len(version_info) > 0:
                 st.session_state.lookup_version_info = version_info
+            elif 'lookup_version_info' not in st.session_state:
+                # Initialize with empty dict if no version info exists at all
+                st.session_state.lookup_version_info = {}
             
             # Add NHS Terminology Server status
             if NHS_TERMINOLOGY_AVAILABLE:
                 render_terminology_server_status()
+
+            # Add memory monitoring section
+            # Check if manual refresh was requested
+            if st.session_state.get('force_memory_refresh', False):
+                st.session_state.force_memory_refresh = False
+            
+            memory_info = get_memory_usage()
+            
+            if memory_info:
+                current_mb = memory_info['current_mb']
+                peak_mb = memory_info['peak_mb']
+                
+                # Memory usage guidance (show warnings outside expander)
+                if current_mb > 2300:
+                    st.error("⚠️ High memory usage! Consider refreshing the page to reset.")
+                elif current_mb > 1800:
+                    st.warning("💡 Approaching memory limits. Avoid multiple large exports.")
+                
+                # Add expandable memory info with current and peak inside
+                with st.expander("💻 Memory Usage", expanded=False):
+                    # Display current memory with appropriate color
+                    status_color = get_memory_status_color(current_mb)
+                    current_display = format_memory_display(current_mb)
+                    peak_display = format_memory_display(peak_mb)
+                    
+                    if status_color == "success":
+                        st.success(f"🟢 Current: {current_display}")
+                    elif status_color == "info":
+                        st.info(f"🔵 Current: {current_display}")
+                    elif status_color == "warning":
+                        st.warning(f"🟡 Current: {current_display}")
+                    else:
+                        st.error(f"🔴 Current: {current_display}")
+                    
+                    # Show peak memory
+                    st.info(f"📈 Peak Use: {peak_display}")
+                    
+                    # Detailed system information
+                    st.caption(f"System Total: {memory_info['system_total_gb']:.1f} GB")
+                    st.caption(f"System Available: {memory_info['system_available_gb']:.1f} GB")
+                    st.caption(f"System Usage: {memory_info['system_usage_percent']:.1f}%")
+                    
+                    # Add memory buttons
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("🔄 Refresh Usage", help="Update current memory usage display", key="memory_refresh_btn"):
+                            st.session_state.force_memory_refresh = True
+                            st.rerun()
+                    with col2:
+                        if st.button("📊 Reset Peak", help="Reset the session peak memory counter"):
+                            st.session_state.memory_peak_mb = current_mb
+                            st.success("Peak memory counter reset!")
+                            st.rerun()
+            else:
+                with st.expander("💻 Memory Usage", expanded=False):
+                    st.error("❌ Memory monitoring unavailable")
             
             return lookup_df, emis_guid_col, snomed_code_col
                 

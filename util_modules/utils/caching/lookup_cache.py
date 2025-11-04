@@ -341,7 +341,8 @@ def build_emis_lookup_cache(lookup_df: pd.DataFrame, snomed_code_col: str, emis_
             'record_count': lookup_count,  # Total records
             'valid_mapping_count': valid_mapping_count,  # Valid mappings only
             'table_hash': table_hash,
-            'available_columns': list(lookup_df.columns)
+            'available_columns': list(lookup_df.columns),
+            'original_version_info': version_info if version_info else {}  # Store original version info
         }
         
         # Save locally
@@ -421,13 +422,24 @@ def get_latest_cached_emis_lookup() -> Optional[Tuple[pd.DataFrame, str, str, Di
                     records.append(record)
                 lookup_df = pd.DataFrame(records)
             
-            # Create version info from cache metadata
-            version_info = {
-                'cache_created_at': cached_data.get('created_at', ''),
-                'record_count': cached_data.get('record_count', len(lookup_df)),
-                'table_hash': cached_data.get('table_hash', ''),
-                'available_columns': cached_data.get('available_columns', [])
-            }
+            # Use original version info if available, otherwise fall back to cache metadata
+            if 'original_version_info' in cached_data and cached_data['original_version_info']:
+                version_info = cached_data['original_version_info'].copy()
+                # Add cache-specific metadata to the original version info
+                version_info.update({
+                    'cache_created_at': cached_data.get('created_at', ''),
+                    'record_count': cached_data.get('record_count', len(lookup_df)),
+                    'table_hash': cached_data.get('table_hash', ''),
+                    'available_columns': cached_data.get('available_columns', [])
+                })
+            else:
+                # Fall back to cache metadata only (for older cache files)
+                version_info = {
+                    'cache_created_at': cached_data.get('created_at', ''),
+                    'record_count': cached_data.get('record_count', len(lookup_df)),
+                    'table_hash': cached_data.get('table_hash', ''),
+                    'available_columns': cached_data.get('available_columns', [])
+                }
             
             return lookup_df, emis_guid_col, snomed_code_col, version_info
             
