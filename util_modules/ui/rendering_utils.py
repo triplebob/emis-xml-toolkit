@@ -117,6 +117,11 @@ def apply_custom_styling():
     <style>
     /* Custom styling for better readability */
     
+    /* Smaller font size for sidebar text */
+    .stSidebar p, .stSidebar span, .stSidebar div {
+        font-size: 0.9rem !important;
+    }
+    
     /* Style expander headers to match sidebar color */
     .stExpander summary {
         background-color: #2D2D2D !important;

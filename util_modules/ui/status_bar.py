@@ -95,6 +95,10 @@ def _get_cached_version_info(version_info_dict):
 
 def render_status_bar():
     """Render the status bar in the sidebar with lookup table information."""
+    # Apply custom styling for sidebar elements
+    from .rendering_utils import apply_custom_styling
+    apply_custom_styling()
+    
     with st.sidebar:
         st.header("🗃️ Lookup Table Status")
         
@@ -176,6 +180,11 @@ def render_status_bar():
             # Changelog section - Direct in-app display 
             with st.sidebar.expander("🎯 What's New: v2.2.1", expanded=False):
                 st.markdown("""
+                    **🎨 Dark Theme & UI Improvements - v2.2.1:**
+                    - New dark theme optimized for clinical data readability
+                    - Roboto font for enhanced accessibility and readability
+                    - Streamlit set to Viewer mode for cleaner production interface    
+                
                     **🚀 Major Performance & Caching Overhaul - v2.2.0**
                     
                     Comprehensive caching architecture and performance improvements eliminating report dropdown hangs and memory issues.
@@ -206,11 +215,6 @@ def render_status_bar():
                     - Instant report dropdown switching using cached analysis
                     - Eliminated UI hangs and freezes during large operations
                     - Clean loading states with proper progress indicators
-                    
-                    **🎨 Dark Theme & UI Improvements - v2.2.1:**
-                    - New dark theme optimized for clinical data readability
-                    - Roboto font for enhanced accessibility and readability
-                    - Streamlit set to Viewer mode for cleaner production interface
                     
                     ✅ **Resolves all critical performance bottlenecks and memory issues**
                     """)
