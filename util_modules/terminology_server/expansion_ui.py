@@ -91,7 +91,7 @@ def _clean_dataframe_for_export(df: pd.DataFrame) -> pd.DataFrame:
         if df_clean[col].dtype == 'object':  # String columns
             # Remove common emoji prefixes used throughout the app
             df_clean[col] = df_clean[col].astype(str).str.replace(
-                r'🩺 |🔍 |❌ |📊 |🔬 |🩺|🔍|❌|📊|🔬', '', regex=True
+                r'⚕️ |🔍 |❌ |📊 |🔬 |⚕️|🔍|❌|📊|🔬', '', regex=True
             ).str.strip()
     
     return df_clean
@@ -147,9 +147,9 @@ def _create_hierarchical_json(all_child_codes: List[Dict], view_mode: str) -> Di
     
     for child in all_child_codes:
         # Get clean codes (remove emojis)
-        parent_code = str(child.get('Parent Code', '')).replace('🩺 ', '').strip()
+        parent_code = str(child.get('Parent Code', '')).replace('⚕️ ', '').strip()
         parent_display = str(child.get('Parent Display', '')).strip()
-        child_code = str(child.get('Child Code', '')).replace('🩺 ', '').strip()
+        child_code = str(child.get('Child Code', '')).replace('⚕️ ', '').strip()
         child_display = str(child.get('Child Display', '')).strip()
         
         # Skip if we don't have essential data
@@ -285,7 +285,7 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
         st.info("ℹ️ No codes with includechildren=True found in this dataset")
         return None
     
-    st.markdown("### 🩺 SNOMED Code Expansion")
+    st.markdown("### ⚕️ SNOMED Code Expansion")
     
     # Expansion options
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -769,17 +769,17 @@ def render_expansion_results(expansion_data: Dict):
         
         if not summary_df.empty:
             # Add visual indicators for SNOMED codes (matching other tabs)
-            summary_df['SNOMED Code'] = '🩺 ' + summary_df['SNOMED Code'].astype(str)
+            summary_df['SNOMED Code'] = '⚕️ ' + summary_df['SNOMED Code'].astype(str)
             
             # Style the summary table based on result status
             def style_status(row):
                 result_status = row['Result Status']
                 if result_status.startswith('Matched'):
-                    return ['background-color: #d4edda'] * len(row)  # Green for matched
+                    return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for matched
                 elif result_status.startswith('Unmatched'):
-                    return ['background-color: #fff3cd'] * len(row)  # Yellow for unmatched
+                    return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow for unmatched
                 else:  # Error
-                    return ['background-color: #f8d7da'] * len(row)  # Red for errors
+                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red for errors
             
             styled_summary = summary_df.style.apply(style_status, axis=1)
             st.dataframe(styled_summary, width='stretch', hide_index=True)
@@ -914,8 +914,8 @@ def render_expansion_results(expansion_data: Dict):
                         child_df = child_df.drop(columns=[col])
             
             # Add visual indicators for code types (matching other tabs)
-            child_df['Parent Code'] = '🩺 ' + child_df['Parent Code'].astype(str)
-            child_df['Child Code'] = '🩺 ' + child_df['Child Code'].astype(str)
+            child_df['Parent Code'] = '⚕️ ' + child_df['Parent Code'].astype(str)
+            child_df['Child Code'] = '⚕️ ' + child_df['Child Code'].astype(str)
             
             # Add visual indicators for EMIS GUID column
             def format_emis_guid(guid):
@@ -930,9 +930,9 @@ def render_expansion_results(expansion_data: Dict):
             def style_emis_guid(row):
                 emis_guid = row['EMIS GUID']
                 if 'Not in EMIS lookup table' in str(emis_guid):
-                    return ['background-color: #f8d7da'] * len(row)  # Pink for not found
+                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red for not found
                 else:
-                    return ['background-color: #d4edda'] * len(row)  # Green for found
+                    return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for found
             
             styled_child_df = child_df.style.apply(style_emis_guid, axis=1)
             st.dataframe(styled_child_df, width='stretch', hide_index=True)
@@ -1022,7 +1022,7 @@ def render_expansion_results(expansion_data: Dict):
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
             # Create SNOMED-only download
-            st.markdown("**🩺 Download Child Codes (SNOMED Only)**")
+            st.markdown("**⚕️ Download Child Codes (SNOMED Only)**")
             if export_filtered_codes:
                 # Create SNOMED-only export (remove EMIS GUID column)
                 snomed_export_df = export_df.copy()
@@ -1045,7 +1045,7 @@ def render_expansion_results(expansion_data: Dict):
                 
                 snomed_csv = _clean_dataframe_for_export(snomed_export_df).to_csv(index=False)
                 st.download_button(
-                    label=f"🩺 {export_filter}",
+                    label=f"⚕️ {export_filter}",
                     data=snomed_csv,
                     file_name=snomed_filename,
                     mime="text/csv",
@@ -1207,7 +1207,7 @@ def render_individual_code_lookup():
                     
                     df = pd.DataFrame(child_data)
                     # Add visual indicator for SNOMED codes
-                    df['Child Code'] = '🩺 ' + df['Child Code'].astype(str)
+                    df['Child Code'] = '⚕️ ' + df['Child Code'].astype(str)
                     st.dataframe(df, width='stretch', hide_index=True)
                     
                     # Quick export with enhanced filename

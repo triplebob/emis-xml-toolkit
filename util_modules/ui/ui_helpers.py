@@ -52,7 +52,7 @@ def render_download_button(
     for col in clean_data.columns:
         if clean_data[col].dtype == 'object':
             # Remove all emojis and extra spaces from text columns
-            clean_data[col] = clean_data[col].astype(str).str.replace(r'[🔍📝🩺📊📋📈📄🏥💊⬇️✅❌🔄📥📈📋]+ ', '', regex=True)
+            clean_data[col] = clean_data[col].astype(str).str.replace(r'[🔍📝⚕️📊📋📈📄🏥💊⬇️✅❌🔄📥📈📋]+ ', '', regex=True)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -87,9 +87,9 @@ def get_success_highlighting_function(success_column: str = 'Mapping Found'):
     """
     def highlight_success(row):
         if row[success_column] == 'Found':
-            return ['background-color: #d4edda'] * len(row)  # Light green
+            return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green with light text
         else:
-            return ['background-color: #f8d7da'] * len(row)  # Light red
+            return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red with light text
     
     return highlight_success
 
@@ -102,7 +102,7 @@ def get_warning_highlighting_function():
         Function for styling DataFrame rows with warning colors
     """
     def highlight_warning(row):
-        return ['background-color: #fff3cd'] * len(row)  # Light yellow/orange
+        return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow/orange with light text
     
     return highlight_warning
 
@@ -224,7 +224,7 @@ def render_section_with_data(
         if 'EMIS GUID' in display_df.columns:
             display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
         if 'SNOMED Code' in display_df.columns:
-            display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
+            display_df['SNOMED Code'] = '⚕️ ' + display_df['SNOMED Code'].astype(str)
         if 'Source Type' in display_df.columns:
             # Only add emojis if they're not already present (to avoid double emojis)
             display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 

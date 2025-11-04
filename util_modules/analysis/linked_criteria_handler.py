@@ -90,7 +90,7 @@ def render_linked_criteria(criterion, main_criterion):
                             if value.get('is_refset', False):
                                 scope = '🎯 Refset'
                             elif value.get('include_children', False):
-                                scope = '👥 + Children'
+                                scope = '👪 + Children'
                             else:
                                 scope = '🎯 Exact'
                             
@@ -116,7 +116,7 @@ def render_linked_criteria(criterion, main_criterion):
                                         width="medium"
                                     ),
                                     "SNOMED Code": st.column_config.TextColumn(
-                                        "🩺 SNOMED Code", 
+                                        "⚕️ SNOMED Code", 
                                         width="medium"
                                     ),
                                     "Description": st.column_config.TextColumn(

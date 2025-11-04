@@ -116,62 +116,70 @@ def apply_custom_styling():
     st.markdown("""
     <style>
     /* Custom styling for better readability */
-    .stExpander {
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        margin-bottom: 8px;
+    
+    /* Style expander headers to match sidebar color */
+    .stExpander summary {
+        background-color: #2D2D2D !important;
+        color: #FAFAFA !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
     }
     
-    .stExpander > div:first-child {
-        background-color: #f8f9fa;
+    .stExpander summary:hover {
+        background-color: #3D3D3D !important;
+    }
+    
+    .stExpander > div > div > summary {
+        background-color: #2D2D2D !important;
+        color: #FAFAFA !important;
     }
     
     /* Consistent spacing for metrics */
     .metric-container {
-        background-color: #f8f9fa;
+        background-color: #2d2d2d;
         padding: 1rem;
         border-radius: 8px;
-        border: 1px solid #e9ecef;
+        border: 1px solid #404040;
         margin-bottom: 1rem;
     }
     
     /* Color coding for different message types */
     .success-box {
-        background-color: #d4edda;
-        border-color: #c3e6cb;
-        color: #155724;
+        background-color: #2d5a3d;
+        border-color: #4a6b4a;
+        color: #e8f5e8;
     }
     
     .warning-box {
-        background-color: #fff3cd;
-        border-color: #ffeaa7;
-        color: #856404;
+        background-color: #5a4d2d;
+        border-color: #6b5a3a;
+        color: #f5f3e8;
     }
     
     .error-box {
-        background-color: #f8d7da;
-        border-color: #f5c6cb;
-        color: #721c24;
+        background-color: #5a2d2d;
+        border-color: #6b3a3a;
+        color: #f5e8e8;
     }
     
     /* Table styling improvements */
     .dataframe tbody tr:hover {
-        background-color: #f5f5f5;
+        background-color: #3d3d3d;
     }
     
     /* Consistent button styling */
     .stButton > button {
         border-radius: 4px;
-        border: 1px solid #ccc;
-        background-color: #fff;
-        color: #333;
+        border: 1px solid #555;
+        background-color: #2d2d2d;
+        color: #fafafa;
         padding: 0.5rem 1rem;
         transition: all 0.2s;
     }
     
     .stButton > button:hover {
-        background-color: #f8f9fa;
-        border-color: #007bff;
+        background-color: #3d3d3d;
+        border-color: #4A9EFF;
     }
     </style>
     """, unsafe_allow_html=True)

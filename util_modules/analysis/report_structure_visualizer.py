@@ -718,7 +718,7 @@ def render_dependency_list_view(dependency_tree, report_map, show_circular):
         # Node icon based on complexity and circular status
         if is_circular:
             icon = "🔄"
-            style = "background-color: #fff3cd;"
+            style = "background-color: #5a4d2d; color: #f5f3e8;"
         elif level == 0:
             icon = "🔵"
             style = ""
@@ -761,7 +761,7 @@ def render_dependency_list_view(dependency_tree, report_map, show_circular):
                             # Clean up the display text
                             st.caption(f"📋 Type: {report_type}")
                         if hasattr(report, 'population_references') and report.population_references:
-                            st.caption(f"👥 References: {len(report.population_references)} populations")
+                            st.caption(f"🧑‍🤝‍🧑 References: {len(report.population_references)} populations")
             
             # Show children (member searches for audit reports)
             children = dep_node.get('children', [])
@@ -975,7 +975,7 @@ def _generate_complete_dependency_analysis(dependency_tree, report_map, show_cir
                     # Clean up the display text
                     output_lines.append(f"{indent}  📋 Type: {report_type}")
                 if hasattr(report, 'population_references') and report.population_references:
-                    output_lines.append(f"{indent}  👥 References: {len(report.population_references)} populations")
+                    output_lines.append(f"{indent}  🧑‍🤝‍🧑 References: {len(report.population_references)} populations")
         
         # Show children (member searches)
         children = dep_node.get('children', [])

@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.2.1 - Dark Theme & UI Improvements (November 2025)
+
+### 🎨 **Dark Theme Implementation**
+- **Professional Dark Theme**: Default dark color scheme optimized for clinical data readability on large screens
+- **High Contrast Tables**: Clinical data tables with proper contrast across all tabs (Clinical Codes, RefSets, NHS Term Server, Reports)
+- **Improved Typography**: Roboto font for enhanced readability and accessibility
+- **Enhanced UI Elements**: Medical symbol (⚕️) consistency, semantic emoji system for populations (🧑‍🤝‍🧑) and hierarchies (👪)
+- **User Choice Preserved**: Toggle between dark and light modes via Settings > Choose app theme
+
+### 🔧 **App Configuration**
+- **Chrome Customization**: Viewer mode for cleaner production interface
+- **File Upload Limits**: Reduced from 200MB to 20MB for improved memory management and prevent uploading of files too large for Streamlit parsing
+- **Criterion Visibility**: Enhanced expander contrast for better navigation in rule analysis
+
+### 📋 **Interface Refinements**
+- **Clean Report Titles**: Removed redundant prefixes from report headers
+- **Improved Footer**: Better text contrast for readability
+- **Optimized Styling**: Updated CSS for consistent dark theme appearance
+
 ## v2.2.0 - Performance Architecture & Export Improvements (November 2025)
 
 ### 🚀 **Caching Infrastructure Overhaul**

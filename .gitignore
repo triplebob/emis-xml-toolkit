@@ -39,3 +39,6 @@ ENV/
 .DS_Store
 Thumbs.db
 .gitattributes
+
+# Private workspace files
+todo_list.md

@@ -296,9 +296,9 @@ def render_medications_tab(results):
             # Color code pseudo-refset members differently
             def highlight_pseudo_medications(row):
                 if row['Mapping Found'] == 'Found':
-                    return ['background-color: #fff3cd'] * len(row)  # Light yellow/orange
+                    return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow/orange
                 else:
-                    return ['background-color: #f8cecc'] * len(row)  # Light red/orange
+                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red
             
             styled_pseudo_medications = medication_pseudo_df.style.apply(highlight_pseudo_medications, axis=1)
             st.dataframe(styled_pseudo_medications, width='stretch')
@@ -347,7 +347,7 @@ def render_refsets_tab(results):
             refsets_data_filtered.append(filtered_refset)
         
         def highlight_refsets(row):
-            return ['background-color: #d4edda'] * len(row)  # Light green for refsets
+            return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for refsets
         
         current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
         

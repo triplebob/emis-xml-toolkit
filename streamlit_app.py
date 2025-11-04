@@ -71,7 +71,7 @@ def main():
     
     with col1:
         # Clean header without button
-        st.header("🔧 The Unofficial EMIS XML Toolkit")
+        st.header("⚕️ The Unofficial EMIS XML Toolkit")
         st.markdown("*Comprehensive EMIS XML analysis and clinical code extraction for healthcare teams*")
         
         # Dynamic MKB version text
@@ -425,7 +425,7 @@ def main():
     st.markdown("---")
     st.markdown(
         """
-        <div style='text-align: center; color: #666;'>
+        <div style='text-align: center; color: #aaa;'>
         <p>The Unofficial EMIS XML Toolkit | Comprehensive EMIS XML analysis and clinical code extraction</p>
         <p style='font-size: 0.8em; margin-top: 10px;'>
         <strong>Disclaimer:</strong> EMIS and EMIS Web are trademarks of Optum Inc. This unofficial toolkit is not affiliated with, 

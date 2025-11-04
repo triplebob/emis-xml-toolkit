@@ -1,8 +1,18 @@
 [theme]
-primaryColor = "#2E86C1"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F2F6"
-textColor = "#262730"
+# Dark theme optimized for medical applications
+primaryColor = "#4A9EFF"
+backgroundColor = "#1E1E1E"
+secondaryBackgroundColor = "#2D2D2D"
+textColor = "#FAFAFA"
+font = "Roboto"
+headingFont = "Roboto"
 
 [server]
-maxUploadSize = 200
+runOnSave = true
+maxUploadSize = 20
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"

@@ -131,7 +131,7 @@ def render_status_bar():
                 load_source
             )
             st.success(status_message)
-            st.info(f"🩺 SCT Codes: {stats['clinical_count']:,}")
+            st.info(f"⚕️ SCT Codes: {stats['clinical_count']:,}")
             st.info(f"💊 Medications: {stats['medication_count']:,}")
             
             if stats['other_count'] > 0:
@@ -174,7 +174,7 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
             # Changelog section - Direct in-app display 
-            with st.sidebar.expander("🎯 What's New - v2.2.0", expanded=False):
+            with st.sidebar.expander("🎯 What's New - v2.2.1", expanded=False):
                 st.markdown("""
                     **🚀 Major Performance & Caching Overhaul - v2.2.0**
                     
@@ -206,6 +206,11 @@ def render_status_bar():
                     - Instant report dropdown switching using cached analysis
                     - Eliminated UI hangs and freezes during large operations
                     - Clean loading states with proper progress indicators
+                    
+                    **🎨 Dark Theme & UI Improvements - v2.2.1:**
+                    - New dark theme optimized for clinical data readability
+                    - Roboto font for enhanced accessibility and readability
+                    - Streamlit set to Viewer mode for cleaner production interface
                     
                     ✅ **Resolves all critical performance bottlenecks and memory issues**
                     """)

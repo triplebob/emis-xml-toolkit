@@ -332,7 +332,7 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
             for report in audit_reports:
                 if hasattr(report, 'population_references') and report.population_references:
                     all_populations.update(report.population_references)
-            st.metric("👥 Referenced Populations", len(all_populations), help="Total unique base searches referenced by all Audit Reports")
+            st.metric("🧑‍🤝‍🧑 Referenced Populations", len(all_populations), help="Total unique base searches referenced by all Audit Reports")
         with col3:
             # Count reports with additional criteria (non-PATIENTS table reports)
             reports_with_criteria = 0
@@ -1137,16 +1137,8 @@ def render_report_visualization(report, analysis):
         getattr(report, 'search_date', '')
     )
     
-    # Format report type for display
-    display_type = report_type
-    if report_type.startswith("[") and report_type.endswith("]"):
-        clean_type = report_type.strip("[]").lower()
-        if clean_type in ["list", "audit", "aggregate"]:
-            display_type = f"{clean_type.capitalize()} Report:"
-        else:
-            display_type = f"{clean_type.capitalize()}:"
-    
-    st.subheader(f"📊 {display_type} {metadata['report_name']}")
+    # Just show the report name without redundant type prefix (users know the tab they're in)
+    st.subheader(f"📊 {metadata['report_name']}")
     
     # Report header with useful info
     if metadata['description']:
@@ -1484,7 +1476,7 @@ def render_list_report_details(report):
                                                     snomed_code = _lookup_snomed_for_ui(emis_guid)
                                                     # Determine scope indicator for regular codes
                                                     if include_children:
-                                                        scope = '👥 + Children'
+                                                        scope = '👪 + Children'
                                                     else:
                                                         scope = '🎯 Exact'
                                                 
@@ -1519,7 +1511,7 @@ def render_list_report_details(report):
                                                         width="medium"
                                                     ),
                                                     "SNOMED Code": st.column_config.TextColumn(
-                                                        "🩺 SNOMED Code", 
+                                                        "⚕️ SNOMED Code", 
                                                         width="medium"
                                                     ),
                                                     "Description": st.column_config.TextColumn(
@@ -1761,7 +1753,7 @@ def render_audit_report_details(report):
     if analysis:
         member_searches = get_member_search_names(report, analysis)
         if member_searches:
-            st.markdown(f"### 👥 Member Searches ({len(member_searches)} searches)")
+            st.markdown(f"### 🧑‍🤝‍🧑 Member Searches ({len(member_searches)} searches)")
             st.info("This Audit Report combines results from the following base searches:")
             
             with st.expander("📋 View All Member Searches", expanded=False):
@@ -1839,7 +1831,7 @@ def render_audit_report_details(report):
                                                 snomed_code = _lookup_snomed_for_ui(emis_guid)
                                                 # Determine scope indicator for regular codes
                                                 if include_children:
-                                                    scope = '👥 + Children'
+                                                    scope = '👪 + Children'
                                                 else:
                                                     scope = '🎯 Exact'
                                             
@@ -1867,7 +1859,7 @@ def render_audit_report_details(report):
                                                         width="medium"
                                                     ),
                                                     "SNOMED Code": st.column_config.TextColumn(
-                                                        "🩺 SNOMED Code", 
+                                                        "⚕️ SNOMED Code", 
                                                         width="medium"
                                                     ),
                                                     "Description": st.column_config.TextColumn(

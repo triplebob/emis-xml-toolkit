@@ -20,6 +20,7 @@ from .linked_criteria_handler import (
     filter_linked_column_filters_from_main
 )
 from .shared_render_utils import _render_rule_step, _render_rule_step_content, _is_parent_report, _render_report_type_specific_info
+from ..ui.rendering_utils import apply_custom_styling
 
 
 def _natural_sort_key(text):
@@ -73,6 +74,9 @@ def render_detailed_rules(reports, analysis=None):
         reports: List of SearchReport objects (should be searches only, no list reports)
         analysis: Analysis object containing folder information (optional, will get from session state if not provided)
     """
+    
+    # Apply custom styling for better UI contrast
+    apply_custom_styling()
     
     if not reports:
         st.info("No detailed rules found")
@@ -619,7 +623,7 @@ def _generate_code_data_for_value_set(vs_values, vs_description, emis_guids, sno
                     description = code_name
                 
                 if value['include_children']:
-                    scope = '👥 + Children'
+                    scope = '👪 + Children'
                 else:
                     scope = '🎯 Exact'
             
@@ -657,7 +661,7 @@ def _generate_basic_code_data(vs_values, vs_description):
             else:
                 snomed_code = 'Analysis unavailable'
                 description = code_name
-                scope = '👥 + Children' if value['include_children'] else '🎯 Exact'
+                scope = '👪 + Children' if value['include_children'] else '🎯 Exact'
             
             code_data.append({
                 'EMIS Code': code_value,
@@ -776,7 +780,7 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                                         width="medium"
                                     ),
                                     "SNOMED Code": st.column_config.TextColumn(
-                                        "🩺 SNOMED Code", 
+                                        "⚕️ SNOMED Code", 
                                         width="medium"
                                     ),
                                     "Description": st.column_config.TextColumn(
@@ -1486,7 +1490,7 @@ def render_complexity_analysis(metrics, analysis=None):
     if metrics.get('total_dependencies', 0) > 0:
         factors.append(f"🔗 Report dependencies ({metrics.get('total_dependencies', 0)})")
     if metrics.get('population_criteria_count', 0) > 0:
-        factors.append(f"👥 Population references ({metrics.get('population_criteria_count', 0)})")
+        factors.append(f"🧑‍🤝‍🧑 Population references ({metrics.get('population_criteria_count', 0)})")
     if metrics.get('has_negation', False):
         factors.append("🚫 Exclusion logic")
     if metrics.get('has_latest_restrictions', False):
@@ -1666,7 +1670,7 @@ def render_restriction_value_set_element(vs_elem):
                         description = code_name
                         
                         if value['include_children']:
-                            scope = '👥 + Children'
+                            scope = '👪 + Children'
                         else:
                             scope = '🎯 Exact'
                     
@@ -1692,7 +1696,7 @@ def render_restriction_value_set_element(vs_elem):
                                 width="medium"
                             ),
                             "SNOMED Code": st.column_config.TextColumn(
-                                "🩺 SNOMED Code", 
+                                "⚕️ SNOMED Code", 
                                 width="medium"
                             ),
                             "Description": st.column_config.TextColumn(
@@ -1811,7 +1815,7 @@ def render_restriction_value_set(vs_description):
                             width="medium"
                         ),
                         "SNOMED Code": st.column_config.TextColumn(
-                            "🩺 SNOMED Code", 
+                            "⚕️ SNOMED Code", 
                             width="medium"
                         ),
                         "Description": st.column_config.TextColumn(

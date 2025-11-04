@@ -205,7 +205,7 @@ class StepRenderer:
         emoji_map = {
             'search': '🔍',
             'filter': '🔽',
-            'population': '👥',
+            'population': '🧑‍🤝‍🧑',
             'report': '📊',
             'unknown': '❓'
         }
