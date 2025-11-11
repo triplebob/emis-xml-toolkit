@@ -48,9 +48,6 @@ class FolderManager:
             # Assume reports are already filtered by caller, no additional filtering needed
             search_reports = folder_reports
             
-            # Debug information (only if debug mode is enabled)
-            if debug_mode:
-                print(f"Debug: Folder '{folder.name}' has {len(folder_reports)} reports")
             
             if search_reports:  # Only include folders that have searches
                 full_path = " > ".join(path_parts)

@@ -7,10 +7,275 @@ tab rendering modules but are specific to tab functionality.
 
 from .common_imports import *
 import hashlib
+import os
+import gc
+import psutil
 
 # Caching functions moved to cache_manager.py
 # Import cache functions from centralized cache manager
 from ...utils.caching.cache_manager import cache_manager
+
+
+def _get_report_size_category(report) -> str:
+    """Determine if report is small, medium, or large for performance optimization"""
+    try:
+        # Count total complexity indicators
+        column_groups_count = 0
+        criteria_count = 0
+        codes_count = 0
+        
+        # Count column groups
+        if hasattr(report, 'column_groups') and report.column_groups:
+            column_groups_count = len(report.column_groups)
+            
+            # Count criteria in column groups
+            for group in report.column_groups:
+                if group.get('criteria_details'):
+                    criteria_list = group['criteria_details'].get('criteria', [])
+                    criteria_count += len(criteria_list)
+                    
+                    # Count codes in criteria
+                    for criterion in criteria_list:
+                        value_sets = criterion.get('value_sets', [])
+                        for vs in value_sets:
+                            codes_count += len(vs.get('values', []))
+        
+        # Count main criteria groups
+        if hasattr(report, 'criteria_groups') and report.criteria_groups:
+            criteria_count += len(report.criteria_groups)
+            for group in report.criteria_groups:
+                for criterion in group.criteria:
+                    value_sets = criterion.value_sets or []
+                    for vs in value_sets:
+                        codes_count += len(vs.get('values', []))
+        
+        # Classify based on complexity
+        if column_groups_count <= 3 and criteria_count <= 5 and codes_count <= 50:
+            return "small"
+        elif column_groups_count <= 10 and criteria_count <= 20 and codes_count <= 200:
+            return "medium" 
+        else:
+            return "large"
+            
+    except Exception:
+        return "medium"  # Safe default
+
+def _monitor_memory_usage(location: str, report_size: str = "medium"):
+    """Monitor memory usage at key points during report rendering - optimized for report size"""
+    try:
+        # Skip memory monitoring for small reports entirely
+        if report_size == "small":
+            return 0
+            
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / 1024 / 1024
+        
+        # Higher thresholds for medium reports, aggressive for large reports
+        threshold = 1500 if report_size == "large" else 2000
+        
+        if memory_mb > threshold:
+            st.warning(f"High memory usage detected at {location}: {memory_mb:.1f} MB")
+            
+            # Trigger cleanup based on report size
+            from ...utils.caching.cache_manager import cache_manager
+            if report_size == "large":
+                cache_manager.manage_session_state_memory(max_cache_items=10)
+            else:
+                cache_manager.manage_session_state_memory(max_cache_items=30)
+            gc.collect()
+            
+            # Check memory again
+            memory_info_after = process.memory_info()
+            memory_mb_after = memory_info_after.rss / 1024 / 1024
+            reduction = memory_mb - memory_mb_after
+            
+            if reduction > 50:  # Significant reduction
+                st.success(f"Memory cleanup successful: freed {reduction:.1f} MB, now at {memory_mb_after:.1f} MB")
+        
+        return memory_mb
+    except Exception:
+        # If memory monitoring fails, just continue
+        return 0
+
+def _batch_lookup_snomed_for_ui(emis_guids: List[str]) -> Dict[str, str]:
+    """Batch lookup SNOMED codes for multiple EMIS GUIDs - much faster than individual lookups"""
+    if not emis_guids:
+        return {}
+        
+    try:
+        # Get cached unified data from session state to avoid expensive recomputation
+        cached_unified_data = st.session_state.get('unified_clinical_data_cache')
+        if cached_unified_data is None:
+            # Only call expensive function if no cache exists
+            from ..ui_helpers import get_unified_clinical_data
+            unified_results = get_unified_clinical_data()
+        else:
+            unified_results = cached_unified_data
+            
+        data_hash = cache_manager.generate_data_hash(unified_results)
+        
+        # Get cached SNOMED lookup dictionary
+        lookup_dict = cache_manager.cache_snomed_lookup_dictionary(data_hash, unified_results)
+        
+        # Batch O(1) lookups from cached dictionary
+        result = {}
+        for guid in emis_guids:
+            if guid and guid != 'N/A':
+                result[guid] = lookup_dict.get(str(guid).strip(), 'Not found')
+            else:
+                result[guid] = 'N/A'
+        return result
+        
+    except Exception as e:
+        # Return error dict for all GUIDs
+        return {guid: f'Error: {str(e)[:20]}...' for guid in emis_guids}
+
+
+
+@st.cache_data(show_spinner="Loading report metadata...", ttl=1800, max_entries=100)
+def _load_report_metadata(report_id: str, report_hash: str, report_name: str, report_type: str, description: str, parent_info: str, search_date: str):
+    """
+    Load and cache basic report metadata with spinner.
+    
+    This cached function shows a spinner only on cache misses.
+    Cache hits return instantly without spinner display.
+    """
+    return {
+        'report_id': report_id,
+        'report_name': report_name,
+        'report_type': report_type,
+        'description': description,
+        'parent_info': parent_info,
+        'search_date': search_date,
+        'metadata_loaded': True
+    }
+
+@st.cache_data(show_spinner="Extracting clinical codes...", ttl=1800, max_entries=100)
+def _extract_clinical_codes(report_id: str, report_hash: str, criteria_data: list):
+    """
+    Extract and count clinical codes with progress tracking and spinner.
+    
+    Shows spinner with progress updates only on cache misses.
+    Cache hits return instantly.
+    """
+    if not criteria_data:
+        return {'clinical_codes_extracted': 0, 'extraction_complete': True}
+    
+    # Count total codes efficiently
+    total_codes = 0
+    for criterion in criteria_data:
+        # Handle both SearchCriterion objects and dict objects
+        if hasattr(criterion, 'value_sets'):
+            # SearchCriterion object
+            value_sets = criterion.value_sets or []
+        else:
+            # Dictionary object
+            value_sets = criterion.get('value_sets', [])
+        
+        for vs in value_sets:
+            if hasattr(vs, 'get'):
+                total_codes += len(vs.get('values', []))
+            else:
+                total_codes += len(getattr(vs, 'values', []))
+    
+    # Only show progress for large code sets
+    if total_codes > 50:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        processed_codes = 0
+        for criterion_idx, criterion in enumerate(criteria_data):
+            # Handle both SearchCriterion objects and dict objects
+            if hasattr(criterion, 'value_sets'):
+                # SearchCriterion object
+                value_sets = criterion.value_sets or []
+            else:
+                # Dictionary object
+                value_sets = criterion.get('value_sets', [])
+            
+            for vs in value_sets:
+                if hasattr(vs, 'get'):
+                    codes = vs.get('values', [])
+                else:
+                    codes = getattr(vs, 'values', [])
+                processed_codes += len(codes)  # Process all codes in this value set at once
+                
+                # Update progress every 25 codes or at significant milestones
+                if processed_codes % 25 == 0 or processed_codes == total_codes:
+                    progress = processed_codes / max(total_codes, 1)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Extracting Clinical Codes: {processed_codes}/{total_codes} processed")
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+    
+    return {
+        'clinical_codes_extracted': total_codes,
+        'codes_processed': total_codes,
+        'extraction_complete': True
+    }
+
+
+@st.cache_data(show_spinner="Processing column groups...", ttl=1800, max_entries=100)
+def _process_column_groups(report_id: str, report_hash: str, column_groups_data: list):
+    """
+    Process column groups with progress tracking and spinner.
+    
+    Shows spinner with progress updates only on cache misses.
+    Cache hits return instantly.
+    """
+    if not column_groups_data:
+        return {'column_groups_processed': 0, 'processing_complete': True}
+    
+    total_groups = len(column_groups_data)
+    processed_groups = []
+    
+    # Only show progress for larger datasets
+    if total_groups > 5:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, group in enumerate(column_groups_data):
+            # Process group data efficiently
+            processed_group = {
+                'group_id': group.get('id', f'group_{i}'),
+                'display_name': group.get('display_name', f'Group {i+1}'),
+                'logical_table': group.get('logical_table', 'N/A'),
+                'has_criteria': group.get('has_criteria', False),
+                'columns_count': len(group.get('columns', [])),
+                'criteria_count': len(group.get('criteria_details', {}).get('criteria', [])) if group.get('criteria_details') else 0
+            }
+            processed_groups.append(processed_group)
+            
+            # Update progress every few groups or at the end
+            if (i + 1) % 3 == 0 or i == total_groups - 1:
+                progress = (i + 1) / total_groups
+                progress_bar.progress(progress)
+                status_text.text(f"Processing Column Groups: {i + 1}/{total_groups} rendered")
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+    else:
+        # Process small datasets without progress tracking
+        for i, group in enumerate(column_groups_data):
+            processed_group = {
+                'group_id': group.get('id', f'group_{i}'),
+                'display_name': group.get('display_name', f'Group {i+1}'),
+                'logical_table': group.get('logical_table', 'N/A'),
+                'has_criteria': group.get('has_criteria', False),
+                'columns_count': len(group.get('columns', [])),
+                'criteria_count': len(group.get('criteria_details', {}).get('criteria', [])) if group.get('criteria_details') else 0
+            }
+            processed_groups.append(processed_group)
+    
+    return {
+        'column_groups_processed': len(processed_groups),
+        'groups_data': processed_groups,
+        'processing_complete': True
+    }
 
 
 def is_data_processing_needed(cache_key: str) -> bool:
@@ -242,39 +507,14 @@ def _reprocess_with_new_mode(deduplication_mode):
     pass
 
 
-# SNOMED lookup moved to cache_manager.py for centralized caching
+# SNOMED lookup now uses batch function for consistency and efficiency
 def _lookup_snomed_for_ui(emis_guid: str) -> str:
-    """
-    Look up SNOMED code for display in UI using centralized cache manager
-    
-    Args:
-        emis_guid: EMIS GUID to look up
-        
-    Returns:
-        SNOMED code if found, 'Not found' otherwise
-    """
+    """Single SNOMED lookup - uses batch function for consistency"""
     if not emis_guid or emis_guid == 'N/A':
         return 'N/A'
     
-    try:
-        # CRITICAL FIX: Use existing cached unified data instead of calling expensive function
-        cached_unified_data = st.session_state.get('unified_clinical_data_cache')
-        if cached_unified_data is None:
-            # Only call expensive function if no cache exists
-            unified_results = get_unified_clinical_data()
-        else:
-            unified_results = cached_unified_data
-            
-        data_hash = cache_manager.generate_data_hash(unified_results)
-        
-        # Get cached SNOMED lookup dictionary
-        lookup_dict = cache_manager.cache_snomed_lookup_dictionary(data_hash, unified_results)
-        
-        # O(1) lookup from cached dictionary
-        return lookup_dict.get(str(emis_guid).strip(), 'Not found')
-        
-    except Exception as e:
-        return f'Error: {str(e)[:20]}...'
+    batch_result = _batch_lookup_snomed_for_ui([emis_guid])
+    return batch_result.get(emis_guid, 'Not found')
 
 
 def _deduplicate_clinical_data_by_emis_guid(clinical_data):
@@ -308,10 +548,12 @@ def _select_best_clinical_code_entry(codes_group):
     """
     Select the best clinical code entry from a group of duplicates.
     
+    Note: All entries should have the same mapping status since they share the same EMIS GUID.
+    This function only selects based on data completeness for better UI display.
+    
     Prioritizes:
-    1. Entries with 'Found' mapping status
-    2. Entries with complete descriptions
-    3. Most recent entries
+    1. Entries with complete descriptions
+    2. Most complete entry (most non-empty fields)
     
     Args:
         codes_group: List of clinical code dictionaries with same EMIS GUID
@@ -322,17 +564,12 @@ def _select_best_clinical_code_entry(codes_group):
     if len(codes_group) == 1:
         return codes_group[0]
     
-    # Priority 1: Found mappings
-    found_codes = [c for c in codes_group if c.get('Mapping Found') == 'Found']
-    if found_codes:
-        codes_group = found_codes
-    
-    # Priority 2: Complete descriptions
+    # Priority 1: Complete descriptions
     complete_codes = [c for c in codes_group if c.get('Description', '').strip()]
     if complete_codes:
         codes_group = complete_codes
     
-    # Priority 3: Most complete entry (most non-empty fields)
+    # Priority 2: Most complete entry (most non-empty fields)
     def completeness_score(code):
         return sum(1 for v in code.values() if v and str(v).strip())
     
@@ -1219,8 +1456,6 @@ def get_unified_clinical_data():
     
     # Lookup already applied earlier before filtering
     # The unified parsing approach already provides better source tracking than GUID mapping
-    # if unified_results.get('clinical_codes'):
-    #     unified_results['clinical_codes'] = _add_source_info_to_clinical_data(unified_results['clinical_codes'])
     
     # Apply standardization to pseudo-refset members  
     if unified_results.get('clinical_pseudo_members'):

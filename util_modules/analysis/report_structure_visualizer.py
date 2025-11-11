@@ -43,78 +43,95 @@ def render_folder_structure(folder_tree, folders, reports):
     folder_map = {f.id: f for f in folders}
     report_map = {r.id: r for r in reports}
     
+    # Export options at the top - collapsed by default
+    with st.expander("📥 Export Folder Structure", expanded=False):
+        st.markdown("**Export Options:**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Folder structure TXT export as fragment
+            @st.fragment
+            def folder_txt_export_fragment():
+                # TXT export using cached tree text
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                xml_filename = st.session_state.get('xml_filename', 'unknown')
+                clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
+                
+                # Generate summary statistics to match JSON export
+                from ..export_handlers.json_export_generator import JSONExportGenerator
+                from ..ui.tabs.tab_helpers import ensure_analysis_cached
+                
+                analysis = ensure_analysis_cached(None)
+                json_generator = JSONExportGenerator(analysis)
+                summary_stats = json_generator._calculate_folder_summary(folder_tree, folder_map, report_map)
+                
+                # Ensure tree text is initialized before using it
+                if f'tree_text_{cache_key}' not in st.session_state:
+                    st.session_state[f'tree_text_{cache_key}'] = generate_folder_tree_ascii(folder_tree, folder_map, report_map)
+                
+                # Build TXT content with summary
+                txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                txt_content += "=" * 80 + "\n\n"
+                txt_content += st.session_state[f'tree_text_{cache_key}']
+                txt_content += "\n\n" + "=" * 80 + "\n"
+                txt_content += "SUMMARY STATISTICS\n"
+                txt_content += "=" * 80 + "\n"
+                txt_content += f"Total Folders: {summary_stats.get('folders', 0)}\n"
+                txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
+                txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
+                txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
+                txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
+                
+                from util_modules.export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager()
+                export_manager.render_text_download_button(
+                    content=txt_content,
+                    filename=f"{clean_xml_name}_folder_structure_{timestamp}.txt",
+                    key="tree_download_txt"
+                )
+            
+            folder_txt_export_fragment()
+        
+        with col2:
+            # Folder structure JSON export as fragment
+            @st.fragment
+            def folder_json_export_fragment():
+                # JSON export using cached folder structure - generate JSON representation lazily
+                if f'tree_json_{cache_key}' not in st.session_state:
+                    # Use the proper JSON export generator
+                    from ..export_handlers.json_export_generator import JSONExportGenerator
+                    from ..ui.tabs.tab_helpers import ensure_analysis_cached
+                    
+                    # Get XML filename from session state
+                    xml_filename = st.session_state.get('xml_filename', 'unknown')
+                    
+                    # Get analysis object for the JSON generator
+                    analysis = ensure_analysis_cached(None)  # Use cached analysis
+                    json_generator = JSONExportGenerator(analysis)
+                    
+                    filename, json_content = json_generator.generate_folder_structure_json(
+                        folder_tree, folder_map, report_map, xml_filename
+                    )
+                    st.session_state[f'tree_json_{cache_key}'] = (filename, json_content)
+                
+                # Get cached JSON data
+                filename, json_content = st.session_state[f'tree_json_{cache_key}']
+                
+                from util_modules.export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager()
+                export_manager.render_json_download_button(
+                    content=json_content,
+                    filename=filename,
+                    key="tree_download_json"
+                )
+            
+            folder_json_export_fragment()
+    
     # Tree View - cache the tree generation in session state
     if f'tree_text_{cache_key}' not in st.session_state:
         st.session_state[f'tree_text_{cache_key}'] = generate_folder_tree_ascii(folder_tree, folder_map, report_map)
     st.code(st.session_state[f'tree_text_{cache_key}'], language="")
-    
-    # Export options for tree view - TXT and JSON
-    st.markdown("---")
-    st.markdown("**📥 Export Options:**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # TXT export using cached tree text
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        xml_filename = st.session_state.get('xml_filename', 'unknown')
-        clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
-        
-        # Generate summary statistics to match JSON export
-        from ..export_handlers.json_export_generator import JSONExportGenerator
-        from ..ui.tabs.tab_helpers import ensure_analysis_cached
-        
-        analysis = ensure_analysis_cached(None)
-        json_generator = JSONExportGenerator(analysis)
-        summary_stats = json_generator._calculate_folder_summary(folder_tree, folder_map, report_map)
-        
-        # Build TXT content with summary
-        txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        txt_content += "=" * 80 + "\n\n"
-        txt_content += st.session_state[f'tree_text_{cache_key}']
-        txt_content += "\n\n" + "=" * 80 + "\n"
-        txt_content += "SUMMARY STATISTICS\n"
-        txt_content += "=" * 80 + "\n"
-        txt_content += f"Total Folders: {summary_stats.get('folders', 0)}\n"
-        txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
-        txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
-        txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
-        txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
-        
-        st.download_button(
-            label="📄 Download as TXT",
-            data=txt_content,
-            file_name=f"{clean_xml_name}_folder_structure_{timestamp}.txt",
-            mime="text/plain",
-            key="tree_download_txt"
-        )
-    
-    with col2:
-        # JSON export using cached folder structure - generate JSON representation lazily
-        if f'tree_json_{cache_key}' not in st.session_state:
-            # Use the proper JSON export generator
-            from ..export_handlers.json_export_generator import JSONExportGenerator
-            from ..ui.tabs.tab_helpers import ensure_analysis_cached
-            
-            # Get analysis object for the JSON generator
-            analysis = ensure_analysis_cached(None)  # Use cached analysis
-            json_generator = JSONExportGenerator(analysis)
-            
-            filename, json_content = json_generator.generate_folder_structure_json(
-                folder_tree, folder_map, report_map, xml_filename
-            )
-            st.session_state[f'tree_json_{cache_key}'] = (filename, json_content)
-        
-        # Get cached JSON data
-        filename, json_content = st.session_state[f'tree_json_{cache_key}']
-        
-        st.download_button(
-            label="📊 Download as JSON",
-            data=json_content,
-            file_name=filename,
-            mime="application/json",
-            key="tree_download_json"
-        )
 
 
 # Deprecated - JSON exports now handled by JSONExportGenerator
@@ -537,80 +554,97 @@ def render_dependency_tree(dependency_tree, reports):
     if f'dep_tree_text_{cache_key}' not in st.session_state:
         st.session_state[f'dep_tree_text_{cache_key}'] = generate_dependency_tree_ascii(dependency_tree, report_map, show_circular)
     
+    # Export options at the top - collapsed by default
+    with st.expander("📥 Export Dependencies", expanded=False):
+        st.markdown("**Export Options:**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Dependency TXT export as fragment
+            @st.fragment
+            def dependency_txt_export_fragment():
+                # TXT export using cached tree text
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                xml_filename = st.session_state.get('uploaded_filename', 'dependency_tree')
+                clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
+                
+                # Generate summary statistics to match JSON export
+                from util_modules.export_handlers.json_export_generator import JSONExportGenerator
+                from util_modules.ui.tabs.tab_helpers import ensure_analysis_cached
+                
+                analysis = ensure_analysis_cached(None)
+                json_generator = JSONExportGenerator(analysis)
+                summary_stats = json_generator._calculate_dependency_summary(dependency_tree, report_map, show_circular)
+                
+                # Ensure dependency tree text is initialized before using it
+                if f'dep_tree_text_{cache_key}' not in st.session_state:
+                    st.session_state[f'dep_tree_text_{cache_key}'] = generate_dependency_tree_ascii(dependency_tree, report_map, show_circular)
+                
+                # Build TXT content with summary
+                dep_txt_content = f"Dependency Tree - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                dep_txt_content += f"Show Circular Dependencies: {show_circular}\n"
+                dep_txt_content += "=" * 80 + "\n\n"
+                dep_txt_content += st.session_state[f'dep_tree_text_{cache_key}']
+                dep_txt_content += "\n\n" + "=" * 80 + "\n"
+                dep_txt_content += "SUMMARY STATISTICS\n"
+                dep_txt_content += "=" * 80 + "\n"
+                dep_txt_content += f"Total Nodes: {summary_stats.get('total_nodes', 0)}\n"
+                dep_txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
+                dep_txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
+                dep_txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
+                dep_txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
+                dep_txt_content += f"Circular Dependencies: {summary_stats.get('circular_dependencies', 0)}\n"
+                
+                from util_modules.export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager()
+                export_manager.render_text_download_button(
+                    content=dep_txt_content,
+                    filename=f"{clean_xml_name}_dependency_tree_{timestamp}.txt",
+                    key="dep_tree_download_txt"
+                )
+            
+            dependency_txt_export_fragment()
+        
+        with col2:
+            # Dependency JSON export as fragment
+            @st.fragment
+            def dependency_json_export_fragment():
+                # JSON export using cached dependency structure - generate JSON representation lazily
+                dep_cache_key = f'dep_tree_json_{cache_key}'
+                if dep_cache_key not in st.session_state:
+                    # Use the proper JSON export generator
+                    from util_modules.export_handlers.json_export_generator import JSONExportGenerator
+                    from util_modules.ui.tabs.tab_helpers import ensure_analysis_cached
+                    
+                    # Get XML filename from session state
+                    xml_filename = st.session_state.get('xml_filename', 'unknown')
+                    
+                    # Get analysis object for the JSON generator
+                    analysis = ensure_analysis_cached(None)  # Use cached analysis
+                    json_generator = JSONExportGenerator(analysis)
+                    
+                    filename, json_content = json_generator.generate_dependency_tree_json(
+                        dependency_tree, report_map, show_circular, xml_filename
+                    )
+                    st.session_state[dep_cache_key] = (filename, json_content)
+                
+                # Get cached JSON data
+                filename, json_content = st.session_state[dep_cache_key]
+                
+                from util_modules.export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager()
+                export_manager.render_json_download_button(
+                    content=json_content,
+                    filename=filename,
+                    key="dep_tree_download_json"
+                )
+            
+            dependency_json_export_fragment()
+    
     # Tree View (collapsible)
     with st.expander("🌳 Dependency Tree", expanded=True):
         st.code(st.session_state[f'dep_tree_text_{cache_key}'], language="")
-    
-    # Export options for tree view - TXT and JSON
-    st.markdown("---")
-    st.markdown("**📥 Export Options:**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # TXT export using cached tree text
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        xml_filename = st.session_state.get('uploaded_filename', 'dependency_tree')
-        clean_xml_name = xml_filename.replace('.xml', '').replace(' ', '_')
-        
-        # Generate summary statistics to match JSON export
-        from ..export_handlers.json_export_generator import JSONExportGenerator
-        from ..ui.tabs.tab_helpers import ensure_analysis_cached
-        
-        analysis = ensure_analysis_cached(None)
-        json_generator = JSONExportGenerator(analysis)
-        summary_stats = json_generator._calculate_dependency_summary(dependency_tree, report_map, show_circular)
-        
-        # Build TXT content with summary
-        dep_txt_content = f"Dependency Tree - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        dep_txt_content += f"Show Circular Dependencies: {show_circular}\n"
-        dep_txt_content += "=" * 80 + "\n\n"
-        dep_txt_content += st.session_state[f'dep_tree_text_{cache_key}']
-        dep_txt_content += "\n\n" + "=" * 80 + "\n"
-        dep_txt_content += "SUMMARY STATISTICS\n"
-        dep_txt_content += "=" * 80 + "\n"
-        dep_txt_content += f"Total Nodes: {summary_stats.get('total_nodes', 0)}\n"
-        dep_txt_content += f"Total Searches: {summary_stats.get('searches', 0)}\n"
-        dep_txt_content += f"Total List Reports: {summary_stats.get('list_reports', 0)}\n"
-        dep_txt_content += f"Total Audit Reports: {summary_stats.get('audit_reports', 0)}\n"
-        dep_txt_content += f"Total Aggregate Reports: {summary_stats.get('aggregate_reports', 0)}\n"
-        dep_txt_content += f"Circular Dependencies: {summary_stats.get('circular_dependencies', 0)}\n"
-        
-        st.download_button(
-            label="📄 Download as TXT",
-            data=dep_txt_content,
-            file_name=f"{clean_xml_name}_dependency_tree_{timestamp}.txt",
-            mime="text/plain",
-            key="dep_tree_download_txt"
-        )
-    
-    with col2:
-        # JSON export using cached dependency structure - generate JSON representation lazily
-        dep_cache_key = f'dep_tree_json_{cache_key}'
-        if dep_cache_key not in st.session_state:
-            # Use the proper JSON export generator
-            from ..export_handlers.json_export_generator import JSONExportGenerator
-            from ..ui.tabs.tab_helpers import ensure_analysis_cached
-            
-            # Get analysis object for the JSON generator
-            analysis = ensure_analysis_cached(None)  # Use cached analysis
-            json_generator = JSONExportGenerator(analysis)
-            
-            filename, json_content = json_generator.generate_dependency_tree_json(
-                dependency_tree, report_map, show_circular, xml_filename
-            )
-            st.session_state[dep_cache_key] = (filename, json_content)
-        
-        # Get cached JSON data
-        filename, json_content = st.session_state[dep_cache_key]
-        
-        st.download_button(
-            label="📊 Download as JSON",
-            data=json_content,
-            file_name=filename,
-            mime="application/json",
-            key="dep_tree_download_json"
-        )
 
 
 def generate_dependency_tree_ascii(dependency_tree, report_map, show_circular=True):

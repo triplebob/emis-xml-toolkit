@@ -2,7 +2,7 @@
 
 ## Overview
 
-This application converts EMIS XML search files into SNOMED clinical codes and provides detailed analysis of search logic, rules, and criteria. The codebase uses a unified pipeline architecture with specialized analyzers for efficient processing and consistent data handling across the application.
+This application converts EMIS XML search files into SNOMED clinical codes and provides detailed analysis of search logic, rules, and criteria. The codebase uses a unified pipeline architecture with specialised analyzers for efficient processing and consistent data handling across the application.
 
 ## Core Application Flow
 
@@ -17,9 +17,9 @@ util_modules.analysis.analysis_orchestrator (unified analysis coordination)
     ↓ orchestrated results
 util_modules.ui.ui_tabs (main interface coordinator)
     ↓ delegates to modular tabs
-util_modules.ui.tabs.* (specialized tab rendering)
+util_modules.ui.tabs.* (specialised tab rendering)
     ↓ export requests
-util_modules.export_handlers (specialized export handling)
+util_modules.export_handlers (specialised export handling)
 ```
 
 ## Main Application Files
@@ -114,11 +114,11 @@ util_modules.export_handlers (specialized export handling)
 ## Analysis and Visualization (`util_modules/analysis/`)
 
 ### `analysis_orchestrator.py` - Central Analysis Coordination
-**Purpose:** Coordinates complete analysis pipeline and unifies results from specialized analyzers.
+**Purpose:** Coordinates complete analysis pipeline and unifies results from specialised analyzers.
 
 **Responsibilities:**
 - Workflow coordination: XMLElementClassifier → SearchAnalyzer → ReportAnalyzer
-- Results unification from specialized analyzers
+- Results unification from specialised analyzers
 - Complexity metric integration
 - Session state preparation for UI compatibility
 
@@ -132,7 +132,7 @@ util_modules.export_handlers (specialized export handling)
 - Element type classification (search/audit/list/aggregate)
 - Document metadata extraction
 - Folder structure extraction
-- Pre-filtering for specialized analyzers
+- Pre-filtering for specialised analyzers
 
 **Returns:** `ClassifiedElements` object with grouped elements and shared metadata.
 
@@ -305,35 +305,84 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** Statistics display, analytics features.
 
-#### `report_tabs.py` - Report Tab Rendering
-**Purpose:** Specialized rendering for List Reports, Audit Reports, and Aggregate Reports.
+#### `report_tabs.py` - Core Report Infrastructure
+**Purpose:** Shared report functionality and main browser interface.
 
 **Responsibilities:**
-- List Report browser with column structure analysis
-- Audit Report browser with organizational focus
-- Aggregate Report browser with statistical analysis
-- Report-type-specific interfaces and metrics
-- Immediate download functionality (no page refresh)
-- Proper field capitalization (Population, Count, etc.)
+- Universal report type browser with folder filtering and export functionality
+- Main reports tab with type filtering and progressive loading
+- Report visualization orchestration with type detection and routing
+- Search report details renderer for report criteria visualization
+- Detailed section rendering helper with caching
+- Import coordination for specialised report detail renderers
 
-**When to modify:** Report-specific enhancements, new report patterns.
+**When to modify:** Core report infrastructure, shared browser functionality, routing logic.
+
+#### `list_report_tab.py` - List Reports Specialisation
+**Purpose:** Dedicated rendering for List Reports with column structure analysis.
+
+**Responsibilities:**
+- List Reports tab with metrics calculation and browser integration
+- Column group processing with progress tracking and caching
+- List report detail visualization with table definitions and sorting
+- Clinical code extraction from column filters and criteria
+- Healthcare context classification for column types
+
+**When to modify:** List report features, column analysis enhancements, table structure improvements.
+
+#### `audit_report_tab.py` - Audit Reports Specialisation  
+**Purpose:** Dedicated rendering for Audit Reports with organizational focus.
+
+**Responsibilities:**
+- Audit Reports tab with population reference metrics
+- Audit report detail visualization with organizational grouping
+- Member search analysis and additional criteria filtering
+- Enhanced metadata display including creation time and author
+- Quality monitoring and compliance tracking features
+
+**When to modify:** Audit report features, organizational analysis, compliance tracking.
+
+#### `aggregate_report_tab.py` - Aggregate Reports Specialisation
+**Purpose:** Dedicated rendering for Aggregate Reports with statistical analysis.
+
+**Responsibilities:**
+- Aggregate Reports tab with statistical metrics calculation
+- Aggregate report detail visualization with cross-tabulation analysis
+- Statistical grouping configuration and built-in filter analysis
+- Healthcare metrics and quality measurement display
+- Enterprise reporting capabilities
+
+**When to modify:** Statistical analysis features, cross-tabulation enhancements, enterprise patterns.
 
 #### `tab_helpers.py` - Shared Tab Utilities
 **Purpose:** Common functionality shared across all tab modules with centralized cache integration.
 
-**Key Functions:**
+**Core Functions:**
 - `is_data_processing_needed()` - Cache state validation
 - `cache_processed_data()` - Session state data caching
 - `paginate_reports()` - Report pagination with @st.cache_data (30-minute TTL, 1K entries)
 - `render_pagination_controls()` - Navigation controls for paginated content
-- Import integration with cache_manager for centralized caching strategies
+
+**Performance Utilities:**
+- `_get_report_size_category()` - Report size classification for performance optimization
+- `_monitor_memory_usage()` - Memory monitoring with garbage collection
+
+**SNOMED Lookup Functions:**
+- `_batch_lookup_snomed_for_ui()` - Batch SNOMED lookup for multiple GUIDs
+- `_lookup_snomed_for_ui()` - Single SNOMED lookup wrapper
+
+**Data Processing Helpers:**
+- `_extract_clinical_codes()` - Clinical code extraction with progress tracking
+- `_process_column_groups()` - Column group processing for reports
+- `_load_report_metadata()` - Report metadata loading with caching
 
 **Cache Integration:**
 - Imports cache_manager for unified caching patterns
 - Session state management for processed data
 - Performance optimization through pagination caching
+- Memory management utilities with automatic cleanup
 
-**When to modify:** Shared tab functionality, pagination improvements, cache integration updates.
+**When to modify:** Shared tab functionality, pagination improvements, cache integration updates, performance optimization.
 
 #### `base_tab.py` - Tab Base Classes
 **Purpose:** Base classes and common patterns for tab implementations.
@@ -471,6 +520,17 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** Report JSON structure changes, new report patterns, restriction logic updates.
 
+### `terminology_export.py` - NHS Terminology Export
+**Purpose:** NHS terminology server export functionality with CSV and JSON formats.
+
+**Responsibilities:**
+- NHS terminology server results export
+- Child code expansion result formatting
+- CSV exports with enhanced column ordering
+- JSON exports for hierarchical data
+
+**When to modify:** NHS terminology export formats, child code expansion exports.
+
 ## XML Parsing (`util_modules/xml_parsers/`)
 
 ### `namespace_handler.py` - Universal Namespace Handling
@@ -581,6 +641,11 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 ### `debug_logger.py` - Development and Troubleshooting
 **Purpose:** Logging and debugging tools for development and troubleshooting.
+
+### `export_debug.py` - Export System Debugging
+**Purpose:** Debugging utilities for export system testing and validation.
+
+**When to modify:** Export system debugging, development testing.
 
 ### `github_loader.py` - External Data Loading
 **Purpose:** GitHub API client for lookup table loading with authentication and format detection.
@@ -733,6 +798,15 @@ util_modules/
 ├── export_handlers/    # Export functionality
 ├── terminology_server/ # NHS Terminology Server integration
 ├── ui/                 # User interface components
+│   └── tabs/           # Modular tab structure
+│       ├── clinical_tabs.py       # Clinical data rendering
+│       ├── analysis_tabs.py       # Search analysis rendering
+│       ├── analytics_tab.py       # Analytics display
+│       ├── report_tabs.py         # Core report infrastructure
+│       ├── list_report_tab.py     # List Reports specialisation
+│       ├── audit_report_tab.py    # Audit Reports specialisation
+│       ├── aggregate_report_tab.py # Aggregate Reports specialisation
+│       └── tab_helpers.py         # Shared utilities
 ├── utils/              # General utilities and caching
 └── xml_parsers/        # Modular XML parsing
 ```
@@ -774,7 +848,7 @@ util_modules/
 - **Consistent Patterns**: All XML parsing uses unified `ns.find()` methods
 
 ### Orchestrated Analysis Pipeline
-**Purpose:** Efficient analysis with single XML parse and specialized analyzers.
+**Purpose:** Efficient analysis with single XML parse and specialised analyzers.
 
 **Flow:**
 1. **XMLElementClassifier**: Single parse + element classification

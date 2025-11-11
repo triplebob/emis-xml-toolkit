@@ -184,7 +184,6 @@ def render_linked_criteria(criterion, main_criterion):
                         st.caption(f"• {filter_desc}")
         
         # Dynamic explanation (removed for cleaner display)
-        # explanation = generate_linked_criteria_explanation(linked_criterion, criterion)
 
 
 def generate_temporal_relationship_description(linked_criterion, main_criterion):

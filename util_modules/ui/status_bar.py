@@ -178,45 +178,15 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
             # Changelog section - Direct in-app display 
-            with st.sidebar.expander("🎯 What's New: v2.2.1", expanded=False):
+            with st.sidebar.expander("🎯 What's New: v2.2.2", expanded=False):
                 st.markdown("""
-                    **🎨 Dark Theme & UI Improvements - v2.2.1:**
-                    - New dark theme optimized for clinical data readability
-                    - Roboto font for enhanced accessibility and readability
-                    - Streamlit set to Viewer mode for cleaner production interface    
-                
-                    **🚀 Major Performance & Caching Overhaul - v2.2.0**
-                    
-                    Comprehensive caching architecture and performance improvements eliminating report dropdown hangs and memory issues.
-                    
-                    **⚡ Caching Infrastructure:**
-                    - New centralized cache manager with optimized TTL settings
-                    - SNOMED lookup caching (10,000 entries, 1-hour TTL)
-                    - Clinical data caching (5,000 entries, 30-minute TTL)
-                    - Report-specific session state caching with instant dropdown switching
-                    - Eliminated expensive reprocessing on every report selection
-                    
-                    **💻 Memory Management:**
-                    - New Memory Usage section in sidebar with real-time monitoring
-                    - Memory peak tracking and reset functionality
-                    - Automatic garbage collection after large operations
-                    - TTL-based cache expiration preventing memory accumulation
-                    - Report switching time reduced from 10+ seconds to <1 second
-                    
-                    **📋 Export System Improvements:**
-                    - NUMERIC_VALUE filters show actual values ("Value greater than or equal to 37.5")
-                    - Fixed date range display for zero-offset dates ("Date is on the search date")
-                    - Lazy export generation with instant downloads from cached data
-                    - Consistent filter formatting across search and report exports
-                    - Export buttons disabled until data fully loaded
-                    
-                    **🎯 UI Responsiveness:**
-                    - Progressive loading with native Streamlit spinners
-                    - Instant report dropdown switching using cached analysis
-                    - Eliminated UI hangs and freezes during large operations
-                    - Clean loading states with proper progress indicators
-                    
-                    ✅ **Resolves all critical performance bottlenecks and memory issues**
+                    **⚡ Export Performance & Memory Improvements - v2.2.2:**
+                    - Fixed critical memory leaks in JSON exports (39MB reduction)
+                    - Single-click lazy exports replace two-button workflow
+                    - Fragment optimization eliminates full app reruns on interactions
+                    - Clinical code filtering bug fix - accurate translation rates
+                    - Export buttons moved to top of analysis tabs for easy access
+                    - Backend code organisation and stability improvements
                     """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
             
@@ -233,65 +203,75 @@ def render_status_bar():
                 # Initialize with empty dict if no version info exists at all
                 st.session_state.lookup_version_info = {}
             
-            # Add NHS Terminology Server status
+            # Add NHS Terminology Server status as fragment
             if NHS_TERMINOLOGY_AVAILABLE:
-                render_terminology_server_status()
+                @st.fragment
+                def nhs_terminology_fragment():
+                    render_terminology_server_status()
+                
+                nhs_terminology_fragment()
 
-            # Add memory monitoring section
-            # Check if manual refresh was requested
-            if st.session_state.get('force_memory_refresh', False):
-                st.session_state.force_memory_refresh = False
-            
-            memory_info = get_memory_usage()
-            
-            if memory_info:
-                current_mb = memory_info['current_mb']
-                peak_mb = memory_info['peak_mb']
+            # Add memory monitoring section as fragment
+            @st.fragment
+            def memory_monitoring_fragment():
+                # Check if manual refresh was requested
+                if st.session_state.get('force_memory_refresh', False):
+                    st.session_state.force_memory_refresh = False
                 
-                # Memory usage guidance (show warnings outside expander)
-                if current_mb > 2300:
-                    st.error("⚠️ High memory usage! Consider refreshing the page to reset.")
-                elif current_mb > 1800:
-                    st.warning("💡 Approaching memory limits. Avoid multiple large exports.")
+                memory_info = get_memory_usage()
                 
-                # Add expandable memory info with current and peak inside
-                with st.expander("💻 Memory Usage", expanded=False):
-                    # Display current memory with appropriate color
-                    status_color = get_memory_status_color(current_mb)
-                    current_display = format_memory_display(current_mb)
-                    peak_display = format_memory_display(peak_mb)
+                if memory_info:
+                    current_mb = memory_info['current_mb']
+                    peak_mb = memory_info['peak_mb']
                     
-                    if status_color == "success":
-                        st.success(f"🟢 Current: {current_display}")
-                    elif status_color == "info":
-                        st.info(f"🔵 Current: {current_display}")
-                    elif status_color == "warning":
-                        st.warning(f"🟡 Current: {current_display}")
-                    else:
-                        st.error(f"🔴 Current: {current_display}")
+                    # Memory usage guidance (show warnings outside expander)
+                    if current_mb > 2300:
+                        st.error("⚠️ High memory usage! Consider refreshing the page to reset.")
+                    elif current_mb > 1800:
+                        st.warning("💡 Approaching memory limits. Avoid multiple large exports.")
                     
-                    # Show peak memory
-                    st.info(f"📈 Peak Use: {peak_display}")
-                    
-                    # Detailed system information
-                    st.caption(f"System Total: {memory_info['system_total_gb']:.1f} GB")
-                    st.caption(f"System Available: {memory_info['system_available_gb']:.1f} GB")
-                    st.caption(f"System Usage: {memory_info['system_usage_percent']:.1f}%")
-                    
-                    # Add memory buttons
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("🔄 Refresh Usage", help="Update current memory usage display", key="memory_refresh_btn"):
-                            st.session_state.force_memory_refresh = True
-                            st.rerun()
-                    with col2:
-                        if st.button("📊 Reset Peak", help="Reset the session peak memory counter"):
-                            st.session_state.memory_peak_mb = current_mb
-                            st.success("Peak memory counter reset!")
-                            st.rerun()
-            else:
-                with st.expander("💻 Memory Usage", expanded=False):
-                    st.error("❌ Memory monitoring unavailable")
+                    # Add expandable memory info with current and peak inside
+                    with st.expander("💻 Memory Usage", expanded=False):
+                        # Display current memory with appropriate color
+                        status_color = get_memory_status_color(current_mb)
+                        current_display = format_memory_display(current_mb)
+                        peak_display = format_memory_display(peak_mb)
+                        
+                        if status_color == "success":
+                            st.success(f"🟢 Current: {current_display}")
+                        elif status_color == "info":
+                            st.info(f"🔵 Current: {current_display}")
+                        elif status_color == "warning":
+                            st.warning(f"🟡 Current: {current_display}")
+                        else:
+                            st.error(f"🔴 Current: {current_display}")
+                        
+                        # Show peak memory
+                        st.info(f"📈 Peak Use: {peak_display}")
+                        
+                        # Detailed system information
+                        st.caption(f"System Total: {memory_info['system_total_gb']:.1f} GB")
+                        st.caption(f"System Available: {memory_info['system_available_gb']:.1f} GB")
+                        st.caption(f"System Usage: {memory_info['system_usage_percent']:.1f}%")
+                        
+                        # Memory buttons (now inside the same fragment as the display)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("🔄 Refresh Usage", help="Update current memory usage display", key="memory_refresh_btn"):
+                                st.session_state.force_memory_refresh = True
+                                # Fragment will auto-rerun, updating the memory display immediately
+                        with col2:
+                            if st.button("📊 Reset Peak", help="Reset the session peak memory counter", key="memory_reset_btn"):
+                                # Get current memory to reset peak
+                                current_memory_info = get_memory_usage()
+                                if current_memory_info:
+                                    st.session_state.memory_peak_mb = current_memory_info['current_mb']
+                                    st.toast("📊 Peak memory counter reset!", icon="✅")
+                else:
+                    with st.expander("💻 Memory Usage", expanded=False):
+                        st.error("❌ Memory monitoring unavailable")
+            
+            memory_monitoring_fragment()
             
             return lookup_df, emis_guid_col, snomed_code_col
                 

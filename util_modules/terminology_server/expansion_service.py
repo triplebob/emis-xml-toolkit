@@ -306,38 +306,6 @@ class ExpansionService:
         
         return pd.DataFrame(summary_data)
     
-    def export_expanded_codes_csv(self, expanded_codes: List[Dict], original_filename: str) -> str:
-        """
-        Export expanded child codes to CSV format
-        
-        Args:
-            expanded_codes: List of expanded child code dictionaries
-            original_filename: Original XML filename for naming
-            
-        Returns:
-            CSV content as string
-        """
-        if not expanded_codes:
-            return ""
-        
-        df = pd.DataFrame(expanded_codes)
-        
-        # Reorder columns for better readability
-        preferred_order = [
-            'Parent SNOMED Code', 'Parent Description', 
-            'SNOMED Code', 'SNOMED Description',
-            'Source Type', 'Source Name', 'Source Container',
-            'Inactive', 'Is Child Code'
-        ]
-        
-        # Include only columns that exist
-        columns = [col for col in preferred_order if col in df.columns]
-        remaining_columns = [col for col in df.columns if col not in columns]
-        final_columns = columns + remaining_columns
-        
-        df = df[final_columns]
-        
-        return df.to_csv(index=False)
 
 
 # Singleton instance

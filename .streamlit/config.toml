@@ -9,7 +9,7 @@ headingFont = "Roboto"
 
 [server]
 runOnSave = true
-maxUploadSize = 20
+maxUploadSize = 30
 
 [browser]
 gatherUsageStats = false

@@ -72,7 +72,7 @@ def main():
     with col1:
         # Clean header without button
         st.header("⚕️ The Unofficial EMIS XML Toolkit")
-        st.markdown("*Comprehensive EMIS XML analysis and clinical code extraction for healthcare teams*")
+        st.markdown("*Comprehensive EMIS XML analysis and clinical code extraction for NHS healthcare teams*")
         
         # Dynamic MKB version text
         mkb_version = version_info.get('emis_version', 'the latest MKB lookup table')
@@ -81,7 +81,7 @@ def main():
         else:
             mkb_text = mkb_version
         
-        st.markdown(f"Upload EMIS XML files to analyze search logic, visualize report structures, and translate clinical codes to SNOMED using {mkb_text}.")
+        st.markdown(f"Upload EMIS XML files to analyze search logic, visualize report structures, and translate clinical codes to UK SNOMED using {mkb_text}.")
         
     
     with col2:

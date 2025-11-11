@@ -251,11 +251,6 @@ class AnalysisOrchestrator:
                 combined_flow.append(flow_item)
         
         # Note: Report flow would be added here if ReportAnalyzer generates flow
-        # if report_results and hasattr(report_results, 'report_flow'):
-        #     for item in report_results.report_flow:
-        #         flow_item = item.copy()
-        #         flow_item['source_analyzer'] = 'report'
-        #         combined_flow.append(flow_item)
         
         return combined_flow
     

@@ -22,23 +22,21 @@ from .tab_helpers import (
     get_unified_clinical_data
 )
 
-# Import report functions from the dedicated report_tabs module
+# Import report functions from the specialized report modules
 try:
-    from .report_tabs import (
-        render_list_reports_tab,
-        render_audit_reports_tab,
-        render_aggregate_reports_tab
-    )
-except ImportError:
-    # Fallback functions if imports fail
+    from .list_report_tab import render_list_reports_tab
+    from .audit_report_tab import render_audit_reports_tab
+    from .aggregate_report_tab import render_aggregate_reports_tab
+except ImportError as e:
+    # If imports fail, show the actual error instead of placeholder
     def render_list_reports_tab(xml_content, xml_filename):
-        st.info("🔄 List Reports tab under refactoring - functionality will be restored shortly")
+        st.error(f"❌ Import Error for List Reports: {e}")
     
     def render_audit_reports_tab(xml_content, xml_filename):
-        st.info("🔄 Audit Reports tab under refactoring - functionality will be restored shortly")
+        st.error(f"❌ Import Error for Audit Reports: {e}")
     
     def render_aggregate_reports_tab(xml_content, xml_filename):
-        st.info("🔄 Aggregate Reports tab under refactoring - functionality will be restored shortly")
+        st.error(f"❌ Import Error for Aggregate Reports: {e}")
 
 # Import functions from the new modular tabs structure
 from .analytics_tab import render_analytics_tab
@@ -153,42 +151,47 @@ def render_clinical_codes_tab(results=None):
     # Source tracking is always enabled in unified parsing (columns hidden based on mode)
     show_code_sources = True
         
-    # Deduplication mode toggle for clinical codes
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown("### 📋 Standalone Clinical Codes" + (" (with source tracking)" if show_code_sources else ""))
-    with col2:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        dedup_mode = st.selectbox(
-            "Code Display Mode (will trigger reprocessing):",
-            options=['unique_codes', 'unique_per_entity'],
-            format_func=lambda x: {
-                'unique_codes': '🔀 Unique Codes', 
-                'unique_per_entity': '📍 Per Source'
-            }[x],
-            index=0 if current_mode == 'unique_codes' else 1,
-            key="clinical_deduplication_mode",
-            help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
-        )
+    # Clinical codes display fragment - isolated from main app
+    @st.fragment
+    def clinical_codes_display_fragment():
+        # Deduplication mode toggle for clinical codes
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("### 📋 Standalone Clinical Codes" + (" (with source tracking)" if show_code_sources else ""))
+        with col2:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            dedup_mode = st.selectbox(
+                "Code Display Mode:",
+                options=['unique_codes', 'unique_per_entity'],
+                format_func=lambda x: {
+                    'unique_codes': '🔀 Unique Codes', 
+                    'unique_per_entity': '📍 Per Source'
+                }[x],
+                index=0 if current_mode == 'unique_codes' else 1,
+                key="clinical_deduplication_mode",
+                help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
+            )
+            
+            # Check if mode changed - update session state within fragment
+            if dedup_mode != current_mode:
+                st.session_state.current_deduplication_mode = dedup_mode
+                st.rerun()
         
-        # Check if mode changed - no reprocessing needed, just update session state
-        if dedup_mode != current_mode:
-            st.session_state.current_deduplication_mode = dedup_mode
+        # Standalone clinical codes section - rendered within fragment
+        render_section_with_data(
+            title="",  # Empty title since we rendered it above
+            data=clinical_data,
+            info_text="These are clinical codes that are NOT part of any pseudo-refset and can be used directly. " + 
+                      ("Use the Mode toggle above to switch between 'Unique Codes' (show each code once across entire XML) and 'Per Source' (show codes per search/report with source tracking)." if st.session_state.get('current_deduplication_mode', 'unique_codes') == 'unique_per_entity' else 
+                       "Currently showing unique codes only (one instance per code across entire XML). Use the Mode toggle to show per-source tracking."),
+            empty_message="No standalone clinical codes found in this XML file",
+            download_label="📥 Download Standalone Clinical Codes CSV",
+            filename_prefix="standalone_clinical_codes",
+            highlighting_function=get_success_highlighting_function()
+        )
     
-    # Deduplication is now handled by render_section_with_data based on current mode
-    
-    # Standalone clinical codes section
-    render_section_with_data(
-        title="",  # Empty title since we rendered it above
-        data=clinical_data,
-        info_text="These are clinical codes that are NOT part of any pseudo-refset and can be used directly. " + 
-                  ("Use the Mode toggle above to switch between 'Unique Codes' (show each code once across entire XML) and 'Per Source' (show codes per search/report with source tracking)." if current_mode == 'unique_per_entity' else 
-                   "Currently showing unique codes only (one instance per code across entire XML). Use the Mode toggle to show per-source tracking."),
-        empty_message="No standalone clinical codes found in this XML file",
-        download_label="📥 Download Standalone Clinical Codes CSV",
-        filename_prefix="standalone_clinical_codes",
-        highlighting_function=get_success_highlighting_function()
-    )
+    # Execute the clinical codes display fragment
+    clinical_codes_display_fragment()
     
     # Check for pseudo-refset members and show appropriate message
     pseudo_members_count = len(pseudo_members_data)
@@ -202,28 +205,6 @@ def render_clinical_codes_tab(results=None):
 
 
 def render_medications_tab(results):
-    # Deduplication mode toggle for medications
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown("### 💊 Standalone Medications")
-    with col2:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        dedup_mode = st.selectbox(
-            "Code Display Mode (will trigger reprocessing):",
-            options=['unique_codes', 'unique_per_entity'],
-            format_func=lambda x: {
-                'unique_codes': '🔀 Unique Codes', 
-                'unique_per_entity': '📍 Per Source'
-            }[x],
-            index=0 if current_mode == 'unique_codes' else 1,
-            key="medication_deduplication_mode",
-            help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
-        )
-        
-        # Check if mode changed - no reprocessing needed, just update session state
-        if dedup_mode != current_mode:
-            st.session_state.current_deduplication_mode = dedup_mode
-    
     # Switch to unified parsing approach using orchestrated analysis (like clinical codes tab)
     unified_results = get_unified_clinical_data()
     if not unified_results:
@@ -233,14 +214,35 @@ def render_medications_tab(results):
     # Get medications data from unified analysis (already standardized and categorized with _original_fields)
     medications_data = unified_results.get('medications', [])
     
-    # Deduplication is now handled by render_section_with_data based on current mode
+    # Medications display fragment - isolated from main app
+    @st.fragment
+    def medications_display_fragment():
+        # Deduplication mode toggle for medications
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("### 💊 Standalone Medications")
+        with col2:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            dedup_mode = st.selectbox(
+                "Code Display Mode:",
+                options=['unique_codes', 'unique_per_entity'],
+                format_func=lambda x: {
+                    'unique_codes': '🔀 Unique Codes', 
+                    'unique_per_entity': '📍 Per Source'
+                }[x],
+                index=0 if current_mode == 'unique_codes' else 1,
+                key="medication_deduplication_mode",
+                help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
+            )
+            
+            # Check if mode changed - update session state within fragment
+            if dedup_mode != current_mode:
+                st.session_state.current_deduplication_mode = dedup_mode
+                st.rerun()
         
-    # Determine what medications we have
-    has_standalone = len(medications_data) > 0
-    has_pseudo = results.get('medication_pseudo_members') and len(results.get('medication_pseudo_members', [])) > 0
-    
-    if has_standalone or has_pseudo:
-        # Show standalone medications if they exist
+        # Determine what medications we have
+        has_standalone = len(medications_data) > 0
+        
         if has_standalone:
             # Filter out Has Qualifier column for medications - not relevant since medications have unique SNOMED codes for different strengths
             medications_data_filtered = []
@@ -253,13 +255,22 @@ def render_medications_tab(results):
                 title="",  # Empty title since we rendered it above
                 data=medications_data_filtered,
                 info_text="These are medications that are NOT part of any pseudo-refset and can be used directly. " + 
-                          ("Use the Mode toggle above to switch between 'Unique Codes' (show each medication once across entire XML) and 'Per Source' (show medications per search/report with source tracking)." if current_mode == 'unique_per_entity' else 
+                          ("Use the Mode toggle above to switch between 'Unique Codes' (show each medication once across entire XML) and 'Per Source' (show medications per search/report with source tracking)." if st.session_state.get('current_deduplication_mode', 'unique_codes') == 'unique_per_entity' else 
                            "Currently showing unique medications only (one instance per medication across entire XML). Use the Mode toggle to show per-source tracking."),
                 empty_message="No standalone medications found in this XML file",
                 download_label="📥 Download Standalone Medications CSV",
                 filename_prefix="standalone_medications",
                 highlighting_function=get_success_highlighting_function()
             )
+    
+    # Execute the medications display fragment
+    medications_display_fragment()
+    
+    # Additional sections outside fragment (keep existing logic)
+    has_standalone = len(medications_data) > 0
+    has_pseudo = results.get('medication_pseudo_members') and len(results.get('medication_pseudo_members', [])) > 0
+    
+    if has_standalone or has_pseudo:
         
         # Show pseudo-refset medications section if they exist
         if has_pseudo:
@@ -305,28 +316,6 @@ def render_medications_tab(results):
 
 
 def render_refsets_tab(results):
-    # Deduplication mode toggle for refsets
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown("### 📊 Refsets")
-    with col2:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        dedup_mode = st.selectbox(
-            "Code Display Mode (will trigger reprocessing):",
-            options=['unique_codes', 'unique_per_entity'],
-            format_func=lambda x: {
-                'unique_codes': '🔀 Unique Codes', 
-                'unique_per_entity': '📍 Per Source'
-            }[x],
-            index=0 if current_mode == 'unique_codes' else 1,
-            key="refsets_deduplication_mode",
-            help="🔀 Unique Codes: Show each refset once\n📍 Per Source: Show refsets per search/report"
-        )
-        
-        # Check if mode changed - no reprocessing needed, just update session state
-        if dedup_mode != current_mode:
-            st.session_state.current_deduplication_mode = dedup_mode
-    
     # Switch to unified parsing approach using orchestrated analysis (like clinical codes tab)
     unified_results = get_unified_clinical_data()
     if not unified_results:
@@ -336,35 +325,62 @@ def render_refsets_tab(results):
     # Get refsets data from unified analysis (already standardized with _original_fields)
     refsets_data = unified_results.get('refsets', [])
     
-    # Deduplication is now handled by render_section_with_data based on current mode
+    # Refsets display fragment - isolated from main app
+    @st.fragment
+    def refsets_display_fragment():
+        # Deduplication mode toggle for refsets
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("### 📊 Refsets")
+        with col2:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            dedup_mode = st.selectbox(
+                "Code Display Mode:",
+                options=['unique_codes', 'unique_per_entity'],
+                format_func=lambda x: {
+                    'unique_codes': '🔀 Unique Codes', 
+                    'unique_per_entity': '📍 Per Source'
+                }[x],
+                index=0 if current_mode == 'unique_codes' else 1,
+                key="refsets_deduplication_mode",
+                help="🔀 Unique Codes: Show each refset once\n📍 Per Source: Show refsets per search/report"
+            )
+            
+            # Check if mode changed - update session state within fragment
+            if dedup_mode != current_mode:
+                st.session_state.current_deduplication_mode = dedup_mode
+                st.rerun()
+        
+        # Refsets section with proper source tracking display
+        if refsets_data:
+            # Filter out Descendants and Has Qualifier columns for refsets - not relevant since refsets are container concepts, not individual codes with hierarchies or qualifiers
+            refsets_data_filtered = []
+            for refset in refsets_data:
+                filtered_refset = {k: v for k, v in refset.items() if k not in ['Descendants', 'Has Qualifier']}
+                refsets_data_filtered.append(filtered_refset)
+            
+            def highlight_refsets(row):
+                return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for refsets
+            
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            
+            # Use the same efficient rendering pattern as clinical codes and medications
+            render_section_with_data(
+                title="",  # Empty title since we rendered it above
+                data=refsets_data_filtered,
+                info_text="These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. " + 
+                          ("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                           "Currently showing unique refsets only. Use the Mode toggle to show per-source tracking."),
+                empty_message="No refsets found in this XML file",
+                download_label="📥 Download Refsets CSV",
+                filename_prefix="refsets",
+                highlighting_function=highlight_refsets
+            )
+        else:
+            st.info("No refsets found in this XML file")
     
-    # Refsets section with proper source tracking display
-    if refsets_data:
-        # Filter out Descendants and Has Qualifier columns for refsets - not relevant since refsets are container concepts, not individual codes with hierarchies or qualifiers
-        refsets_data_filtered = []
-        for refset in refsets_data:
-            filtered_refset = {k: v for k, v in refset.items() if k not in ['Descendants', 'Has Qualifier']}
-            refsets_data_filtered.append(filtered_refset)
-        
-        def highlight_refsets(row):
-            return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for refsets
-        
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        
-        # Use the same efficient rendering pattern as clinical codes and medications
-        render_section_with_data(
-            title="",  # Empty title since we rendered it above
-            data=refsets_data_filtered,
-            info_text="These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. " + 
-                      ("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                       "Currently showing unique refsets only. Use the Mode toggle to show per-source tracking."),
-            empty_message="No refsets found in this XML file",
-            download_label="📥 Download Refsets CSV",
-            filename_prefix="refsets",
-            highlighting_function=highlight_refsets
-        )
-    else:
-        st.info("No refsets found in this XML file")
+    # Execute the refsets display fragment
+    refsets_display_fragment()
 
 
 def render_pseudo_refsets_tab(results):
@@ -377,78 +393,82 @@ def render_pseudo_refsets_tab(results):
     # Get pseudo-refsets data from unified analysis
     pseudo_refsets_data = unified_results.get('pseudo_refsets', [])
     
-    # Apply deduplication based on current mode
-    current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-    if current_mode == 'unique_codes' and pseudo_refsets_data:
-        # Deduplicate by EMIS GUID - keep only one instance per pseudo-refset
-        unique_pseudo_refsets = {}
-        for pseudo_refset in pseudo_refsets_data:
-            emis_guid = pseudo_refset.get('EMIS GUID', '')
-            if emis_guid and emis_guid not in unique_pseudo_refsets:
-                unique_pseudo_refsets[emis_guid] = pseudo_refset
-        pseudo_refsets_data = list(unique_pseudo_refsets.values())
-    
-    # Deduplication mode toggle for pseudo-refsets
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown("### ⚠️ All Pseudo-Refsets")
-    with col2:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        dedup_mode = st.selectbox(
-            "Code Display Mode (will trigger reprocessing):",
-            options=['unique_codes', 'unique_per_entity'],
-            format_func=lambda x: {
-                'unique_codes': '🔀 Unique Codes', 
-                'unique_per_entity': '📍 Per Source'
-            }[x],
-            index=0 if current_mode == 'unique_codes' else 1,
-            key="pseudo_refsets_deduplication_mode",
-            help="🔀 Unique Codes: Show each pseudo-refset once\n📍 Per Source: Show pseudo-refsets per search/report"
-        )
+    # Pseudo-refsets display fragment - isolated from main app
+    @st.fragment
+    def pseudo_refsets_display_fragment():
+        # Deduplication mode toggle for pseudo-refsets
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("### ⚠️ All Pseudo-Refsets")
+        with col2:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            dedup_mode = st.selectbox(
+                "Code Display Mode:",
+                options=['unique_codes', 'unique_per_entity'],
+                format_func=lambda x: {
+                    'unique_codes': '🔀 Unique Codes', 
+                    'unique_per_entity': '📍 Per Source'
+                }[x],
+                index=0 if current_mode == 'unique_codes' else 1,
+                key="pseudo_refsets_deduplication_mode",
+                help="🔀 Unique Codes: Show each pseudo-refset once\n📍 Per Source: Show pseudo-refsets per search/report"
+            )
+            
+            # Check if mode changed - update session state within fragment
+            if dedup_mode != current_mode:
+                st.session_state.current_deduplication_mode = dedup_mode
+                st.rerun()
         
-        # Check if mode changed - no reprocessing needed, just update session state
-        if dedup_mode != current_mode:
-            st.session_state.current_deduplication_mode = dedup_mode
-    
-    # Show appropriate dynamic message based on pseudo-refsets and mode
-    if not pseudo_refsets_data:
-        st.success("✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).")
-    else:
+        # Apply deduplication based on current mode (need to recalculate inside fragment)
         current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        if current_mode == 'unique_codes':
-            st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking.")
+        display_pseudo_refsets = pseudo_refsets_data
+        if current_mode == 'unique_codes' and pseudo_refsets_data:
+            # Deduplicate by EMIS GUID - keep only one instance per pseudo-refset
+            unique_pseudo_refsets = {}
+            for pseudo_refset in pseudo_refsets_data:
+                emis_guid = pseudo_refset.get('EMIS GUID', '')
+                if emis_guid and emis_guid not in unique_pseudo_refsets:
+                    unique_pseudo_refsets[emis_guid] = pseudo_refset
+            display_pseudo_refsets = list(unique_pseudo_refsets.values())
+        
+        # Show appropriate dynamic message based on pseudo-refsets and mode
+        if not display_pseudo_refsets:
+            st.success("✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).")
         else:
-            st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
-    
-    # Deduplication is now handled by render_section_with_data based on current mode
-    display_pseudo_refsets = pseudo_refsets_data
-    
-    # Use efficient render_section_with_data pattern for pseudo-refsets
-    if display_pseudo_refsets:
-        # Filter out unnecessary columns for pseudo-refsets display
-        display_data = []
-        for refset in display_pseudo_refsets:
-            filtered_refset = {k: v for k, v in refset.items() if k not in ['Descendants', 'Has Qualifier']}
-            display_data.append(filtered_refset)
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            if current_mode == 'unique_codes':
+                st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking.")
+            else:
+                st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
         
-        render_section_with_data(
-            title="",  # No title needed as it's already shown above
-            data=display_data,
-            info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                      "Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking."),
-            empty_message="✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).",
-            download_label="📥 Download Pseudo-Refsets CSV",
-            filename_prefix="pseudo_refsets",
-            highlighting_function=get_warning_highlighting_function()
-        )
-        
-        st.warning("""
-        **Important Usage Notes:**
-        - These pseudo-refset containers cannot be referenced directly in EMIS clinical searches
-        - To use them, you must manually list all individual member codes within each valueset
-        - View the 'Pseudo-Refset Members' tab to see all member codes for each container
-        """)
-    # No else needed - the info box above already handles the no pseudo-refsets case
+        # Use efficient render_section_with_data pattern for pseudo-refsets
+        if display_pseudo_refsets:
+            # Filter out unnecessary columns for pseudo-refsets display
+            display_data = []
+            for refset in display_pseudo_refsets:
+                filtered_refset = {k: v for k, v in refset.items() if k not in ['Descendants', 'Has Qualifier']}
+                display_data.append(filtered_refset)
+            
+            render_section_with_data(
+                title="",  # No title needed as it's already shown above
+                data=display_data,
+                info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                          "Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking."),
+                empty_message="✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).",
+                download_label="📥 Download Pseudo-Refsets CSV",
+                filename_prefix="pseudo_refsets",
+                highlighting_function=get_warning_highlighting_function()
+            )
+            
+            st.warning("""
+            **Important Usage Notes:**
+            - These pseudo-refset containers cannot be referenced directly in EMIS clinical searches
+            - To use them, you must manually list all individual member codes within each valueset
+            - View the 'Pseudo-Refset Members' tab to see all member codes for each container
+            """)
+    
+    # Execute the pseudo-refsets display fragment
+    pseudo_refsets_display_fragment()
 
 
 def render_pseudo_refset_members_tab(results):
@@ -463,61 +483,66 @@ def render_pseudo_refset_members_tab(results):
     # Get pseudo-refset members data from unified analysis
     pseudo_members_data = unified_results.get('clinical_pseudo_members', [])
     
-    # Deduplication mode toggle for pseudo-refset members
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown("### 📝 Pseudo-Refset Member Codes")
-    with col2:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        dedup_mode = st.selectbox(
-            "Code Display Mode (will trigger reprocessing):",
-            options=['unique_codes', 'unique_per_entity'],
-            format_func=lambda x: {
-                'unique_codes': '🔀 Unique Codes', 
-                'unique_per_entity': '📍 Per Source'
-            }[x],
-            index=0 if current_mode == 'unique_codes' else 1,
-            key="pseudo_members_deduplication_mode",
-            help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
+    # Pseudo-members display fragment - isolated from main app
+    @st.fragment
+    def pseudo_members_display_fragment():
+        # Deduplication mode toggle for pseudo-refset members
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("### 📝 Pseudo-Refset Member Codes")
+        with col2:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            dedup_mode = st.selectbox(
+                "Code Display Mode:",
+                options=['unique_codes', 'unique_per_entity'],
+                format_func=lambda x: {
+                    'unique_codes': '🔀 Unique Codes', 
+                    'unique_per_entity': '📍 Per Source'
+                }[x],
+                index=0 if current_mode == 'unique_codes' else 1,
+                key="pseudo_members_deduplication_mode",
+                help="🔀 Unique Codes: Show each code once\n📍 Per Source: Show codes per search/report"
+            )
+            
+            # Check if mode changed - update session state within fragment
+            if dedup_mode != current_mode:
+                st.session_state.current_deduplication_mode = dedup_mode
+                st.rerun()
+        
+        # Show appropriate dynamic message based on pseudo-members and mode
+        if not pseudo_members_data:
+            st.success("✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
+            return
+        else:
+            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+            if current_mode == 'unique_codes':
+                st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing unique codes only. Use the Mode toggle to show per-source tracking.")
+            else:
+                st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
+        
+        # Use efficient render_section_with_data pattern for pseudo-members
+        render_section_with_data(
+            title="",  # No title needed as it's already shown above
+            data=pseudo_members_data,
+            info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
+                      "Currently showing unique codes only. Use the Mode toggle to show per-source tracking."),
+            empty_message="✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).",
+            download_label="📥 Download Pseudo-Members CSV",
+            filename_prefix="pseudo_members",
+            highlighting_function=get_warning_highlighting_function()
         )
         
-        # Check if mode changed - no reprocessing needed, just update session state
-        if dedup_mode != current_mode:
-            st.session_state.current_deduplication_mode = dedup_mode
+        # Add helpful information about pseudo-refsets
+        st.warning("""
+        **Important Usage Notes:**
+        - These codes are part of pseudo-refsets (ValueSets that EMIS does not recognize natively)
+        - To use these codes in EMIS clinical searches, you must manually list all individual member codes
+        - Pseudo-refset containers cannot be referenced directly by their container SNOMED code
+        - View the pseudo-refset containers in the 'All Pseudo-Refsets' tab
+        """)
     
-    # Deduplication is now handled by render_section_with_data based on current mode
-    
-    # Show appropriate dynamic message based on pseudo-members and mode
-    if not pseudo_members_data:
-        st.success("✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
-        return
-    else:
-        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-        if current_mode == 'unique_codes':
-            st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing unique codes only. Use the Mode toggle to show per-source tracking.")
-        else:
-            st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
-    
-    # Use efficient render_section_with_data pattern for pseudo-members
-    render_section_with_data(
-        title="",  # No title needed as it's already shown above
-        data=pseudo_members_data,
-        info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                  "Currently showing unique codes only. Use the Mode toggle to show per-source tracking."),
-        empty_message="✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).",
-        download_label="📥 Download Pseudo-Members CSV",
-        filename_prefix="pseudo_members",
-        highlighting_function=get_warning_highlighting_function()
-    )
-    
-    # Add helpful information about pseudo-refsets
-    st.warning("""
-    **Important Usage Notes:**
-    - These codes are part of pseudo-refsets (ValueSets that EMIS does not recognize natively)
-    - To use these codes in EMIS clinical searches, you must manually list all individual member codes
-    - Pseudo-refset containers cannot be referenced directly by their container SNOMED code
-    - View the pseudo-refset containers in the 'All Pseudo-Refsets' tab
-    """)
+    # Execute the pseudo-members display fragment
+    pseudo_members_display_fragment()
 
 
 def render_clinical_codes_main_tab(results):
@@ -536,7 +561,7 @@ def render_clinical_codes_main_tab(results):
         "⚠️ Pseudo-Refsets", 
         "📝 Pseudo-Refset Members", 
         "📊 Analytics",
-        "🏥 NHS Term Server"
+        "👪 Child Code Finder"
     ])
     
     with tab1:

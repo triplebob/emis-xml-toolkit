@@ -41,4 +41,5 @@ Thumbs.db
 .gitattributes
 
 # Private workspace files
-todo_list.md
+project_tracker.md
+retired_code.md

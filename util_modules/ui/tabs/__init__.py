@@ -23,10 +23,12 @@ from .clinical_tabs import (
     render_clinical_codes_main_tab
 )
 
+# Import tab functions from specialized modules
+from .list_report_tab import render_list_reports_tab
+from .audit_report_tab import render_audit_reports_tab  
+from .aggregate_report_tab import render_aggregate_reports_tab
+
 from .report_tabs import (
-    render_list_reports_tab,
-    render_audit_reports_tab,
-    render_aggregate_reports_tab,
     render_report_type_browser,
     render_reports_tab
 )

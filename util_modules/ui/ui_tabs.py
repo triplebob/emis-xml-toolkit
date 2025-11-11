@@ -7,7 +7,6 @@ from .ui_helpers import (
     render_section_with_data, 
     render_metrics_row, 
     render_success_rate_metric,
-    render_download_button,
     get_success_highlighting_function,
     get_warning_highlighting_function,
     create_expandable_sections,

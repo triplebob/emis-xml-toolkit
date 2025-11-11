@@ -1,5 +1,93 @@
 # Changelog
 
+## v2.2.2 - Export Architecture & UI Performance Improvements (November 2025)
+
+### 🚀 **Export Architecture Overhaul**
+
+**Memory Leak Resolution:**
+- **Critical Memory Fixes**: Eliminated 3 major memory leaks preventing large exports (39MB JSON files, navigation-triggered generation)
+- **Lazy Generation**: Export files now generated only on button click, not during UI rendering
+- **Smart Caching**: Generated files cached in session state for immediate download with automatic cleanup
+- **Memory Efficient Processing**: Export data cleared after download to prevent accumulation
+
+**Export Workflow Improvements:**
+- **Single-Click Pattern**: Replaced confusing two-button workflow with streamlined single-click lazy generation
+- **Consistent Design**: All export buttons now have uniform styling and immediate accessibility
+- **Progress Indicators**: Clear loading states with spinners during generation
+- **Error Handling**: Better error states and user feedback across all export components
+
+### ⚡ **UI Performance Revolution**
+
+**Fragment optimisation:**
+- **Export Updates**: Export interactions no longer trigger full application reruns
+- **Component Isolation**: Memory monitoring and analytics buttons now update only their specific sections
+- **Responsive Interface**: Significantly improved responsiveness across all tabs and components
+- **Reduced Processing**: Button clicks perform targeted updates instead of full page refreshes
+
+### 🔍 **Data Integrity & Bug Fixes**
+
+**Clinical Code Filtering Fix:**
+- **Critical Bug Resolution**: Fixed issue where unmatched codes were incorrectly hidden during deduplication process
+- **Data Completeness**: All clinical codes now properly preserved through filtering operations
+- **Accurate Metrics**: SNOMED translation success rates display real data instead of artificially inflated percentages
+- **UI Consistency**: Filter results now accurately reflect actual data processing outcomes
+
+**Session State Stability:**
+- **Fragment Error Fixes**: Resolved KeyError exceptions in export fragments accessing uninitialized session state
+- **Variable Scope**: Fixed NameError issues with xml_filename access within fragment contexts
+- **Initialization Patterns**: Proper session state initialization before fragment execution
+
+### 📊 **Search Analysis UX Enhancements**
+
+**Export Accessibility:**
+- **Improved Navigation**: Export options relocated to top of analysis tabs in collapsible sections
+- **Streamlined Workflow**: No more scrolling through large dependency trees to access downloads
+- **Clean Interface**: Collapsible expanders default to closed state for uncluttered view
+- **Immediate Access**: Export functionality immediately available without navigation overhead
+
+**Analysis Tab Reorganization:**
+- **Folder Structure Tab**: Export options moved to top in "📥 Export Folder Structure" expander
+- **Dependencies Tab**: Export buttons relocated to "📥 Export Dependencies" section
+- **Rule Logic Browser**: Fragment optimisation for export generation
+- **Visual Consistency**: Consistent export patterns across all analysis sub-tabs
+
+### 🛠️ **Backend Stability & Code Organisation**
+
+**Modular Refactoring:**
+- **Code Organisation**: Comprehensive modular refactoring for improved maintainability
+- **Import Consistency**: Standardized import patterns across entire codebase (relative imports)
+- **Dead Code Cleanup**: Removed unused functions and consolidated duplicate logic
+
+**Architecture Improvements:**
+- **Centralized Export Logic**: Consolidated export functionality - exisiting exports were an absolute mess
+- **Reduced Maintenance**: Simplified codebase with focused modules and clear responsibilities
+- **Error Prevention**: Better error handling and validation across all components
+- **Performance Monitoring**: Enhanced memory usage tracking and cleanup processes
+
+### 🎯 **Developer Experience**
+
+**Code Quality:**
+- **Function Cleanup**: Removed 2 unneeded functions (functionality integrated with other virtually identical functions I forgot I'd already created)
+- **Import Patterns**: Fixed mixed absolute/relative imports for consistency (no idea why I'd use a mix of both)
+- **Error Handling**: Improved error states and user feedback mechanisms
+
+---
+
+### **Performance Impact**
+
+**Measured Improvements:**
+- **Memory Usage**: 39MB reduction in export memory consumption, stopped +10MB incremental leak each time a different report or search was selected in dropdown menus
+- **UI Responsiveness**: Eliminated full app reruns during export interactions and menu selections
+- **Export Generation**: Proper lazy loading prevents navigation-triggered file creation (hopefully)
+- **Data Accuracy**: Clinical code filtering now preserves all legitimate unmatched codes
+
+**User Experience Benefits:**
+- **Simplified Exports**: Single-click workflow replaces annoying two-button pattern (terrible UX - sorry!)
+- **Faster Interactions**: Fragment optimisation provides immediate response
+- **Better Navigation**: Export options immediately accessible without scrolling
+- **Accurate Data**: Translation rates reflect true processing results
+
+
 ## v2.2.1 - Dark Theme & UI Improvements (November 2025)
 
 ### 🎨 **Dark Theme Implementation**
@@ -18,6 +106,7 @@
 - **Clean Report Titles**: Removed redundant prefixes from report headers
 - **Improved Footer**: Better text contrast for readability
 - **Optimized Styling**: Updated CSS for consistent dark theme appearance
+
 
 ## v2.2.0 - Performance Architecture & Export Improvements (November 2025)
 
@@ -44,7 +133,7 @@
 - **Peak Memory Tracking**: Session-based peak memory monitoring with manual reset functionality
 - **System Information**: Display of total system memory, available memory, and usage percentages
 
-**Memory Optimization:**
+**Memory optimisation:**
 - **TTL-Based Expiration**: Automatic cache cleanup prevents memory accumulation
 - **Garbage Collection**: Systematic cleanup after large operations
 - **Memory Leak Prevention**: Proper disposal of large DataFrames and export objects
@@ -72,7 +161,7 @@
 - **Progressive Enhancement**: Load reports in sections with proper progress tracking
 - **Native Spinners**: Clean Streamlit progress indicators replace custom loading messages
 
-**Processing Optimization:**
+**Processing optimisation:**
 - **Cache Hit Efficiency**: 95%+ cache hit rates for repeated operations
 - **Reduced Reprocessing**: Eliminated expensive recalculation on dropdown changes
 - **Batch Operations**: Optimized clinical code lookups and SNOMED translations
@@ -115,7 +204,7 @@
 
 ---
 
-## v2.1.2 - Memory Optimization and Performance Fixes (October 2025)
+## v2.1.2 - Memory optimisation and Performance Fixes (October 2025)
 
 ### 🧠 **Memory Management Improvements**
 
@@ -132,7 +221,7 @@
 
 ### ⚡ **Performance Enhancements**
 
-**Dropdown Optimization:**
+**Dropdown optimisation:**
 - **Report Selection**: Eliminated complete file reprocessing when switching between report dropdowns
 - **Search Selection**: Removed automatic export generation when selecting different searches in analysis tab
 - **Clinical Filters**: Stopped CSV generation on every radio button change, reducing processing overhead by ~90%
@@ -161,7 +250,7 @@
 - **Cache Efficiency**: Enhanced session state utilization to reduce redundant processing across UI interactions
 - **Export Processing**: Optimized filtering and generation logic to minimize memory usage during CSV/Excel/JSON creation
 
-**Architecture Optimization:**
+**Architecture optimisation:**
 - **Analysis Caching**: Enforced use of pre-computed analysis data across all tab components
 - **State Management**: Improved session state handling to prevent unnecessary data regeneration
 - **Component Isolation**: Separated export generation from UI rendering to improve responsiveness
@@ -186,7 +275,7 @@
 
 ---
 
-## v2.1.1 - Memory & Performance Optimization (October 2025)
+## v2.1.1 - Memory & Performance optimisation (October 2025)
 
 ### 🚀 **Threading Performance Enhancements**
 
@@ -194,7 +283,7 @@
 - **Dynamic Threading**: Scales from 8-20 concurrent workers based on workload size (≤100: 8 workers, 101-300: 12 workers, 301-500: 16 workers, 501+: 20 workers)
 - **Memory Management**: Prevents thread explosion that was creating thousands of workers instead of expected counts
 - **Batched Processing**: Implements controlled worker batches to prevent memory overflow in large terminology expansions
-- **Resource Optimization**: Balances performance with Streamlit Cloud's 2.7GB memory constraint
+- **Resource optimisation**: Balances performance with Streamlit Cloud's 2.7GB memory constraint
 
 **Worker Thread Stabilization:**
 - **Credential Passing**: Resolves authentication failures by passing NHS Terminology Server credentials explicitly to worker threads
@@ -202,7 +291,7 @@
 - **Context Management**: Eliminates thousands of ThreadPoolExecutor "missing ScriptRunContext" warnings
 - **Performance Monitoring**: Real-time progress tracking with concurrent worker count display
 
-### 🧠 **Memory Management Optimization**
+### 🧠 **Memory Management optimisation**
 
 **Session-Based Caching:**
 - **Expansion Result Caching**: Implements session-state caching to eliminate repeated NHS Terminology Server API calls
@@ -239,7 +328,7 @@
 - **Connection Notifications**: Toast alerts for successful NHS Terminology Server connections
 
 **Production Readiness:**
-- **Cloud Deployment Optimization**: Specifically tuned for Streamlit Cloud memory and threading constraints
+- **Cloud Deployment optimisation**: Specifically tuned for Streamlit Cloud memory and threading constraints
 - **Stability Improvements**: Comprehensive testing under high-volume terminology expansion scenarios
 - **Error Recovery**: Graceful handling of network timeouts and terminology server unavailability
 - **Backward Compatibility**: All existing workflows remain unchanged with performance benefits
@@ -256,14 +345,14 @@
 - **Resource Tracking**: Monitor memory usage patterns during large expansion operations
 - **Thread Lifecycle Management**: Proper thread cleanup and resource deallocation
 - **API Rate Management**: Intelligent request pacing to prevent terminology server overload
-- **Cache Efficiency Metrics**: Track cache performance and hit rates for optimization
+- **Cache Efficiency Metrics**: Track cache performance and hit rates for optimisation
 
 ---
 
 ### **Migration Notes**
 
 **Automatic Improvements:**
-- All memory and performance optimizations apply automatically to existing workflows
+- All memory and performance optimisations apply automatically to existing workflows
 - No configuration changes required - improvements are transparent to users
 - Enhanced performance while maintaining complete backward compatibility
 - Existing NHS Terminology Server credentials continue to work without modification
@@ -307,7 +396,7 @@
 
 **Cache-First Strategy Implementation:**
 - **Multi-Tier Caching**: Session state → local cache → GitHub cache → API fallback
-- **Lookup Table Optimization**: Comprehensive audit and update of all GitHub API calls
+- **Lookup Table optimisation**: Comprehensive audit and update of all GitHub API calls
 - **Performance Improvements**: Faster startup and reduced API dependencies
 - **Session Persistence**: Expansion results maintained across download operations
 
@@ -348,7 +437,7 @@
 ### 🔧 **Technical Enhancements**
 
 **System Architecture:**
-- **Codebase Audit**: Systematic review and optimization of all GitHub API integrations
+- **Codebase Audit**: Systematic review and optimisation of all GitHub API integrations
 - **Error Handling**: Enhanced error reporting and recovery mechanisms
 - **Data Validation**: Improved handling of mixed data types and edge cases
 - **Memory Management**: Optimized session state usage for large expansion results
@@ -380,7 +469,7 @@
 **Full Backward Compatibility:**
 - All existing XML processing workflows remain unchanged
 - Enhanced functionality available immediately without configuration
-- Existing lookup table integrations automatically benefit from cache optimization
+- Existing lookup table integrations automatically benefit from cache optimisation
 - No changes required to existing user workflows
 
 **New Requirements (Optional):**
@@ -390,18 +479,18 @@
 
 ---
 
-*Version 2.1.0 introduces comprehensive NHS terminology integration while significantly improving system performance through cache architecture optimization.*
+*Version 2.1.0 introduces comprehensive NHS terminology integration while significantly improving system performance through cache architecture optimisation.*
 
 ---
 
 ## v2.0.1 - Performance & UI Improvements (October 2025)
 
-### 🚀 **Performance Optimizations**
+### 🚀 **Performance optimisations**
 
 **Unified Pipeline Caching:**
 - **Instant Loading**: Refsets, pseudo-refsets, and pseudo-members tabs now load instantly after initial processing
 - **Session State Caching**: Added `get_unified_clinical_data()` caching with automatic invalidation
-- **Memory Optimization**: Eliminated redundant processing across clinical code tabs
+- **Memory optimisation**: Eliminated redundant processing across clinical code tabs
 
 **Search Count Consistency:**
 - **Unified Metrics**: All tabs now show consistent search counts 
@@ -432,7 +521,7 @@
 
 **Rule Logic Browser Fixes:**
 - **Functionality Restored**: Fixed broken rule display that showed "No detailed rules found" in certain XML logic
-- **Data Source Optimization**: Balanced search count accuracy with detailed rule content display
+- **Data Source optimisation**: Balanced search count accuracy with detailed rule content display
 - **Complexity Metrics**: Maintained accurate complexity analysis (36 searches in breakdown)
 
 **Architecture Updates:**
@@ -582,7 +671,7 @@
 - **Version Independence**: Cross-version compatibility
 - **Population Control**: Patient-level and organizational-level analysis
 
-### **⚡ Performance Optimizations**
+### **⚡ Performance optimisations**
 
 **Processing Speed:**
 - **Single XML Parse**: Eliminates redundant parsing with element classification
@@ -601,7 +690,7 @@
 **XML Processing:**
 - **Universal Namespace Handling**: Supports mixed namespaced/non-namespaced documents
 - **Robust Error Handling**: Comprehensive exception management
-- **Memory Optimization**: Efficient processing of large XML files
+- **Memory optimisation**: Efficient processing of large XML files
 - **Cloud Compatibility**: Optimized for Streamlit Cloud deployment
 
 **Data Management:**
@@ -681,5 +770,5 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 ---
 
 *Last Updated: November 2025*  
-*Application Version: 2.2.0*  
+*Application Version: 2.2.2*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*

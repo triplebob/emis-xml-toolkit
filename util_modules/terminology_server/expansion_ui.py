@@ -13,6 +13,8 @@ import io
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ..utils.export_debug import log_export_created, track_export_object, log_memory_after_export
+from ..export_handlers.terminology_export import TerminologyExportHandler
 import threading
 import queue
 import time
@@ -23,14 +25,16 @@ from .nhs_terminology_client import get_terminology_client
 from ..utils.caching.lookup_cache import get_cached_emis_lookup
 
 
-def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_id, client_id, client_secret):
+def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_id, client_id, client_secret, debug_mode=False):
     """Pure worker function - API calls only, no EMIS processing or caching"""
     try:
         snomed_code = code_entry.get('SNOMED Code', '').strip()
-        print(f"DEBUG Worker {worker_id}: Starting with code {snomed_code}")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: Starting with code {snomed_code}")
         
         if not snomed_code:
-            print(f"DEBUG Worker {worker_id}: No SNOMED code")
+            if debug_mode:
+                print(f"DEBUG Worker {worker_id}: No SNOMED code")
             result_queue.put({
                 'worker_id': worker_id,
                 'snomed_code': snomed_code,
@@ -49,14 +53,17 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
         client.client_secret = client_secret
         
         # Perform expansion (pure API call) - no caching, no processing
-        print(f"DEBUG Worker {worker_id}: Calling API...")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: Calling API...")
         expansion_result = client._expand_concept_uncached(snomed_code, include_inactive)
-        print(f"DEBUG Worker {worker_id}: API call done, result: {expansion_result is not None}")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: API call done, result: {expansion_result is not None}")
         
         # Determine success status
         success = expansion_result is not None and not expansion_result.error
         error_msg = expansion_result.error if expansion_result else 'No expansion result returned'
-        print(f"DEBUG Worker {worker_id}: Success: {success}, Error: {error_msg[:50] if error_msg else 'None'}")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: Success: {success}, Error: {error_msg[:50] if error_msg else 'None'}")
         
         # Put raw result in queue for main thread processing
         result_queue.put({
@@ -67,10 +74,12 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
             'error': error_msg,
             'raw_result': expansion_result
         })
-        print(f"DEBUG Worker {worker_id}: Result queued")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: Result queued")
         
     except Exception as e:
-        print(f"DEBUG Worker {worker_id}: Exception: {str(e)}")
+        if debug_mode:
+            print(f"DEBUG Worker {worker_id}: Exception: {str(e)}")
         # Put error in queue
         result_queue.put({
             'worker_id': worker_id,
@@ -82,19 +91,7 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
         })
 
 
-def _clean_dataframe_for_export(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove emojis from DataFrame columns for clean CSV export"""
-    df_clean = df.copy()
-    
-    # Remove all emoji prefixes used in the app from string columns
-    for col in df_clean.columns:
-        if df_clean[col].dtype == 'object':  # String columns
-            # Remove common emoji prefixes used throughout the app
-            df_clean[col] = df_clean[col].astype(str).str.replace(
-                r'⚕️ |🔍 |❌ |📊 |🔬 |⚕️|🔍|❌|📊|🔬', '', regex=True
-            ).str.strip()
-    
-    return df_clean
+# Removed _clean_dataframe_for_export - now handled by TerminologyExportHandler._clean_dataframe_for_export()
 
 
 def _escape_xml(text: str) -> str:
@@ -225,16 +222,17 @@ streamlit_logger.setLevel(logging.ERROR)
 
 def render_terminology_server_status():
     """Render NHS Terminology Server connection status in sidebar"""
-    with st.sidebar:
-        # Make NHS Terminology Server expandable like other sections
-        with st.expander("🏥 NHS Term Server", expanded=False):
-            # Initialize shared session state for connection status if not exists
-            if 'nhs_connection_status' not in st.session_state:
-                st.session_state.nhs_connection_status = None
-            
-            client = get_terminology_client()
-            
-            # Test connection button
+    # Make NHS Terminology Server expandable like other sections
+    with st.expander("🏥 NHS Term Server", expanded=False):
+        # Initialize shared session state for connection status if not exists
+        if 'nhs_connection_status' not in st.session_state:
+            st.session_state.nhs_connection_status = None
+        
+        client = get_terminology_client()
+        
+        # Test connection button and status display as fragment for isolated execution
+        @st.fragment
+        def connection_test_fragment():
             if st.button("🔗 Test Connection", key="test_nhs_connection"):
                 with st.spinner("Testing connection..."):
                     success, message = client.test_connection()
@@ -249,9 +247,9 @@ def render_terminology_server_status():
                         st.toast("✅ Connected to NHS Terminology Server!", icon="🎉")
                     else:
                         st.toast("❌ Failed to connect to NHS Terminology Server", icon="⚠️")
-                    # Status display will update automatically when session state changes
+                    # Fragment will auto-rerun to show updated status
             
-            # Show connection status using shared session state
+            # Show connection status using shared session state (inside fragment for live updates)
             if st.session_state.nhs_connection_status and st.session_state.nhs_connection_status.get('tested'):
                 # Show test result
                 if st.session_state.nhs_connection_status['success']:
@@ -264,6 +262,8 @@ def render_terminology_server_status():
                     st.success("🔑 Authenticated")
                 else:
                     st.warning("🔑 Not authenticated")
+        
+        connection_test_fragment()
 
 
 def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
@@ -287,30 +287,6 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
     
     st.markdown("### ⚕️ SNOMED Code Expansion")
     
-    # Expansion options
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        include_inactive = st.checkbox(
-            "Include inactive concepts",
-            value=False,
-            help="Include concepts that are inactive/deprecated in SNOMED CT"
-        )
-    
-    with col2:
-        use_cache = st.checkbox(
-            "Use cached results",
-            value=True,
-            help="Use previously cached expansion results (24h expiry)"
-        )
-    
-    with col3:
-        filter_zero_descendants = st.checkbox(
-            "Skip codes with 0 descendants",
-            value=True,
-            help="Filter out codes already known to have no child concepts (saves API calls)"
-        )
-    
     # Deduplicate codes and track source information
     code_sources = {}  # SNOMED code -> list of source entries
     unique_codes = {}  # SNOMED code -> representative entry
@@ -332,37 +308,70 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
             }
             code_sources[snomed_code].append(source_info)
     
-    # Apply filtering and show dynamic summary with deduplication info
+    # Apply filtering and show dynamic summary with deduplication info in two-column layout
     original_count = len(all_expandable_codes)
     unique_count = len(unique_codes)
     dedupe_savings = original_count - unique_count
     
-    if filter_zero_descendants:
-        # Count codes with 0 descendants before filtering
-        zero_descendant_count = sum(1 for code in unique_codes.values() 
-                                  if str(code.get('Descendants', '')).strip() == '0')
+    # Two-column layout: info message + checkboxes
+    info_col, options_col = st.columns([1, 1])
+    
+    # Get checkbox values in right column - arrange in 3 sub-columns for horizontal layout
+    with options_col:
+        cb_col1, cb_col2, cb_col3 = st.columns(3)
         
-        if zero_descendant_count > 0:
-            remaining_codes = unique_count - zero_descendant_count
-            if dedupe_savings > 0:
-                st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls) → {remaining_codes} after filtering 0-descendant codes")
+        with cb_col1:
+            st.markdown("")
+            include_inactive = st.checkbox(
+                "Include inactive concepts",
+                value=False,
+                help="Include concepts that are inactive/deprecated in SNOMED CT"
+            )
+        
+        with cb_col2:
+            st.markdown("")
+            use_cache = st.checkbox(
+                "Use cached results",
+                value=True,
+                help="Use previously cached expansion results (24h expiry)"
+            )
+        
+        with cb_col3:
+            st.markdown("")
+            filter_zero_descendants = st.checkbox(
+                "Skip codes with 0 descendants",
+                value=True,
+                help="Filter out codes already known to have no child concepts (saves API calls)"
+            )
+    
+    # Show info message in left column
+    with info_col:
+        if filter_zero_descendants:
+            # Count codes with 0 descendants before filtering
+            zero_descendant_count = sum(1 for code in unique_codes.values() 
+                                      if str(code.get('Descendants', '')).strip() == '0')
+            
+            if zero_descendant_count > 0:
+                remaining_codes = unique_count - zero_descendant_count
+                if dedupe_savings > 0:
+                    st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls) → {remaining_codes} after filtering 0-descendant codes")
+                else:
+                    st.info(f"Found {unique_count} codes that can be expanded - filtered out {zero_descendant_count} codes with 0 descendants (saves API calls), {remaining_codes} codes will be processed")
+                # Apply the actual filtering
+                expandable_codes = [code for code in unique_codes.values() 
+                                  if str(code.get('Descendants', '')).strip() != '0']
             else:
-                st.info(f"Found {unique_count} codes that can be expanded - filtered out {zero_descendant_count} codes with 0 descendants (saves API calls), {remaining_codes} codes will be processed")
-            # Apply the actual filtering
-            expandable_codes = [code for code in unique_codes.values() 
-                              if str(code.get('Descendants', '')).strip() != '0']
+                if dedupe_savings > 0:
+                    st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)")
+                else:
+                    st.info(f"Found {unique_count} codes that can be expanded to include child concepts")
+                expandable_codes = list(unique_codes.values())
         else:
             if dedupe_savings > 0:
                 st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)")
             else:
                 st.info(f"Found {unique_count} codes that can be expanded to include child concepts")
             expandable_codes = list(unique_codes.values())
-    else:
-        if dedupe_savings > 0:
-            st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)")
-        else:
-            st.info(f"Found {unique_count} codes that can be expanded to include child concepts")
-        expandable_codes = list(unique_codes.values())
     
     # Expansion button with protection against double-clicks
     if 'expansion_in_progress' not in st.session_state:
@@ -465,11 +474,18 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     # Show immediate feedback
     status_text.text("Starting expansion process...")
     
+    # Clear any previous expansion status
+    if 'expansion_status' in st.session_state:
+        del st.session_state.expansion_status
+    
     # Load pre-built EMIS lookup cache (built during XML processing)
     lookup_df = getattr(st.session_state, 'lookup_df', None)
     snomed_code_col = getattr(st.session_state, 'snomed_code_col', 'SNOMED Code')
     emis_guid_col = getattr(st.session_state, 'emis_guid_col', 'EMIS GUID')
     version_info = getattr(st.session_state, 'lookup_version_info', None)
+    
+    # Get debug mode from session state
+    debug_mode = st.session_state.get('debug_mode', False)
     
     status_text.text("Loading EMIS lookup cache...")
     
@@ -599,7 +615,7 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
             for i, code_entry in enumerate(uncached_codes[:max_workers]):  # Start first batch
                 thread = threading.Thread(
                     target=_pure_worker_expand_code,
-                    args=(code_entry, include_inactive, result_queue, i, client_id, client_secret),
+                    args=(code_entry, include_inactive, result_queue, i, client_id, client_secret, debug_mode),
                     daemon=True
                 )
                 thread.start()
@@ -676,7 +692,7 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
                     next_code = remaining_codes.pop(0)
                     thread = threading.Thread(
                         target=_pure_worker_expand_code,
-                        args=(next_code, include_inactive, result_queue, next_thread_id, client_id, client_secret),
+                        args=(next_code, include_inactive, result_queue, next_thread_id, client_id, client_secret, debug_mode),
                         daemon=True
                     )
                     thread.start()
@@ -715,23 +731,14 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
         total_codes = len(expandable_codes)
         success_rate = successful_expansions / total_codes if total_codes > 0 else 0
         
-        # Dynamic status indicator and totals in two columns
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if success_rate == 1.0:
-                # Green: 100% success
-                st.success(f"✅ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
-            elif success_rate > 0:
-                # Yellow: Partial success
-                st.warning(f"⚠️ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
-            else:
-                # Red: No success
-                st.error(f"❌ Expansion failed: {successful_expansions}/{total_codes} codes expanded successfully")
-        
-        with col2:
-            st.info(f"📊 Total child codes discovered: {total_child_codes}")
-        
+        # Store completion status in session state for persistent display
+        expansion_status = {
+            'successful_expansions': successful_expansions,
+            'total_codes': total_codes,
+            'total_child_codes': total_child_codes,
+            'success_rate': success_rate
+        }
+        st.session_state.expansion_status = expansion_status
         
         return {
             'expansion_results': expansion_results,
@@ -751,7 +758,7 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
 
 def render_expansion_results(expansion_data: Dict):
     """
-    Render the results of code expansion
+    Render the expansion results table (middle-level fragment content)
     
     Args:
         expansion_data: Dictionary containing expansion results
@@ -783,6 +790,46 @@ def render_expansion_results(expansion_data: Dict):
             
             styled_summary = summary_df.style.apply(style_status, axis=1)
             st.dataframe(styled_summary, width='stretch', hide_index=True)
+
+        # Show completion status below results table
+        if hasattr(st.session_state, 'expansion_status') and st.session_state.expansion_status:
+            status = st.session_state.expansion_status
+            success_rate = status['success_rate']
+            successful_expansions = status['successful_expansions']
+            total_codes = status['total_codes']
+            total_child_codes = status['total_child_codes']
+        
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                if success_rate == 1.0:
+                    # Green: 100% success
+                    st.success(f"✅ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
+                elif success_rate > 0:
+                    # Yellow: Partial success
+                    st.warning(f"⚠️ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
+                else:
+                    # Red: No success
+                    st.error(f"❌ Expansion failed: {successful_expansions}/{total_codes} codes expanded successfully")
+        
+            with col2:
+                st.info(f"📊 Total child codes discovered: {total_child_codes}")
+
+
+def render_child_codes_detail(expansion_data: Dict):
+    """
+    Render the child codes detail section (bottom-level fragment content)
+    
+    Args:
+        expansion_data: Dictionary containing expansion results
+    """
+    if not expansion_data or 'expansion_results' not in expansion_data:
+        return
+    
+    # EMIS GUID Coverage information
+    expansion_results = expansion_data['expansion_results']
+    original_codes = expansion_data.get('original_codes', [])
+    service = get_expansion_service()
     
     # Use pre-processed child codes if available (much faster!)
     all_child_codes = expansion_data.get('processed_children', [])
@@ -802,63 +849,75 @@ def render_expansion_results(expansion_data: Dict):
                 if snomed_code and emis_guid:
                     emis_lookup[snomed_code] = emis_guid
         
-        for code, result in expansion_results.items():
-            if not result.error and result.children:
-                for child in result.children:
-                    emis_guid = emis_lookup.get(child.code)
-                    emis_status = emis_guid if emis_guid else 'Not in EMIS lookup table'
+        # Create full child codes list with EMIS GUID lookup
+        all_child_codes = []
+        for parent_code, result in expansion_results.items():
+            if result and hasattr(result, 'child_codes') and result.child_codes:
+                for child in result.child_codes:
+                    child_snomed = str(child.get('code', '')).strip()
+                    emis_guid = emis_lookup.get(child_snomed, 'Not in EMIS lookup table')
+                    
+                    # Find original code entry for source tracking
+                    original_entry = next((code for code in original_codes if code.get('SNOMED Code', '').strip() == parent_code), {})
                     
                     all_child_codes.append({
-                        'Parent Code': code,
-                        'Parent Display': result.source_display,
-                        'Child Code': child.code,
-                        'Child Display': child.display,
-                        'EMIS GUID': emis_status,
-                        'Inactive': 'True' if child.inactive else 'False'
+                        'Parent Code': parent_code,
+                        'Parent Display': result.original_display if result else 'Unknown',
+                        'Child Code': child_snomed,
+                        'Child Display': child.get('display', 'Unknown'),
+                        'Inactive': str(child.get('inactive', False)),
+                        'EMIS GUID': emis_guid,
+                        # Source tracking
+                        'Source Type': original_entry.get('Source Type', 'Unknown'),
+                        'Source Name': original_entry.get('Source Name', 'Unknown'),
+                        'Source Container': original_entry.get('Source Container', 'Unknown')
                     })
     
-    # Calculate EMIS GUID coverage statistics
-    if all_child_codes:
-        total_child_codes = len(all_child_codes)
-        missing_emis_guids = sum(1 for code in all_child_codes if code['EMIS GUID'] == 'Not in EMIS lookup table')
-        
-        # Show helpful info about EMIS GUID coverage
-        if missing_emis_guids > 0:
-            coverage_rate = ((total_child_codes - missing_emis_guids) / total_child_codes) * 100
-            st.info(f"ℹ️ EMIS GUID Coverage: {total_child_codes - missing_emis_guids}/{total_child_codes} child codes found in EMIS lookup table ({coverage_rate:.1f}%). Missing codes may be newer concepts not yet available in EMIS.")
+    # Count total and with EMIS GUIDs
+    total_count = len(all_child_codes)
+    emis_count = len([code for code in all_child_codes if code.get('EMIS GUID') != 'Not in EMIS lookup table'])
+    coverage_pct = (emis_count / total_count * 100) if total_count > 0 else 0
+    
     
     if all_child_codes:
         # Child Codes table header and view mode selector (matching clinical codes pattern)
-        col1, col2 = st.columns([4, 1])
+        st.markdown("### 👪 Child Codes Detail")
+        st.caption("🌳 Expanded hierarchy includes ALL descendants (children, grandchildren, etc.) from NHS Terminology Server")
+
+        
+        # Filter controls
+        col1, col2, col3 = st.columns([6, 1, 1])
+        
         with col1:
-            st.markdown("### 🔍 Child Codes Detail")
-            st.caption("🌳 Expanded hierarchy includes ALL descendants (children, grandchildren, etc.) from NHS Terminology Server")
+            search_term = st.text_input(
+                "Search child codes",
+                placeholder="Enter code or description to filter...",
+                label_visibility="visible",
+                icon= "🔍",
+                key="child_codes_search"
+            )
+
         with col2:
+            st.markdown("")
+            st.markdown("")
+            show_inactive = st.checkbox(
+                "Include inactive concepts",
+                value=False,
+                help="Include concepts that are inactive/deprecated in SNOMED CT",
+                key="show_inactive_children"
+            )    
+
+        with col3:
             view_mode = st.selectbox(
-                "View mode",
+                "Code Display Mode:",
                 ["🔀 Unique Codes", "📍 Per Source"],
                 index=0,  # Default to Unique Codes
                 key="child_view_mode",
                 help="🔀 Unique Codes: Show distinct parent-child combinations only\n📍 Per Source: Show all parent-child relationships including duplicates across sources"
             )
         
-        # Filter controls
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            search_term = st.text_input(
-                "🔍 Search child codes",
-                placeholder="Enter code or description to filter...",
-                key="child_codes_search"
-            )
-        
-        with col2:
-            show_inactive = st.checkbox(
-                "Show inactive",
-                value=False,
-                key="show_inactive_children"
-            )
-        
+        st.markdown("")
+
         # Apply filters
         filtered_codes = all_child_codes.copy()
         
@@ -919,10 +978,17 @@ def render_expansion_results(expansion_data: Dict):
             
             # Add visual indicators for EMIS GUID column
             def format_emis_guid(guid):
-                if str(guid) == 'Not in EMIS lookup table':
-                    return f'❌ {guid}'  # Add red X for "not found" entries
+                guid_str = str(guid)
+                if guid_str == 'Not in EMIS lookup table':
+                    # Only add emoji if not already present
+                    if not guid_str.startswith('❌'):
+                        return f'❌ {guid_str}'
+                    return guid_str
                 else:
-                    return f'🔍 {guid}'  # Add EMIS GUID indicator
+                    # Only add emoji if not already present
+                    if not guid_str.startswith('🔍'):
+                        return f'🔍 {guid_str}'
+                    return guid_str
             
             child_df['EMIS GUID'] = child_df['EMIS GUID'].apply(format_emis_guid)
             
@@ -936,354 +1002,261 @@ def render_expansion_results(expansion_data: Dict):
             
             styled_child_df = child_df.style.apply(style_emis_guid, axis=1)
             st.dataframe(styled_child_df, width='stretch', hide_index=True)
-    
-    # Export options section (moved outside expander to prevent UI resets)
-    st.markdown("### 📥 Export Options")
-    # Check if we have source tracking for granular filters
-    has_source_tracking = all_child_codes and any(
-        'Source Type' in code for code in all_child_codes
-    )
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        # Always show Summary download first (ignores filters)
-        st.markdown("**📊 Download Summary of Matched/Unmatched Parents**")
-        summary_csv = _clean_dataframe_for_export(summary_df).to_csv(index=False)
-        st.download_button(
-            label="📊 Expansion Summary",
-            data=summary_csv,
-            file_name=f"expansion_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            help="Overview of expansion success rate for searched parent codes only",
-            key="summary_download"
-        )
-        
-        # Clear memory after export
-        del summary_csv
-        
-        # Export filter options (for child codes)
-        st.markdown("**🔍 Child Codes Filter**")
-        if has_source_tracking:
-            export_filter = st.radio(
-                "Export Filter:",
-                ["All Child Codes", "Only Matched", "Only Unmatched", "Only Child Codes from Searches", "Only Child Codes from Reports"],
-                key="child_codes_export_filter"
-            )
         else:
-            export_filter = st.radio(
-                "Export Filter:",
-                ["All Child Codes", "Only Matched", "Only Unmatched"],
-                key="child_codes_export_filter_simple"
-            )
-    
-    with col2:
-        if all_child_codes:
-            # Apply export filter to child codes data
-            export_filtered_codes = []
-            
-            for code in all_child_codes:
-                include_code = False
-                
-                if export_filter == "All Child Codes":
-                    include_code = True
-                elif export_filter == "Only Matched":
-                    # Code is matched if it has an EMIS GUID
-                    emis_guid = code.get('EMIS GUID', 'Not in EMIS lookup table')
-                    include_code = emis_guid != 'Not in EMIS lookup table'
-                elif export_filter == "Only Unmatched":
-                    # Code is unmatched if it doesn't have an EMIS GUID
-                    emis_guid = code.get('EMIS GUID', 'Not in EMIS lookup table')
-                    include_code = emis_guid == 'Not in EMIS lookup table'
-                elif export_filter == "Only Child Codes from Searches" and has_source_tracking:
-                    # Filter for search sources
-                    source_type = code.get('Source Type', '')
-                    include_code = 'Search' in str(source_type)
-                elif export_filter == "Only Child Codes from Reports" and has_source_tracking:
-                    # Filter for report sources
-                    source_type = code.get('Source Type', '')
-                    include_code = 'Search' not in str(source_type) and source_type != 'Unknown'
-                
-                if include_code:
-                    export_filtered_codes.append(code)
-            
-            # Apply view mode filtering to export data (hide source columns if in Unique Codes mode)
-            if export_filtered_codes:
-                export_df = pd.DataFrame(export_filtered_codes)
-                
-                # Hide source columns in Unique Codes mode (consistent with display)
-                if view_mode == "🔀 Unique Codes":
-                    columns_to_remove = ['Source Type', 'Source Name', 'Source Container']
-                    for col in columns_to_remove:
-                        if col in export_df.columns:
-                            export_df = export_df.drop(columns=[col])
-            
-            # Generate timestamps and filename components
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            
-            # Create SNOMED-only download
-            st.markdown("**⚕️ Download Child Codes (SNOMED Only)**")
-            if export_filtered_codes:
-                # Create SNOMED-only export (remove EMIS GUID column)
-                snomed_export_df = export_df.copy()
-                if 'EMIS GUID' in snomed_export_df.columns:
-                    snomed_export_df = snomed_export_df.drop(columns=['EMIS GUID'])
-                
-                # Generate filename for SNOMED export with view mode
-                view_suffix = "unique" if view_mode == "🔀 Unique Codes" else "per_source"
-                
-                if export_filter == "Only Matched":
-                    snomed_filename = f"child_snomed_matched_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Unmatched":
-                    snomed_filename = f"child_snomed_unmatched_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Child Codes from Searches":
-                    snomed_filename = f"child_snomed_searches_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Child Codes from Reports":
-                    snomed_filename = f"child_snomed_reports_{view_suffix}_{timestamp}.csv"
-                else:
-                    snomed_filename = f"child_snomed_all_{view_suffix}_{timestamp}.csv"
-                
-                snomed_csv = _clean_dataframe_for_export(snomed_export_df).to_csv(index=False)
-                st.download_button(
-                    label=f"⚕️ {export_filter}",
-                    data=snomed_csv,
-                    file_name=snomed_filename,
-                    mime="text/csv",
-                    help="Child codes with SNOMED details only",
-                    key="snomed_download"
-                )
-                
-                # Clear memory after large export
-                is_large_export = len(snomed_export_df) > 10000
-                del snomed_csv, snomed_export_df
-                if is_large_export:
-                    st.cache_data.clear()
-                    gc.collect()
+            if search_term or not show_inactive:
+                st.info("No child codes match the current filters")
             else:
-                st.info(f"No SNOMED data available for {export_filter}")
-            
-            # Create EMIS import download (only active codes)
-            # First calculate match statistics for all export filtered codes
-            all_emis_export_codes = [code for code in export_filtered_codes if code.get('Inactive') == 'False']
-            all_emis_available = sum(1 for code in all_emis_export_codes 
-                                   if code.get('EMIS GUID') != 'Not in EMIS lookup table')
-            all_total_codes = len(all_emis_export_codes)
-            
-            st.markdown(f"**🔍 Download Child Codes (inc EMIS GUID) - {all_emis_available}/{all_total_codes} matched**")
-            
-            if all_emis_export_codes:
-                # Prepare EMIS import data
-                emis_import_data = []
-                for code in all_emis_export_codes:
-                    emis_guid = code.get('EMIS GUID', 'Not in EMIS lookup table')
-                    description = code['Child Display']
-                    
-                    emis_data = {
-                        'SNOMED Code': code['Child Code'],
-                        'EMIS GUID': emis_guid,
-                        'Description': description,
-                        'Parent Code': code['Parent Code'],
-                        'Parent Description': code['Parent Display'],
-                        'XML Output': _create_xml_output(emis_guid, description)
-                    }
-                    
-                    # Add source columns if in Per Source mode
-                    if view_mode == "📍 Per Source":
-                        emis_data.update({
-                            'Source Type': code.get('Source Type', 'Unknown'),
-                            'Source Name': code.get('Source Name', 'Unknown'),
-                            'Source Container': code.get('Source Container', 'Unknown')
-                        })
-                    
-                    emis_import_data.append(emis_data)
-                
-                # Generate filename for EMIS export with view mode
-                view_suffix = "unique" if view_mode == "🔀 Unique Codes" else "per_source"
-                
-                if export_filter == "Only Matched":
-                    emis_filename = f"emis_import_matched_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Unmatched":
-                    emis_filename = f"emis_import_unmatched_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Child Codes from Searches":
-                    emis_filename = f"emis_import_searches_{view_suffix}_{timestamp}.csv"
-                elif export_filter == "Only Child Codes from Reports":
-                    emis_filename = f"emis_import_reports_{view_suffix}_{timestamp}.csv"
-                else:
-                    emis_filename = f"emis_import_all_{view_suffix}_{timestamp}.csv"
-                
-                emis_df = pd.DataFrame(emis_import_data)
-                emis_csv = _clean_dataframe_for_export(emis_df).to_csv(index=False)
-                
-                st.download_button(
-                    label=f"🔍 {export_filter}",
-                    data=emis_csv,
-                    file_name=emis_filename,
-                    mime="text/csv",
-                    help="Child codes with both SNOMED details and EMIS GUIDs for import",
-                    key="emis_download"
-                )
-            else:
-                st.info(f"No active EMIS import data available for {export_filter}")
-            
-            # JSON hierarchical export section
-            st.markdown("**🌳 Download Hierarchical JSON (Parent-Child Structure)**")
-            if all_child_codes:
-                # Create hierarchical JSON structure for unique parents only
-                json_data = _create_hierarchical_json(all_child_codes, view_mode)
-                
-                # Generate filename for JSON export
-                view_suffix = "unique" if view_mode == "🔀 Unique Codes" else "per_source"
-                json_filename = f"child_hierarchy_{view_suffix}_{timestamp}.json"
-                
-                # Format JSON with proper indentation
-                json_string = json.dumps(json_data, indent=2, ensure_ascii=False)
-                
-                st.download_button(
-                    label="🌳 Hierarchical JSON",
-                    data=json_string,
-                    file_name=json_filename,
-                    mime="application/json",
-                    help="Parent-child code hierarchy in JSON format - ignores filters, shows unique parents only",
-                    key="json_download"
-                )
-            else:
-                st.info("No child codes available for JSON export")
-        else:
-            st.info("No child codes available for export")
-    
-    if not all_child_codes:
-        st.warning("No child codes were found in the expansion results")
+                st.info("This concept has no child concepts")
 
+    # Only show EMIS coverage if we have child codes
+    if all_child_codes:
+        st.info(f"📊 EMIS GUID Coverage: {emis_count}/{total_count} child codes found in EMIS lookup table ({coverage_pct:.1f}%)")
 
-def render_individual_code_lookup():
-    """Render UI for looking up individual SNOMED codes"""
-    with st.expander("🔍 Individual Code Lookup", expanded=False):
-        st.markdown("Look up a specific SNOMED code to see its child concepts")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            lookup_code = st.text_input(
-                "SNOMED Code",
-                placeholder="e.g., 73211009",
-                key="individual_lookup_code"
-            )
-        
-        with col2:
-            include_inactive = st.checkbox(
-                "Include inactive",
-                value=False,
-                key="individual_lookup_inactive"
-            )
-        
-        if st.button("🔍 Lookup Code", key="perform_individual_lookup") and lookup_code:
-            service = get_expansion_service()
+    
+    # Export section with conditional filters (matching clinical code tabs pattern)
+    if all_child_codes:
+        @st.fragment
+        def child_codes_export_fragment():
+            col1, col2 = st.columns([1, 2])
             
-            with st.spinner(f"Looking up {lookup_code}... (may fetch multiple pages if >1000 results)"):
-                result = service.expand_snomed_code(lookup_code.strip(), include_inactive, use_cache=True)
-            
-            if result.error:
-                st.error(f"Lookup failed: {result.error}")
-            else:
-                # Display parent information prominently
-                st.info(f"**Parent Code:** {lookup_code.strip()} | **Parent Term:** {result.source_display}")
+            with col1:
+                # Analyze data to determine available filter options
+                current_mode = st.session_state.get('child_view_mode', '🔀 Unique Codes')
+                has_source_tracking = any('Source Type' in code for code in all_child_codes)
                 
-                # Show result count with pagination indicator
-                if len(result.children) >= 1000:
-                    st.success(f"Found {len(result.children)} child concepts (fetched via automatic pagination)")
+                # Count different types of data
+                total_count = len(all_child_codes)
+                matched_count = len([code for code in all_child_codes if code.get('EMIS GUID', 'Not in EMIS lookup table') != 'Not in EMIS lookup table'])
+                unmatched_count = total_count - matched_count
+                
+                # Count source types
+                search_count = 0
+                report_count = 0
+                if has_source_tracking:
+                    search_count = len([code for code in all_child_codes if 'Search' in str(code.get('Source Type', ''))])
+                    report_count = len([code for code in all_child_codes if 'Search' not in str(code.get('Source Type', '')) and code.get('Source Type', '') != 'Unknown'])
+                
+                # Build conditional filter options (smart logic like clinical codes)
+                filter_options = ["All Child Codes"]
+                
+                # Smart logic for matched/unmatched filters
+                if matched_count > 0 and unmatched_count > 0:
+                    # Both matched and unmatched exist - show both filter options
+                    filter_options.append("Only Matched")
+                    filter_options.append("Only Unmatched")
+                elif matched_count > 0 and unmatched_count == 0:
+                    # All codes are matched - no need for "Only Matched" (same as "All Codes")
+                    pass  # Just keep "All Codes"
+                elif matched_count == 0 and unmatched_count > 0:
+                    # All codes are unmatched - no need for "Only Unmatched" (same as "All Codes")
+                    pass  # Just keep "All Codes"
+                
+                # Add source-based filters only if in per_source mode and both sources exist
+                if has_source_tracking and current_mode == '📍 Per Source':
+                    if search_count > 0:
+                        filter_options.append("Only Child Codes from Searches")
+                    if report_count > 0:
+                        filter_options.append("Only Child Codes from Reports")
+                
+                # Show radio with conditional options
+                export_filter = st.radio(
+                    "Export Filter:",
+                    filter_options,
+                    key="child_codes_export_filter",
+                    horizontal=len(filter_options) <= 3
+                )
+                
+                # Always show counts for transparency
+                st.caption(f"📊 Total: {total_count} | ✅ Matched: {matched_count} | ❌ Unmatched: {unmatched_count}")
+                if has_source_tracking and current_mode == '📍 Per Source':
+                    st.caption(f"🔍 Searches: {search_count} | 📊 Reports: {report_count}")
+            
+            with col2:
+                # Filter data based on selection
+                filtered_codes = []
+                export_label = "📥 👪 Child Codes"
+                export_suffix = ""
+                
+                for code in all_child_codes:
+                    include_code = False
+                    
+                    if export_filter == "All Child Codes":
+                        include_code = True
+                    elif export_filter == "Only Matched":
+                        emis_guid = code.get('EMIS GUID', 'Not in EMIS lookup table')
+                        include_code = emis_guid != 'Not in EMIS lookup table'
+                        export_label = "📥 ✅ 👪 Matched Child Codes"
+                        export_suffix = "_matched"
+                    elif export_filter == "Only Unmatched":
+                        emis_guid = code.get('EMIS GUID', 'Not in EMIS lookup table')
+                        include_code = emis_guid == 'Not in EMIS lookup table'
+                        export_label = "📥 ❌ 👪 Unmatched Child Codes"
+                        export_suffix = "_unmatched"
+                    elif export_filter == "Only Child Codes from Searches":
+                        source_type = code.get('Source Type', '')
+                        include_code = 'Search' in str(source_type)
+                        export_label = "📥 🔍 👪 Child Codes from Searches"
+                        export_suffix = "_searches"
+                    elif export_filter == "Only Child Codes from Reports":
+                        source_type = code.get('Source Type', '')
+                        include_code = 'Search' not in str(source_type) and source_type != 'Unknown'
+                        export_label = "📥 📊 👪 Child Codes from Reports"
+                        export_suffix = "_reports"
+                    
+                    if include_code:
+                        filtered_codes.append(code)
+                
+                # Add view mode to labels and filename
+                mode_suffix = "_unique" if current_mode == '🔀 Unique Codes' else "_per_source"
+                if export_suffix:
+                    export_suffix = mode_suffix + export_suffix
                 else:
-                    st.success(f"Found {len(result.children)} child concepts")
+                    export_suffix = mode_suffix
                 
-                if result.children:
-                    child_data = []
-                    for child in result.children:
-                        child_data.append({
-                            'Parent Code': lookup_code.strip(),
-                            'Parent Term': result.source_display,
-                            'Child Code': child.code,
-                            'Child Display': child.display,
-                            'Inactive': 'True' if child.inactive else 'False'
-                        })
-                    
-                    df = pd.DataFrame(child_data)
-                    # Add visual indicator for SNOMED codes
-                    df['Child Code'] = '⚕️ ' + df['Child Code'].astype(str)
-                    st.dataframe(df, width='stretch', hide_index=True)
-                    
-                    # Quick export with enhanced filename
-                    csv_data = _clean_dataframe_for_export(df).to_csv(index=False)
-                    # Create descriptive filename with parent term
-                    safe_term = "".join(c for c in result.source_display if c.isalnum() or c in (' ', '-', '_')).rstrip()[:30]
-                    filename = f"lookup_{lookup_code.strip()}_{safe_term}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                    
-                    st.download_button(
-                        label="📥 Download Results",
-                        data=csv_data,
-                        file_name=filename,
-                        mime="text/csv"
+                mode_label = " (Unique)" if current_mode == '🔀 Unique Codes' else " (Per Source)"
+                export_label = export_label.replace("📥", f"📥{mode_label}")
+                
+                # Show count of filtered items
+                filtered_df = pd.DataFrame(filtered_codes) if filtered_codes else pd.DataFrame()
+                st.caption(f"📊 Will generate CSV with {len(filtered_df)} rows × {len(filtered_df.columns) if len(filtered_df) > 0 else 9} columns")
+                
+                # Render download button using UIExportManager (matching clinical code pattern)
+                if filtered_codes:
+                    xml_filename = st.session_state.get('xml_filename')
+                    from util_modules.export_handlers.ui_export_manager import UIExportManager
+                    export_manager = UIExportManager()
+                    export_manager.render_download_button(
+                        data=filtered_df,
+                        label=export_label,
+                        filename_prefix=f"child_codes{export_suffix}",
+                        xml_filename=xml_filename,
+                        key=f"download_child_codes_{export_filter.lower().replace(' ', '_')}"
                     )
                 else:
-                    st.info("This concept has no child concepts")
+                    st.info("No child codes match the current export filter")
+        
+        # Execute the export fragment
+        child_codes_export_fragment()
 
 
 def render_expansion_tab_content(clinical_data: List[Dict]):
     """
-    Render complete expansion tab content
+    Render complete expansion tab content with fragment hierarchy
     
     Args:
         clinical_data: Clinical codes data from the main analysis
     """
     # Clean header without connection status
-    st.markdown("# 🏥 NHS Terminology Server Integration")
+    st.subheader("🏥 Terminology Server Child Code Expansion")
     st.markdown("Use the NHS Terminology Server to expand SNOMED codes with `<includeChildren>true</includeChildren>` to return a comprehensive list of all child codes")
     
     st.markdown("---")
     
-    # Main expansion interface
-    expansion_data = render_expansion_controls(clinical_data)
+    # TOP LEVEL FRAGMENT: Expansion controls 
+    @st.fragment
+    def expansion_controls_fragment():
+        # Main expansion interface
+        expansion_data = render_expansion_controls(clinical_data)
+        
+        # Store expansion results in session state to persist across fragments
+        if expansion_data:
+            st.session_state.expansion_results_data = expansion_data
+            # Force rerun to trigger dependent fragments
+            st.rerun()
     
-    # Store expansion results in session state to persist across page reruns (e.g., when downloading)
-    if expansion_data:
-        st.session_state.expansion_results_data = expansion_data
-        st.markdown("---")
-        render_expansion_results(expansion_data)
-    elif 'expansion_results_data' in st.session_state:
-        # Show previous results if available (e.g., after download button rerun)
-        st.markdown("---")
-        render_expansion_results(st.session_state.expansion_results_data)
+    # Execute top-level fragment
+    expansion_controls_fragment()
+
     
-    st.markdown("---")
+    # MIDDLE LEVEL FRAGMENT: Expansion results table (only if we have data)
+    if hasattr(st.session_state, 'expansion_results_data') and st.session_state.expansion_results_data:
+        st.markdown("")
+        
+        @st.fragment
+        def expansion_results_fragment():
+            render_expansion_results(st.session_state.expansion_results_data)
+        
+        # Execute middle-level fragment
+        expansion_results_fragment()
+
+        st.markdown("")
+        st.markdown("")
+
+        # BOTTOM LEVEL FRAGMENT: Child codes detail (only if we have data)
+        @st.fragment 
+        def child_codes_detail_fragment():
+            render_child_codes_detail(st.session_state.expansion_results_data)
+        
+        # Execute bottom-level fragment
+        child_codes_detail_fragment()
+
+
+def render_individual_code_lookup():
+    """
+    Render individual SNOMED code lookup interface
     
-    # Individual lookup section
-    render_individual_code_lookup()
+    Provides a simple interface for testing single concept expansions
+    without requiring XML processing or cached EMIS lookup data.
+    """
+    st.markdown("### 🔍 Individual Code Lookup")
+    st.markdown("Test individual SNOMED concept expansion (no XML file required)")
     
-    st.markdown("---")
+    col1, col2, col3 = st.columns([2, 1, 1])
     
-    # Usage information
-    with st.expander("ℹ️ About NHS Terminology Server Integration", expanded=False):
-        st.markdown("""
-        ### How it works
-        
-        1. **Detection**: The system automatically detects SNOMED codes with `includechildren=True` in your XML
-        2. **Expansion**: Connects to NHS England Terminology Server to find all child concepts
-        3. **Enhancement**: Adds discovered child codes to your clinical data for complete coverage
-        
-        ### Use Cases
-        
-        - **Complete Code Lists**: Get all specific codes under a general concept
-        - **EMIS Implementation**: Know exactly which codes to add manually in EMIS
-        - **Clinical Accuracy**: Ensure no relevant codes are missed in searches
-        
-        ### Data Source
-        
-        - **NHS England Terminology Server**: Official FHIR R4 compliant server
-        - **SNOMED CT UK Edition**: Most current UK clinical terminology
-        - **System-to-System Authentication**: Secure automated access
-        
-        ### Limitations
-        
-        - Requires active internet connection
-        - Subject to NHS terminology server availability
-        - Large hierarchies may take time to expand
-        - Results cached for 24 hours to improve performance
-        """)
+    with col1:
+        snomed_code = st.text_input(
+            "SNOMED CT Code",
+            placeholder="e.g., 73211009",
+            help="Enter a SNOMED CT concept code for expansion testing"
+        )
+    
+    with col2:
+        include_inactive = st.checkbox(
+            "Include inactive",
+            value=False,
+            help="Include inactive/deprecated concepts in results"
+        )
+    
+    with col3:
+        use_cache = st.checkbox(
+            "Use cached results",
+            value=True,
+            help="Use previously cached results if available"
+        )
+    
+    if st.button("🔍 Lookup Code", type="primary"):
+        if snomed_code.strip():
+            try:
+                with st.spinner(f"Looking up {snomed_code}..."):
+                    client = get_terminology_client()
+                    result = client.expand_concept(snomed_code.strip(), include_inactive)
+                
+                if result and not result.error:
+                    st.success(f"✅ Found concept: **{result.original_display}**")
+                    
+                    if result.child_codes:
+                        st.info(f"📊 **{len(result.child_codes)} child concepts** discovered")
+                        
+                        # Create simple DataFrame for display
+                        child_data = []
+                        for child in result.child_codes:
+                            child_data.append({
+                                'Code': child['code'],
+                                'Display': child['display'],
+                                'Active': 'Yes' if not child.get('inactive', False) else 'No'
+                            })
+                        
+                        df = pd.DataFrame(child_data)
+                        st.dataframe(df, use_container_width=True)
+                    else:
+                        st.info("ℹ️ This concept has no child concepts")
+                
+                elif result and result.error:
+                    st.error(f"❌ Error: {result.error}")
+                else:
+                    st.error("❌ No result returned from terminology server")
+            
+            except Exception as e:
+                st.error(f"❌ Lookup failed: {str(e)}")
+        else:
+            st.warning("⚠️ Please enter a SNOMED CT code")

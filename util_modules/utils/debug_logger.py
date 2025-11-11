@@ -256,66 +256,72 @@ def render_debug_controls() -> None:
                     
                     debug_json = json.dumps(debug_info, indent=2, default=str)
                     
-                    st.download_button(
+                    from util_modules.export_handlers.ui_export_manager import UIExportManager
+                    export_manager = UIExportManager()
+                    export_manager.render_json_download_button(
+                        content=debug_json,
+                        filename=f"emis_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                         label="💾 Download Debug Info",
-                        data=debug_json,
-                        file_name=f"emis_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json"
+                        key="download_debug_info"
                     )
             
             # Cache Generation Section
             st.markdown("---")
             st.markdown("**⚡ Cache Generation**")
             
-            # Generate GitHub cache button
-            if st.button("🔨 Generate Cache"):
-                st.info("🔐 Cache will be encrypted using GZIP_TOKEN from secrets")
-                try:
-                    # Import required modules
-                    from .caching.lookup_cache import generate_cache_for_github
-                    import os
-                    
-                    # Get lookup table data
-                    lookup_df = st.session_state.get('lookup_df')
-                    snomed_code_col = st.session_state.get('snomed_code_col', 'SNOMED Code')
-                    emis_guid_col = st.session_state.get('emis_guid_col', 'EMIS GUID')
-                    version_info = st.session_state.get('lookup_version_info')
-                    
-                    # Log debug info to terminal
-                    if version_info:
-                        print(f"DEBUG - Version info found: {list(version_info.keys())}")
-                        if 'emis_version' in version_info:
-                            print(f"DEBUG - EMIS Version: {version_info['emis_version']}")
-                        else:
-                            print("DEBUG - Missing original EMIS version data - cache will have limited version info")
-                    else:
-                        print("DEBUG - No version info found in session state")
-                    
-                    if lookup_df is None or lookup_df.empty:
-                        st.error("❌ No lookup table loaded. Please check that the app has loaded the lookup table.")
-                    else:
-                        with st.spinner("Generating EMIS lookup cache for GitHub..."):
-                            # Create .cache directory if it doesn't exist
-                            cache_dir = ".cache"
-                            os.makedirs(cache_dir, exist_ok=True)
-                            
-                            # Generate the cache
-                            success = generate_cache_for_github(
-                                lookup_df=lookup_df,
-                                snomed_code_col=snomed_code_col,
-                                emis_guid_col=emis_guid_col,
-                                output_dir=cache_dir,
-                                version_info=version_info
-                            )
-                            
-                            if success:
-                                st.success("✅ Encrypted GitHub cache generated successfully!")
-                                st.info("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users.")
+            # Generate GitHub cache button as fragment
+            @st.fragment
+            def cache_generation_fragment():
+                if st.button("🔨 Generate Cache", key="generate_cache_btn"):
+                    st.info("🔐 Cache will be encrypted using GZIP_TOKEN from secrets")
+                    try:
+                        # Import required modules
+                        from .caching.lookup_cache import generate_cache_for_github
+                        import os
+                        
+                        # Get lookup table data
+                        lookup_df = st.session_state.get('lookup_df')
+                        snomed_code_col = st.session_state.get('snomed_code_col', 'SNOMED Code')
+                        emis_guid_col = st.session_state.get('emis_guid_col', 'EMIS GUID')
+                        version_info = st.session_state.get('lookup_version_info')
+                        
+                        # Log debug info to terminal
+                        if version_info:
+                            print(f"DEBUG - Version info found: {list(version_info.keys())}")
+                            if 'emis_version' in version_info:
+                                print(f"DEBUG - EMIS Version: {version_info['emis_version']}")
                             else:
-                                st.error("❌ Failed to generate GitHub cache")
-                
-                except Exception as e:
-                    st.error(f"❌ Cache generation failed: {str(e)}")
+                                print("DEBUG - Missing original EMIS version data - cache will have limited version info")
+                        else:
+                            print("DEBUG - No version info found in session state")
+                        
+                        if lookup_df is None or lookup_df.empty:
+                            st.error("❌ No lookup table loaded. Please check that the app has loaded the lookup table.")
+                        else:
+                            with st.spinner("Generating EMIS lookup cache for GitHub..."):
+                                # Create .cache directory if it doesn't exist
+                                cache_dir = ".cache"
+                                os.makedirs(cache_dir, exist_ok=True)
+                                
+                                # Generate the cache
+                                success = generate_cache_for_github(
+                                    lookup_df=lookup_df,
+                                    snomed_code_col=snomed_code_col,
+                                    emis_guid_col=emis_guid_col,
+                                    output_dir=cache_dir,
+                                    version_info=version_info
+                                )
+                                
+                                if success:
+                                    st.toast("✅ Encrypted GitHub cache generated successfully!", icon="🎉")
+                                    st.info("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users.")
+                                else:
+                                    st.error("❌ Failed to generate GitHub cache")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Cache generation failed: {str(e)}")
+            
+            cache_generation_fragment()
             
             st.caption("💡 Generates pre-built cache for GitHub deployment - saves build time for all users")
             
@@ -323,18 +329,22 @@ def render_debug_controls() -> None:
             st.markdown("---")
             st.markdown("**🧪 Test Runner**")
             
-            # Performance tests
-            if st.button("⚡ Performance Tests"):
-                with st.spinner("Running performance tests..."):
-                    success, output = run_test_suite('test_performance')
-                
-                if success:
-                    st.success("✅ Performance tests passed!")
-                else:
-                    st.error("❌ Performance tests failed!")
-                
-                with st.expander("📄 Performance Test Output"):
-                    st.code(output)
+            # Performance tests as fragment
+            @st.fragment
+            def performance_tests_fragment():
+                if st.button("⚡ Performance Tests", key="performance_tests_btn"):
+                    with st.spinner("Running performance tests..."):
+                        success, output = run_test_suite('test_performance')
+                    
+                    if success:
+                        st.toast("✅ Performance tests passed!", icon="🚀")
+                    else:
+                        st.error("❌ Performance tests failed!")
+                    
+                    with st.expander("📄 Performance Test Output", expanded=not success):
+                        st.code(output)
+            
+            performance_tests_fragment()
             
             st.caption("💡 Verify memory tracking, cloud environment detection, and performance optimization features")
 

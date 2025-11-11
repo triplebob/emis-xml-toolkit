@@ -450,16 +450,15 @@ class AsyncDataFrameRenderer:
         # Render DataFrame
         st.dataframe(df_to_show, width='stretch')
         
-        # Download option
-        if st.button(f"📥 Download {title} CSV", key=f"download_{df_id}"):
-            csv = filtered_df.to_csv(index=False)
-            st.download_button(
-                label=f"Download {title}.csv",
-                data=csv,
-                file_name=f"{title.lower().replace(' ', '_')}.csv",
-                mime="text/csv",
-                key=f"download_button_{df_id}"
-            )
+        # Download option using centralized export manager
+        from util_modules.export_handlers.ui_export_manager import UIExportManager
+        export_manager = UIExportManager()
+        export_manager.render_download_button(
+            data=filtered_df,
+            label=f"📥 Download {title} CSV",
+            filename_prefix=title.lower().replace(' ', '_'),
+            key=f"download_{df_id}"
+        )
     
     def clear_cache(self, df_id: Optional[str] = None):
         """Clear cached DataFrames."""

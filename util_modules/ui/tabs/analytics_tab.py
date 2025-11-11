@@ -422,29 +422,43 @@ def render_analytics_tab():
             # Add a spacer to balance the layout
             st.write("")
     
-    # Export Functionality
+    # Export Functionality as fragments
     st.write("### 📤 Export Analytics")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Use export manager for enhanced JSON export
-        from ...export_handlers.ui_export_manager import UIExportManager
-        export_manager = UIExportManager()
-        export_manager.render_enhanced_json_export(audit_stats)
+        # Enhanced JSON export as fragment
+        @st.fragment
+        def json_export_fragment():
+            from util_modules.export_handlers.ui_export_manager import UIExportManager
+            export_manager = UIExportManager()
+            export_manager.render_enhanced_json_export(audit_stats)
+        
+        json_export_fragment()
     
     with col2:
-        # Export summary report
-        from ...utils.audit import create_validation_report
-        summary_report = create_validation_report(audit_stats)
-        st.download_button(
-            label="📋 Download Summary Report",
-            data=summary_report,
-            file_name=f"processing_report_{audit_stats['xml_stats']['filename']}.txt",
-            mime="text/plain"
-        )
+        # Summary report export as fragment
+        @st.fragment
+        def summary_report_fragment():
+            from ...utils.audit import create_validation_report
+            summary_report = create_validation_report(audit_stats)
+            from util_modules.export_handlers.ui_export_manager import UIExportManager
+            export_manager = UIExportManager()
+            export_manager.render_text_download_button(
+                content=summary_report,
+                filename=f"processing_report_{audit_stats['xml_stats']['filename']}.txt",
+                label="📋 Download Summary Report",
+                key="download_summary_report"
+            )
+        
+        summary_report_fragment()
     
     with col3:
-        # Use export manager for proper analytics export
-        from ...export_handlers.ui_export_manager import UIExportManager
-        export_manager = UIExportManager()
-        export_manager.render_analytics_export(audit_stats)
+        # Analytics export as fragment
+        @st.fragment
+        def analytics_export_fragment():
+            from util_modules.export_handlers.ui_export_manager import UIExportManager
+            export_manager = UIExportManager()
+            export_manager.render_analytics_export(audit_stats)
+        
+        analytics_export_fragment()

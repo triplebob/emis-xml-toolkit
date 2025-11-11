@@ -392,30 +392,6 @@ def render_detailed_rules_tab(analysis, xml_filename):
             # Legacy analysis - filter reports to get searches only
             search_only_reports = ReportClassifier.filter_searches_only(analysis.reports)
         
-        # Debug information (only if debug mode is enabled)
-        if st.session_state.get('debug_mode', False):
-            st.write(f"Debug: Total reports before filtering: {len(analysis.reports)}")
-            st.write(f"Debug: Search reports after filtering: {len(search_only_reports)}")
-            
-            # Handle duplicate report names
-            name_counts = {}
-            for r in analysis.reports:
-                name = r.name
-                if name not in name_counts:
-                    name_counts[name] = []
-                name_counts[name].append(r)
-            
-            duplicates = {name: reports for name, reports in name_counts.items() if len(reports) > 1}
-            if duplicates:
-                st.write("Debug: Found duplicate names:")
-                for name, reports in duplicates.items():
-                    st.write(f"  '{name}' appears {len(reports)} times:")
-                    for r in reports:
-                        classification = ReportClassifier.classify_report_type(r)
-                        is_list_report = hasattr(r, 'is_list_report') and r.is_list_report
-                        is_actual_search = ReportClassifier.is_actual_search(r)
-                        parent_guid = getattr(r, 'parent_guid', 'None')
-                        st.write(f"    - ID: {r.id}, Classification: {classification}, is_list_report: {is_list_report}, is_actual_search: {is_actual_search}, parent_guid: {parent_guid}")
             
         
         render_detailed_rules(search_only_reports, analysis)
@@ -431,34 +407,37 @@ def render_detailed_rules_tab(analysis, xml_filename):
         st.markdown("---")
         st.markdown("**📊 Export Analysis**")
         
-        # LAZY export generation - only when button is clicked
-        if st.button("📥 Rule Analysis (TXT)", help="Generate detailed rule analysis as text file", key="rule_analysis_export"):
-            try:
-                with st.spinner("Generating rule analysis report..."):
-                    from ...export_handlers.rule_export import RuleExportHandler
-                    rule_handler = RuleExportHandler()
-                    filename, report_text = rule_handler.generate_comprehensive_analysis_report(analysis, xml_filename)
-                    
-                    st.download_button(
-                        label="⬇️ Download Rule Analysis",
-                        data=report_text,
-                        file_name=filename,
-                        mime="text/plain",
-                        key="rule_analysis_download"
-                    )
-                    # Clear large content from memory immediately after download
-                    del report_text
-                    import gc
-                    gc.collect()
-                    st.success("✅ Rule analysis report generated successfully")
-            except Exception as e:
-                st.error(f"Rule analysis export failed: {e}")
+        # Rule analysis export as fragment to prevent full page reruns
+        @st.fragment
+        def rule_analysis_export_fragment():
+            # LAZY export generation - only when button is clicked
+            if st.button("📥 Rule Analysis (TXT)", help="Generate detailed rule analysis as text file", key="rule_analysis_export"):
+                try:
+                    with st.spinner("Generating rule analysis report..."):
+                        from ...export_handlers.rule_export import RuleExportHandler
+                        rule_handler = RuleExportHandler()
+                        filename, report_text = rule_handler.generate_comprehensive_analysis_report(analysis, xml_filename)
+                        
+                        from ...export_handlers.ui_export_manager import UIExportManager
+                        export_manager = UIExportManager()
+                        export_manager.render_text_download_button(
+                            content=report_text,
+                            filename=filename,
+                            label="⬇️ Download Rule Analysis",
+                            key="rule_analysis_download"
+                        )
+                        # Clear large content from memory immediately after download
+                        del report_text
+                        import gc
+                        gc.collect()
+                        st.success("✅ Rule analysis report generated successfully")
+                except Exception as e:
+                    st.error(f"Rule analysis export failed: {e}")
+        
+        # Execute the fragment
+        rule_analysis_export_fragment()
     
 
 
-# Import render_reports_tab from the main ui_tabs module since it's not extracted yet
-try:
-    from .report_tabs import render_reports_tab
-except ImportError:
-    def render_reports_tab(analysis):
-        st.info("🔄 Reports tab under refactoring - functionality will be restored shortly")
+# Import render_reports_tab from the report_tabs module
+from .report_tabs import render_reports_tab
