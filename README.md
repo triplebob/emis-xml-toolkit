@@ -120,7 +120,7 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 ## 🚀 Quick Start
 
 ### **Option 1: Use Live App (Recommended)**
-**[🌐 Access Live Application](https://emis-xml-toolkit.streamlit.app/)** - No installation required
+**[🌐 Access Live Application](https://clinxml.streamlit.app/)** - No installation required
 
 1. Upload your EMIS XML file
 2. View comprehensive analysis across 5 specialised tabs
@@ -374,10 +374,10 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 - **Namespace Handling**: [Namespace Documentation](docs/namespace-handling.md)
 
 ### **Live Application**
-**🌐 [https://emis-xml-toolkit.streamlit.app/](https://emis-xml-toolkit.streamlit.app/)**
+**🌐 [https://clinxml.streamlit.app/](https://clinxml.streamlit.app/)**
 
 ---
 
 *Last Updated: November 2025*  
 *Application Version: 2.2.3*  
-*Live Application: https://emis-xml-toolkit.streamlit.app/*
+*Live Application: https://clinxml.streamlit.app/*
