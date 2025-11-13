@@ -1,4 +1,4 @@
-# ⚕️ The Unofficial EMIS XML Toolkit
+![ClinXML - The Unofficial EMIS XML Toolkit](img/clinxml.svg)
 
 A comprehensive web application for analyzing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
 Transform complex EMIS XML documents into actionable insights for NHS healthcare teams.
@@ -84,6 +84,13 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 - Built-in filters and criteria analysis
 - Healthcare metrics and quality measurement
 - Enterprise reporting capabilities
+
+### **Patient Demographics & LSOA Filtering**
+- Future-proof LSOA detection supporting exisiting 2011 census data, with dynamic year support for future LSOA releases
+- Demographics-only XML analysis without clinical codes
+- EMIS-style phrasing for patient demographic criteria
+- Individual LSOA code display in exports
+- Grouped criteria analysis for shared IDs with different demographic values
 
 ---
 
@@ -238,7 +245,13 @@ streamlit run streamlit_app.py
 │   ├── modules.md                                      # Module architecture guide
 │   ├── nhs-terminology-server-integration.md           # NHS terminology server reference
 │   ├── emis-xml-patterns.md                            # EMIS XML pattern reference
-│   └── namespace-handling.md                           # Namespace handling guide
+│   ├── namespace-handling.md                           # Namespace handling guide
+│   └── theme-colors.md                                 # Custom theme colour reference guide
+├── img/                                                # 📁 **Application branding assets**
+│   ├── logo.svg                                        # ClinXML medical cross icon
+│   ├── clinxml.svg                                     # Full logo with text and tagline
+│   ├── clinxml_title.svg                               # Text-only logo
+│   └── favicon.ico                                     # Browser favicon
 └── tests/                                              # 📁 **Test suite**
     └── test_performance.py                             # Performance testing
 ```
@@ -366,5 +379,5 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 ---
 
 *Last Updated: November 2025*  
-*Application Version: 2.2.2*  
+*Application Version: 2.2.3*  
 *Live Application: https://emis-xml-toolkit.streamlit.app/*
