@@ -422,6 +422,24 @@ class JSONExportGenerator:
                         human_readable_description = f"{column_display} filtering"
                 else:
                     human_readable_description = f"{column_display} filtering"
+            elif col_filter.get('column_type') == 'patient_demographics':
+                # Patient demographics filters (LSOA codes, etc.)
+                action = "Include patients in" if col_filter.get('in_not_in') == "IN" else "Exclude patients in"
+                demographics_type = col_filter.get('demographics_type', 'LSOA')
+                grouped_values = col_filter.get('grouped_demographics_values', [])
+                demographics_count = col_filter.get('demographics_count', 0)
+                
+                if grouped_values and demographics_count > 1:
+                    human_readable_description = f"{action} {demographics_count} {demographics_type} areas"
+                else:
+                    # Single demographics code
+                    range_info = col_filter.get('range', {})
+                    from_data = range_info.get('from', {})
+                    value = from_data.get('value')
+                    if value:
+                        human_readable_description = f"{action} {demographics_type} area: {value}"
+                    else:
+                        human_readable_description = f"{action} specific {demographics_type} areas"
             elif emisinternal_value_sets:
                 # Handle EMISINTERNAL filters with enhanced context
                 column_name = column_check[0] if column_check else ''
@@ -565,6 +583,35 @@ class JSONExportGenerator:
                     "total_values": value_count,
                     "inclusion_logic": "INCLUDE" if col_filter.get('in_not_in') == "IN" else "EXCLUDE",
                     "values_handled_in": "clinical_codes_section"
+                }
+        
+        # Patient demographics constraints 
+        if col_filter.get('column_type') == 'patient_demographics':
+            demographics_type = col_filter.get('demographics_type', 'LSOA')
+            grouped_values = col_filter.get('grouped_demographics_values', [])
+            demographics_count = col_filter.get('demographics_count', 0)
+            
+            if grouped_values and demographics_count > 1:
+                # Multiple demographics areas
+                constraints["patient_demographics_filter"] = {
+                    "filter_type": "demographics_areas",
+                    "demographics_type": demographics_type,
+                    "area_codes": grouped_values,
+                    "area_count": demographics_count,
+                    "inclusion_logic": "INCLUDE" if col_filter.get('in_not_in') == "IN" else "EXCLUDE",
+                    "operator": col_filter.get('demographics_operator', 'OR')
+                }
+            else:
+                # Single demographics area
+                range_info = col_filter.get('range', {})
+                from_data = range_info.get('from', {})
+                value = from_data.get('value')
+                
+                constraints["patient_demographics_filter"] = {
+                    "filter_type": "demographics_area",
+                    "demographics_type": demographics_type,
+                    "area_code": value,
+                    "inclusion_logic": "INCLUDE" if col_filter.get('in_not_in') == "IN" else "EXCLUDE"
                 }
         
         # Text/string constraints

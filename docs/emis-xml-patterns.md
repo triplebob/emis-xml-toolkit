@@ -39,6 +39,11 @@ Technical reference for all currently encountered EMIS XML search patterns, stru
 - **SEX**: Patient gender
 - **PATIENT**: EMIS patient identifier
 
+### Patient Demographics Data
+- **LONDON_LOWER_AREA_2011**: Lower Layer Super Output Area codes for all of England and Wales (2011 Census)
+- **Note**: Despite "LONDON" in the column name, this covers all LSOA areas nationwide (naming quirk in EMIS)
+- **Purpose**: Index of Multiple Deprivation (IMD) analysis and patient demographics filtering
+
 ### Organization and Practice Data
 - **ORGANISATION_TERM**: Practice/organization names
 - **USUAL_GP.USER_NAME**: Assigned clinician details
@@ -1062,6 +1067,80 @@ EMISINTERNAL codes can appear in both main search criteria and linked criteria d
 - **Source Attribution**: Search vs report origin tracking
 - **Configurable Integration**: User-controlled report code inclusion
 - **Filter Preservation**: Clinical code filtering independent of structure analysis
+
+## Patient Demographics and Area-Based Filtering Patterns
+
+### Lower Layer Super Output Area (LSOA) Filtering
+
+EMIS supports patient demographics filtering using Office for National Statistics Lower Layer Super Output Areas for Index of Multiple Deprivation (IMD) analysis and population health studies. Despite the "LONDON" prefix in the column name, this system covers all LSOA areas across England and Wales.
+
+#### Pattern Structure
+```xml
+<criteriaGroup>
+  <definition>
+    <memberOperator>OR</memberOperator>
+    <criteria>
+      <criterion>
+        <id>49b44815-002d-4ab7-adc6-f17ab93bc275</id>
+        <table>PATIENTS</table>
+        <displayName>Patient Details</displayName>
+        <negation>false</negation>
+        <filterAttribute>
+          <columnValue>
+            <id>23e4e672-b3eb-4e9c-b6a0-8c5062ae416a</id>
+            <column>LONDON_LOWER_AREA_2011</column>
+            <displayName>Lower Layer Area (2011)</displayName>
+            <inNotIn>IN</inNotIn>
+            <singleValue>
+              <variable>
+                <value>E01006420</value>
+              </variable>
+            </singleValue>
+          </columnValue>
+        </filterAttribute>
+      </criterion>
+    </criteria>
+    <!-- Additional criteria for each LSOA code -->
+    <criteria>
+      <criterion>
+        <!-- Same criterion ID, different LSOA value -->
+        <id>49b44815-002d-4ab7-adc6-f17ab93bc275</id>
+        <table>PATIENTS</table>
+        <filterAttribute>
+          <columnValue>
+            <column>LONDON_LOWER_AREA_2011</column>
+            <inNotIn>IN</inNotIn>
+            <singleValue>
+              <variable>
+                <value>E01018749</value>
+              </variable>
+            </singleValue>
+          </columnValue>
+        </filterAttribute>
+      </criterion>
+    </criteria>
+  </definition>
+  <actionIfTrue>SELECT</actionIfTrue>
+  <actionIfFalse>REJECT</actionIfFalse>
+</criteriaGroup>
+```
+
+### Key Characteristics
+- **Shared Criterion ID**: Multiple criteria share the same criterion ID but contain different LSOA values
+- **OR Logic**: `memberOperator>OR` allows inclusion of patients from any specified area
+- **Variable Values**: LSOA codes stored as simple string variables (no temporal or numeric processing)
+- **Column Type**: `LONDON_LOWER_AREA_2011` using 2011 Census boundaries (covers all England and Wales)
+
+### LSOA Code Format
+- **Pattern**: E followed by 8 digits (e.g., E01006420, E01033756) 
+- **Geographic Scope**: Lower Layer Super Output Areas across England and Wales (2011 Census boundaries)
+- **Coverage**: Nationwide LSOA codes despite "LONDON" in column name
+- **Usage**: Index of Multiple Deprivation (IMD) studies, health inequality research, population health analysis
+
+### Implementation Notes
+- **Multiple Areas**: Each LSOA requires separate criterion within the same criteriaGroup
+- **Performance**: OR logic with multiple patient demographics criteria may impact query performance on large datasets
+- **Data Source**: LSOA codes derived from patient postcode data linked to ONS area boundaries
 
 ### Key Distinctions from Search XMLs
 1. **Purpose**: Reports focus on data presentation vs searches focus on population identification

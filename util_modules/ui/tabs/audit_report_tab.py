@@ -60,7 +60,18 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
     """
     
     if not xml_content:
-        st.info("📊 Upload and process an XML file to see Audit Reports")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            📊 Upload and process an XML file to see Audit Reports
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     try:
@@ -69,7 +80,18 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
         analysis = st.session_state.get('search_analysis') or st.session_state.get('xml_structure_analysis')
         if analysis is None:
             st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
-            st.info("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.
+            </div>
+            """, unsafe_allow_html=True)
             return
         
         from ...core.report_classifier import ReportClassifier
@@ -94,41 +116,47 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
             st.toast(f"Found {audit_count} Audit Report{'s' if audit_count != 1 else ''}", icon="📊")
             cache_processed_data(toast_cache_key, True)
         
-        st.markdown("### 📊 Audit Reports Analysis")
-        st.markdown("Audit Reports provide organizational aggregation for quality monitoring and compliance tracking.")
-        
         if not audit_reports:
             st.info("📊 No Audit Reports found in this XML file")
             return
-        
-        # Audit Reports metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📊 Audit Reports", audit_count)
-        with col2:
-            # Count unique population references across all audit reports
-            all_populations = set()
-            for report in audit_reports:
-                if hasattr(report, 'population_references') and report.population_references:
-                    all_populations.update(report.population_references)
-            st.metric("🧑‍🤝‍🧑 Referenced Populations", len(all_populations), help="Total unique base searches referenced by all Audit Reports")
-        with col3:
-            # Count reports with additional criteria (non-PATIENTS table reports)
-            reports_with_criteria = 0
-            for report in audit_reports:
-                has_criteria = hasattr(report, 'criteria_groups') and report.criteria_groups
-                # Also check if it's not a simple PATIENTS table report
-                is_patients_only = (hasattr(report, 'custom_aggregate') and 
-                                  report.custom_aggregate and 
-                                  report.custom_aggregate.get('logical_table') == 'PATIENTS' and 
-                                  not has_criteria)
-                if has_criteria or not is_patients_only:
-                    reports_with_criteria += 1
-            st.metric("🔍 Reports with Additional Criteria", reports_with_criteria, help="Reports that apply additional filtering beyond organizational aggregation")
-        
-        # Audit Report browser
-        from .report_tabs import render_report_type_browser
-        render_report_type_browser(audit_reports, analysis, "Audit Report", "📊")
+
+        # 🔧 Audit Report Logic Browser - Fragmented expandable frame (prevents full reruns)
+        with st.expander("🔧 Audit Report Logic Browser", expanded=True):
+            @st.fragment
+            def audit_report_browser_fragment():
+                from .report_tabs import render_report_type_browser
+                render_report_type_browser(audit_reports, analysis, "Audit Report", "📊")
+            
+            audit_report_browser_fragment()
+
+        # 📊 Audit Reports Analysis - Collapsed expandable frame (not fragmented)
+        with st.expander("📊 Audit Reports Analysis", expanded=False):
+            st.markdown("Audit Reports provide organizational aggregation for quality monitoring and compliance tracking.")
+            
+            # Audit Reports metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📊 Audit Reports", audit_count)
+            with col2:
+                # Count unique population references across all audit reports
+                all_populations = set()
+                for report in audit_reports:
+                    if hasattr(report, 'population_references') and report.population_references:
+                        all_populations.update(report.population_references)
+                st.metric("🧑‍🤝‍🧑 Referenced Populations", len(all_populations), help="Total unique base searches referenced by all Audit Reports")
+            with col3:
+                # Count reports with additional criteria (non-PATIENTS table reports)
+                reports_with_criteria = 0
+                for report in audit_reports:
+                    has_criteria = hasattr(report, 'criteria_groups') and report.criteria_groups
+                    # Also check if it's not a simple PATIENTS table report
+                    is_patients_only = (hasattr(report, 'custom_aggregate') and 
+                                      report.custom_aggregate and 
+                                      report.custom_aggregate.get('logical_table') == 'PATIENTS' and 
+                                      not has_criteria)
+                    if has_criteria or not is_patients_only:
+                        reports_with_criteria += 1
+                st.metric("🔍 Reports with Additional Criteria", reports_with_criteria, help="Reports that apply additional filtering beyond organizational aggregation")
         
         # PERFORMANCE: Skip cleanup for tab-level functions - only needed for large reports
         pass
@@ -222,39 +250,42 @@ def render_audit_report_details(report):
     analysis = st.session_state.get('search_analysis')
     
     # Aggregation Configuration Section
-    st.markdown("### 📊 Aggregation Configuration")
+    with st.container(border=True):
+        st.markdown("**📊 Aggregation Configuration**")
+        
+        if hasattr(report, 'custom_aggregate') and report.custom_aggregate:
+            agg = report.custom_aggregate
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                logical_table = agg.get('logical_table', 'N/A')
+                st.markdown(f"**Logical Table:** {logical_table}")
+                result = agg.get('result', {})
+                result_source = result.get('source', 'N/A')
+                calculation_type = result.get('calculation_type', 'N/A')
+                
+                # Capitalize first letter but preserve special cases like 'N/A'
+                if result_source and result_source != 'N/A':
+                    result_source = result_source.capitalize()
+                if calculation_type and calculation_type != 'N/A':
+                    calculation_type = calculation_type.capitalize()
+                    
+                st.markdown(f"**Result Source:** {result_source}")
+                st.markdown(f"**Calculation Type:** {calculation_type}")
+            
+            with col2:
+                # Show member search count
+                pop_count = len(report.population_references) if hasattr(report, 'population_references') else 0
+                st.markdown(f"**Member Searches:** {pop_count}")
+                
+                # Show if it has additional criteria
+                has_criteria = hasattr(report, 'criteria_groups') and report.criteria_groups
+                criteria_type = "Complex (with additional criteria)" if has_criteria else "Simple (organizational only)"
+                st.markdown(f"**Type:** {criteria_type}")
     
+    # Dynamic Grouping Section (outside the bordered container)
     if hasattr(report, 'custom_aggregate') and report.custom_aggregate:
         agg = report.custom_aggregate
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            logical_table = agg.get('logical_table', 'N/A')
-            st.markdown(f"**Logical Table:** {logical_table}")
-            result = agg.get('result', {})
-            result_source = result.get('source', 'N/A')
-            calculation_type = result.get('calculation_type', 'N/A')
-            
-            # Capitalize first letter but preserve special cases like 'N/A'
-            if result_source and result_source != 'N/A':
-                result_source = result_source.capitalize()
-            if calculation_type and calculation_type != 'N/A':
-                calculation_type = calculation_type.capitalize()
-                
-            st.markdown(f"**Result Source:** {result_source}")
-            st.markdown(f"**Calculation Type:** {calculation_type}")
-        
-        with col2:
-            # Show member search count
-            pop_count = len(report.population_references) if hasattr(report, 'population_references') else 0
-            st.markdown(f"**Member Searches:** {pop_count}")
-            
-            # Show if it has additional criteria
-            has_criteria = hasattr(report, 'criteria_groups') and report.criteria_groups
-            criteria_type = "Complex (with additional criteria)" if has_criteria else "Simple (organizational only)"
-            st.markdown(f"**Type:** {criteria_type}")
-        
-        # Dynamic Grouping Section
         groups = agg.get('groups', [])
         if groups:
             group_columns = []
@@ -288,7 +319,18 @@ def render_audit_report_details(report):
                     grouping_type = "Temporal Grouping"
             
             st.markdown(f"### 📋 {grouping_type}")
-            st.info(f"Results grouped by: {', '.join(group_columns)}")
+            st.markdown(f"""
+            <div style="
+                background-color: #5B2758;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                Results grouped by: {', '.join(group_columns)}
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("No aggregation configuration found")
     
@@ -297,7 +339,18 @@ def render_audit_report_details(report):
         member_searches = get_member_search_names(report, analysis)
         if member_searches:
             st.markdown(f"### 🧑‍🤝‍🧑 Member Searches ({len(member_searches)} searches)")
-            st.info("This Audit Report combines results from the following base searches:")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                This Audit Report combines results from the following base searches:
+            </div>
+            """, unsafe_allow_html=True)
             
             with st.expander("📋 View All Member Searches", expanded=False):
                 for i, search_name in enumerate(member_searches, 1):
@@ -480,7 +533,18 @@ def render_audit_report_details(report):
         logical_table = report.custom_aggregate.get('logical_table', '')
         if logical_table == 'PATIENTS':
             st.markdown("### ℹ️ Simple Organizational Report")
-            st.info("This Audit Report performs pure organizational aggregation without additional clinical criteria.")
+            st.markdown("""
+            <div style="
+                background-color: #5B2758;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                This Audit Report performs pure organizational aggregation without additional clinical criteria.
+            </div>
+            """, unsafe_allow_html=True)
         else:
             st.markdown("### ℹ️ No Additional Criteria")
             st.info(f"This Audit Report uses the {logical_table} table but does not apply additional filtering criteria.")
@@ -520,7 +584,6 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
         st.session_state[rendering_state_key] = False
     
     # Efficient side-by-side layout like Search Analysis tab
-    st.markdown("---")
     
     # Use columns for folder selection, report selection, and export buttons
     col1, col2, col3 = st.columns([3, 4, 0.8])
@@ -626,7 +689,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
         if selected_folder:
             st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
         elif analysis.folders:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s from all folders")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                {icon} Showing all {len(folder_reports)} {report_type_name}s from all folders
+            </div>
+            """, unsafe_allow_html=True)
         else:
             st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
     
@@ -671,67 +745,36 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
                 export_col1, export_col2 = st.columns(2)
                 
                 with export_col1:
-                    # Cached Excel export to prevent regeneration
-                    excel_cache_key = f"excel_export_cache_{selected_report.id}"
-                    
-                    # Only generate if not already cached
-                    if excel_cache_key not in st.session_state:
-                        try:
-                            from ...export_handlers.report_export import ReportExportHandler
-                            export_handler = ReportExportHandler(analysis)
-                            filename, content = export_handler.generate_report_export(selected_report)
-                            
-                            # Cache the export data
-                            st.session_state[excel_cache_key] = {
-                                'filename': filename,
-                                'content': content
-                            }
-                            
-                            # Clean up handler
-                            del export_handler
-                            
-                        except Exception as e:
-                            st.session_state[excel_cache_key] = {'error': str(e)}
-                    
-                    # Show download button or error using centralized export manager
-                    cached_data = st.session_state[excel_cache_key]
+                    # Truly lazy Excel export using centralized UIExportManager
                     from ...export_handlers.ui_export_manager import UIExportManager
-                    export_manager = UIExportManager()
-                    export_manager.render_cached_excel_download(cached_data, selected_report.name, selected_report.id)
+                    export_manager = UIExportManager(analysis)
+                    export_manager.render_lazy_excel_export_button(
+                        selected_report, selected_report.name, selected_report.id, "report"
+                    )
                 
                 with export_col2:
-                    # Cached JSON export to prevent regeneration
-                    json_cache_key = f"json_export_cache_{selected_report.id}"
-                    
-                    # Only generate if not already cached
-                    if json_cache_key not in st.session_state:
-                        try:
-                            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-                            from ...export_handlers.report_json_export_generator import ReportJSONExportGenerator
-                            json_generator = ReportJSONExportGenerator(analysis)
-                            json_filename, json_content = json_generator.generate_report_json(selected_report, xml_filename)
-                            
-                            # Cache the export data
-                            st.session_state[json_cache_key] = {
-                                'filename': json_filename,
-                                'content': json_content
-                            }
-                            
-                            # Clean up generator
-                            del json_generator
-                            
-                        except Exception as e:
-                            st.session_state[json_cache_key] = {'error': str(e)}
-                    
-                    # Show download button or error
-                    cached_data = st.session_state[json_cache_key]
+                    # Truly lazy JSON export using centralized UIExportManager
                     from ...export_handlers.ui_export_manager import UIExportManager
-                    export_manager = UIExportManager()
-                    export_manager.render_cached_json_download(cached_data, selected_report.name, selected_report.id)
+                    export_manager = UIExportManager(analysis)
+                    xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                    export_manager.render_lazy_json_export_button(
+                        selected_report, selected_report.name, selected_report.id, "report", xml_filename
+                    )
             
             # Update status indicator now that export buttons are ready
             with status_placeholder.container():
-                st.success("✅ Rendering Complete")
+                st.markdown("""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    ✓&nbsp;&nbsp;Rendering Complete
+                </div>
+                """, unsafe_allow_html=True)
                 
         else:
             # Show disabled buttons when no report selected

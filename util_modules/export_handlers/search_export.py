@@ -1604,6 +1604,38 @@ class SearchExportHandler:
                 else:
                     summaries.append("Numeric value range filter")
                     
+            elif any('LOWER_AREA' in col for col in column_upper_list):
+                # For patient demographics filtering columns (LSOA codes)
+                # Check both value_sets and grouped demographic values
+                total_areas = sum(len(vs.get('values', [])) for vs in all_value_sets)
+                
+                # Also check for grouped demographics values (from analyzer)
+                grouped_demographics = []
+                for filter_item in filters:
+                    grouped_demographics.extend(filter_item.get('grouped_demographics_values', []))
+                
+                if grouped_demographics:
+                    total_areas = len(grouped_demographics)
+                
+                if total_areas > 0:
+                    # Determine the year from column name for context
+                    year_match = None
+                    for col in column_upper_list:
+                        if '2011' in col:
+                            year_match = '2011'
+                        elif '2015' in col:
+                            year_match = '2015'
+                        elif '2021' in col:
+                            year_match = '2021'
+                        elif '2031' in col:
+                            year_match = '2031'
+                        break
+                    
+                    year_text = f" ({year_match} boundaries)" if year_match else ""
+                    summaries.append(f"Include {total_areas} Lower Layer Super Output Areas{year_text}")
+                else:
+                    summaries.append("Include specified patient demographic areas (LSOA)")
+                    
             elif emisinternal_value_sets:
                 # For EMISINTERNAL columns, show aggregated summary
                 total_internal_values = sum(len(vs.get('values', [])) for vs in emisinternal_value_sets)
@@ -1634,11 +1666,11 @@ class SearchExportHandler:
         return summaries
     
     def _generate_additional_filter_details(self, main_filters):
-        """Generate detailed breakdown of EMISINTERNAL filters matching UI Additional Filters section"""
+        """Generate detailed breakdown of EMISINTERNAL and patient demographics filters matching UI Additional Filters section"""
         details = []
         
-        # Collect all EMISINTERNAL value sets from all filters
-        emisinternal_data = []
+        # Collect all relevant value sets from all filters (EMISINTERNAL + patient demographics)
+        filter_data = []
         for cf in main_filters:
             column = cf.get('column', '')
             column_name = column.upper() if isinstance(column, str) else column[0].upper() if column else ''
@@ -1647,18 +1679,35 @@ class SearchExportHandler:
             
             value_sets = cf.get('value_sets', [])
             for vs in value_sets:
-                if vs.get('code_system') == 'EMISINTERNAL':
+                # Include EMISINTERNAL and patient demographics filters
+                if vs.get('code_system') == 'EMISINTERNAL' or 'LOWER_AREA' in column_name:
                     for value in vs.get('values', []):
-                        emisinternal_data.append({
+                        filter_data.append({
                             'column_name': column_name,
                             'column_display_name': column_display_name,
                             'in_not_in': in_not_in,
                             'value': value,
-                            'vs_description': vs.get('description', '')
+                            'vs_description': vs.get('description', ''),
+                            'code_system': vs.get('code_system', ''),
+                            'is_patient_demographics': 'LOWER_AREA' in column_name
                         })
+            
+            # Also handle grouped patient demographics values (from analyzer)
+            if 'LOWER_AREA' in column_name:
+                grouped_demographics = cf.get('grouped_demographics_values', [])
+                for area_code in grouped_demographics:
+                    filter_data.append({
+                        'column_name': column_name,
+                        'column_display_name': column_display_name,
+                        'in_not_in': in_not_in,
+                        'value': {'value': area_code, 'display_name': area_code},
+                        'vs_description': '',
+                        'code_system': '',
+                        'is_patient_demographics': True
+                    })
         
         # Generate individual filter descriptions
-        for item in emisinternal_data:
+        for item in filter_data:
             display_name = item['value'].get('display_name', '')
             code_value = item['value'].get('value', '')
             column_name = item['column_name']
@@ -1667,6 +1716,24 @@ class SearchExportHandler:
             
             # Determine action based on in_not_in value
             action = "Include" if in_not_in == "IN" else "Exclude"
+            
+            # Handle patient demographics filters (LSOA codes) with EMIS-style phrasing
+            if item.get('is_patient_demographics', False):
+                # Extract year from column name
+                year_match = None
+                if '2011' in column_name:
+                    year_match = '2011'
+                elif '2015' in column_name:
+                    year_match = '2015'
+                elif '2021' in column_name:
+                    year_match = '2021'
+                elif '2031' in column_name:
+                    year_match = '2031'
+                
+                year_text = f" ({year_match})" if year_match else ""
+                # Simplified EMIS phrasing: "Include Patients where the Lower Layer Area (2011) is: E01012571"
+                details.append(f"{action} Patients where the Lower Layer Area{year_text} is: {code_value}")
+                continue
             
             # Determine proper context based on column name
             if column_name == 'ISSUE_METHOD':
@@ -1771,6 +1838,30 @@ class SearchExportHandler:
                 
         elif any(col in ['AUTHOR', 'CURRENTLY_CONTRACTED'] for col in column_check):
             return "User authorization: Active users only"
+            
+        elif column_filter.get('column_type') == 'patient_demographics':
+            # Patient demographics filters (LSOA codes, etc.)
+            action = "Include patients in" if in_not_in == "IN" else "Exclude patients in"
+            demographics_type = column_filter.get('demographics_type', 'LSOA')
+            grouped_values = column_filter.get('grouped_demographics_values', [])
+            demographics_count = column_filter.get('demographics_count', 0)
+            
+            if grouped_values and demographics_count > 1:
+                if demographics_count <= 5:
+                    # Show all codes if 5 or fewer
+                    area_list = ", ".join(grouped_values)
+                    return f"{action} {demographics_type} areas: {area_list}"
+                else:
+                    # Show summary with count
+                    return f"{action} {demographics_count} {demographics_type} areas"
+            else:
+                # Single demographics code
+                if range_info:
+                    from_data = range_info.get('from', {})
+                    value = from_data.get('value')
+                    if value:
+                        return f"{action} {demographics_type} area: {value}"
+                return f"{action} specific {demographics_type} areas"
             
         else:
             # Check for EMISINTERNAL filters and use enhanced context

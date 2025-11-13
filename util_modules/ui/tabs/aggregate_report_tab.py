@@ -88,26 +88,32 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
             st.toast(f"Found {aggregate_count} Aggregate Report{'s' if aggregate_count != 1 else ''}", icon="📈")
             cache_processed_data(toast_cache_key, True)
         
-        st.markdown("### 📈 Aggregate Reports Analysis")
-        st.markdown("Aggregate Reports provide statistical cross-tabulation and analysis with built-in filtering capabilities.")
-        
         if not aggregate_reports:
             st.info("📈 No Aggregate Reports found in this XML file")
             return
-        
-        # Aggregate Reports metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📈 Aggregate Reports", aggregate_count)
-        with col2:
-            reports_with_stats = sum(1 for report in aggregate_reports if hasattr(report, 'statistical_groups') and report.statistical_groups)
-            st.metric("📊 With Statistical Setup", reports_with_stats)
-        with col3:
-            reports_with_builtin_filters = sum(1 for report in aggregate_reports if hasattr(report, 'aggregate_criteria') and report.aggregate_criteria)
-            st.metric("🔍 With Built-in Filters", reports_with_builtin_filters)
-        
-        # Aggregate Report browser
-        render_report_type_browser(aggregate_reports, analysis, "Aggregate Report", "📈")
+
+        # 🔧 Aggregate Report Logic Browser - Fragmented expandable frame (prevents full reruns)
+        with st.expander("🔧 Aggregate Report Logic Browser", expanded=True):
+            @st.fragment
+            def aggregate_report_browser_fragment():
+                render_report_type_browser(aggregate_reports, analysis, "Aggregate Report", "📈")
+            
+            aggregate_report_browser_fragment()
+
+        # 📈 Aggregate Reports Analysis - Collapsed expandable frame (not fragmented)
+        with st.expander("📈 Aggregate Reports Analysis", expanded=False):
+            st.markdown("Aggregate Reports provide statistical cross-tabulation and analysis with built-in filtering capabilities.")
+            
+            # Aggregate Reports metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📈 Aggregate Reports", aggregate_count)
+            with col2:
+                reports_with_stats = sum(1 for report in aggregate_reports if hasattr(report, 'statistical_groups') and report.statistical_groups)
+                st.metric("📊 With Statistical Setup", reports_with_stats)
+            with col3:
+                reports_with_builtin_filters = sum(1 for report in aggregate_reports if hasattr(report, 'aggregate_criteria') and report.aggregate_criteria)
+                st.metric("🔍 With Built-in Filters", reports_with_builtin_filters)
         
         # PERFORMANCE: Skip cleanup for tab-level functions - only needed for large reports
         pass
@@ -149,7 +155,6 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
         st.session_state[rendering_state_key] = False
     
     # Efficient side-by-side layout like Search Analysis tab
-    st.markdown("---")
     
     # Use columns for folder selection, report selection, and export buttons
     col1, col2, col3 = st.columns([3, 4, 0.8])
@@ -255,7 +260,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
         if selected_folder:
             st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
         elif analysis.folders:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s from all folders")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                {icon} Showing all {len(folder_reports)} {report_type_name}s from all folders
+            </div>
+            """, unsafe_allow_html=True)
         else:
             st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
     
@@ -300,67 +316,36 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
                 export_col1, export_col2 = st.columns(2)
                 
                 with export_col1:
-                    # Cached Excel export to prevent regeneration
-                    excel_cache_key = f"excel_export_cache_{selected_report.id}"
-                    
-                    # Only generate if not already cached
-                    if excel_cache_key not in st.session_state:
-                        try:
-                            from ...export_handlers.report_export import ReportExportHandler
-                            export_handler = ReportExportHandler(analysis)
-                            filename, content = export_handler.generate_report_export(selected_report)
-                            
-                            # Cache the export data
-                            st.session_state[excel_cache_key] = {
-                                'filename': filename,
-                                'content': content
-                            }
-                            
-                            # Clean up handler
-                            del export_handler
-                            
-                        except Exception as e:
-                            st.session_state[excel_cache_key] = {'error': str(e)}
-                    
-                    # Show download button or error using centralized export manager
-                    cached_data = st.session_state[excel_cache_key]
+                    # Truly lazy Excel export using centralized UIExportManager
                     from ...export_handlers.ui_export_manager import UIExportManager
-                    export_manager = UIExportManager()
-                    export_manager.render_cached_excel_download(cached_data, selected_report.name, selected_report.id)
+                    export_manager = UIExportManager(analysis)
+                    export_manager.render_lazy_excel_export_button(
+                        selected_report, selected_report.name, selected_report.id, "report"
+                    )
                 
                 with export_col2:
-                    # Cached JSON export to prevent regeneration
-                    json_cache_key = f"json_export_cache_{selected_report.id}"
-                    
-                    # Only generate if not already cached
-                    if json_cache_key not in st.session_state:
-                        try:
-                            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-                            from ...export_handlers.report_json_export_generator import ReportJSONExportGenerator
-                            json_generator = ReportJSONExportGenerator(analysis)
-                            json_filename, json_content = json_generator.generate_report_json(selected_report, xml_filename)
-                            
-                            # Cache the export data
-                            st.session_state[json_cache_key] = {
-                                'filename': json_filename,
-                                'content': json_content
-                            }
-                            
-                            # Clean up generator
-                            del json_generator
-                            
-                        except Exception as e:
-                            st.session_state[json_cache_key] = {'error': str(e)}
-                    
-                    # Show download button or error
-                    cached_data = st.session_state[json_cache_key]
+                    # Truly lazy JSON export using centralized UIExportManager
                     from ...export_handlers.ui_export_manager import UIExportManager
-                    export_manager = UIExportManager()
-                    export_manager.render_cached_json_download(cached_data, selected_report.name, selected_report.id)
+                    export_manager = UIExportManager(analysis)
+                    xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                    export_manager.render_lazy_json_export_button(
+                        selected_report, selected_report.name, selected_report.id, "report", xml_filename
+                    )
             
             # Update status indicator now that export buttons are ready
             with status_placeholder.container():
-                st.success("✅ Rendering Complete")
+                st.markdown("""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    ✓&nbsp;&nbsp;Rendering Complete
+                </div>
+                """, unsafe_allow_html=True)
                 
         else:
             # Show disabled buttons when no report selected
@@ -709,83 +694,126 @@ def render_aggregate_report_details(report):
     statistical_groups_count = len(report.statistical_groups) if hasattr(report, 'statistical_groups') and report.statistical_groups else 0
     _render_cached_aggregate_report_content(report.id, report.name, aggregate_groups_count, statistical_groups_count)
     
-    st.markdown("### 📈 Statistical Configuration")
-    
-    # Aggregate groups
-    if report.aggregate_groups:
-        st.markdown("#### 📊 Aggregate Groups")
-        for i, group in enumerate(report.aggregate_groups, 1):
-            with st.expander(f"Group {i}: {group.get('display_name', 'Unnamed')}", expanded=False):
-                st.markdown(f"**Grouping Columns:** {', '.join(group.get('grouping_columns', []))}")
-                st.markdown(f"**Sub Totals:** {'Yes' if group.get('sub_totals', False) else 'No'}")
-                st.markdown(f"**Repeat Header:** {'Yes' if group.get('repeat_header', False) else 'No'}")
-    
-    # Statistical setup with resolved names (enhanced 2025-09-18)
+    # Statistical setup in nested bordered container
     if report.statistical_groups:
-        st.markdown("#### 📈 Statistical Setup")
-        
-        # Display statistical setup with resolved names
-        rows_group = next((g for g in report.statistical_groups if g.get('type') == 'rows'), None)
-        cols_group = next((g for g in report.statistical_groups if g.get('type') == 'columns'), None)
-        result_group = next((g for g in report.statistical_groups if g.get('type') == 'result'), None)
-        
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            if rows_group:
-                group_name = rows_group.get('group_name', f"Group {rows_group.get('group_id', 'Unknown')}")
-                st.info(f"**Rows:** {group_name}")
-            else:
-                st.warning("**Rows:** Not configured")
-        
-        with col2:
-            if cols_group:
-                group_name = cols_group.get('group_name', f"Group {cols_group.get('group_id', 'Unknown')}")
-                st.info(f"**Columns:** {group_name}")
-            else:
-                st.warning("**Columns:** Not configured")
-        
-        with col3:
-            if result_group:
-                calc_type = result_group.get('calculation_type', 'count')
-                source = result_group.get('source', 'record')
-                
-                # Determine what we're counting based on logical table and criteria
-                count_of_what = "Records"  # Default
-                
-                if hasattr(report, 'logical_table'):
-                    logical_table = getattr(report, 'logical_table', '')
-                    if logical_table == 'EVENTS':
-                        count_of_what = "Clinical Codes"
-                    elif logical_table == 'MEDICATION_ISSUES':
-                        count_of_what = "Medication Issues"
-                    elif logical_table == 'MEDICATION_COURSES':
-                        count_of_what = "Medication Courses"
-                    elif logical_table == 'PATIENTS':
-                        count_of_what = "Patients"
-                    elif logical_table:
-                        count_of_what = logical_table.replace('_', ' ').title()
-                
-                # Check if we can get more specific from criteria
-                if hasattr(report, 'aggregate_criteria') and report.aggregate_criteria:
-                    criteria_groups = report.aggregate_criteria.get('criteria_groups', [])
-                    for group in criteria_groups:
-                        for criterion in group.get('criteria', []):
-                            display_name = criterion.get('display_name', '')
-                            if 'Clinical Codes' in display_name:
-                                count_of_what = "Clinical Codes"
-                            elif 'Medication' in display_name:
-                                count_of_what = "Medications"
-                            break
-                
-                result_text = f"{calc_type.title()} of {count_of_what}"
-                st.success(f"**Result:** {result_text}")
-            else:
-                st.error("**Result:** Not configured")
+        with st.container(border=True):
+            st.markdown("**📈 Statistical Configuration**")
+            
+            # Display statistical setup with resolved names
+            rows_group = next((g for g in report.statistical_groups if g.get('type') == 'rows'), None)
+            cols_group = next((g for g in report.statistical_groups if g.get('type') == 'columns'), None)
+            result_group = next((g for g in report.statistical_groups if g.get('type') == 'result'), None)
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                if rows_group:
+                    group_name = rows_group.get('group_name', f"Group {rows_group.get('group_id', 'Unknown')}")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        <strong>Rows:</strong> {group_name}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("**Rows:** Not configured")
+            
+            with col2:
+                if cols_group:
+                    group_name = cols_group.get('group_name', f"Group {cols_group.get('group_id', 'Unknown')}")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        <strong>Columns:</strong> {group_name}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("**Columns:** Not configured")
+            
+            with col3:
+                if result_group:
+                    calc_type = result_group.get('calculation_type', 'count')
+                    source = result_group.get('source', 'record')
+                    
+                    # Determine what we're counting based on logical table and criteria
+                    count_of_what = "Records"  # Default
+                    
+                    if hasattr(report, 'logical_table'):
+                        logical_table = getattr(report, 'logical_table', '')
+                        if logical_table == 'EVENTS':
+                            count_of_what = "Clinical Codes"
+                        elif logical_table == 'MEDICATION_ISSUES':
+                            count_of_what = "Medication Issues"
+                        elif logical_table == 'MEDICATION_COURSES':
+                            count_of_what = "Medication Courses"
+                        elif logical_table == 'PATIENTS':
+                            count_of_what = "Patients"
+                        elif logical_table:
+                            count_of_what = logical_table.replace('_', ' ').title()
+                    
+                    # Check if we can get more specific from criteria
+                    if hasattr(report, 'aggregate_criteria') and report.aggregate_criteria:
+                        criteria_groups = report.aggregate_criteria.get('criteria_groups', [])
+                        for group in criteria_groups:
+                            for criterion in group.get('criteria', []):
+                                display_name = criterion.get('display_name', '')
+                                if 'Clinical Codes' in display_name:
+                                    count_of_what = "Clinical Codes"
+                                elif 'Medication' in display_name:
+                                    count_of_what = "Medications"
+                                break
+                    
+                    result_text = f"{calc_type.title()} of {count_of_what}"
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        <strong>Result:</strong> {result_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.error("**Result:** Not configured")
+    
+    # Aggregate groups in collapsed expander (moved below Statistical Setup)
+    if report.aggregate_groups:
+        with st.expander("📊 Aggregate Groups", expanded=False):
+            for i, group in enumerate(report.aggregate_groups, 1):
+                with st.expander(f"Group {i}: {group.get('display_name', 'Unnamed')}", expanded=False):
+                    st.markdown(f"**Grouping Columns:** {', '.join(group.get('grouping_columns', []))}")
+                    st.markdown(f"**Sub Totals:** {'Yes' if group.get('sub_totals', False) else 'No'}")
+                    st.markdown(f"**Repeat Header:** {'Yes' if group.get('repeat_header', False) else 'No'}")
     
     # Display built-in criteria if present (enhanced 2025-09-18)
     if hasattr(report, 'aggregate_criteria') and report.aggregate_criteria:
         st.markdown("### 🔍 Built-in Report Filters")
-        st.info("This aggregate report has its own built-in criteria that filters the data before aggregation.")
+        st.markdown(f"""
+        <div style="
+            background-color: #5B2758;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            This aggregate report has its own built-in criteria that filters the data before aggregation.
+        </div>
+        """, unsafe_allow_html=True)
         
         # Use the same sophisticated rendering as regular searches
         from ...analysis.search_rule_visualizer import render_criteria_group

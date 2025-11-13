@@ -755,3 +755,162 @@ class UIExportManager:
                 mime="application/json",
                 key="download_analytics_json"
             )
+
+    # New truly lazy export methods - two-click pattern for all exports
+    def render_lazy_excel_export_button(self, export_object, object_name: str, object_id: str, 
+                                        export_type: str = "report", xml_filename: str = None) -> None:
+        """
+        Render truly lazy Excel export with two-click pattern:
+        Click 1: Generate button -> Creates Excel file
+        Click 2: Download button -> Downloads file and cleans up
+        
+        Args:
+            export_object: The object to export (report, search, etc.)
+            object_name: Display name for the object
+            object_id: Unique ID for the object
+            export_type: Type of export ("report", "search", etc.)
+            xml_filename: Optional XML filename for export naming
+        """
+        excel_cache_key = f'lazy_excel_{export_type}_{object_id}'
+        
+        if excel_cache_key not in st.session_state:
+            # Show generate button
+            if st.button("📊 Excel", help=f"Generate Excel export for: {object_name}", 
+                        key=f"generate_excel_{export_type}_{object_id}"):
+                
+                with st.spinner(f"Generating Excel export for {object_name}..."):
+                    try:
+                        if export_type == "report":
+                            from .report_export import ReportExportHandler
+                            export_handler = ReportExportHandler(self.analysis)
+                            filename, content = export_handler.generate_report_export(export_object)
+                        elif export_type == "search":
+                            from .search_export import SearchExportHandler
+                            export_handler = SearchExportHandler(self.analysis)
+                            include_parent_info = getattr(export_object, 'parent_guid', None) is not None
+                            filename, content = export_handler.generate_search_export(
+                                export_object, include_parent_info=include_parent_info
+                            )
+                        else:
+                            raise ValueError(f"Unsupported export type: {export_type}")
+                        
+                        # Cache the result
+                        st.session_state[excel_cache_key] = (filename, content)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Excel export generation failed: {str(e)}")
+        else:
+            # Show download button
+            filename, content = st.session_state[excel_cache_key]
+            downloaded = st.download_button(
+                label="📊 Excel",
+                data=content,
+                file_name=filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help=f"File Ready For Download: {filename}",
+                key=f"download_excel_{export_type}_{object_id}"
+            )
+            
+            if downloaded:
+                del st.session_state[excel_cache_key]
+
+    def render_lazy_json_export_button(self, export_object, object_name: str, object_id: str,
+                                       export_type: str = "report", xml_filename: str = None) -> None:
+        """
+        Render truly lazy JSON export with two-click pattern:
+        Click 1: Generate button -> Creates JSON file
+        Click 2: Download button -> Downloads file and cleans up
+        
+        Args:
+            export_object: The object to export (report, search, etc.)
+            object_name: Display name for the object
+            object_id: Unique ID for the object
+            export_type: Type of export ("report", "search", etc.)
+            xml_filename: Optional XML filename for export naming
+        """
+        json_cache_key = f'lazy_json_{export_type}_{object_id}'
+        
+        if json_cache_key not in st.session_state:
+            # Show generate button
+            if st.button("📋 JSON", help=f"Generate JSON export for: {object_name}",
+                        key=f"generate_json_{export_type}_{object_id}"):
+                
+                with st.spinner(f"Generating JSON export for {object_name}..."):
+                    try:
+                        if export_type == "report":
+                            from .report_json_export_generator import ReportJSONExportGenerator
+                            json_generator = ReportJSONExportGenerator(self.analysis)
+                            filename, content = json_generator.generate_report_json(export_object, xml_filename or 'unknown.xml')
+                        elif export_type == "search":
+                            from .json_export_generator import JSONExportGenerator
+                            json_generator = JSONExportGenerator(self.analysis)
+                            filename, content = json_generator.generate_search_json(export_object, xml_filename or 'unknown.xml')
+                        else:
+                            raise ValueError(f"Unsupported export type: {export_type}")
+                        
+                        # Cache the result
+                        st.session_state[json_cache_key] = (filename, content)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"JSON export generation failed: {str(e)}")
+        else:
+            # Show download button
+            filename, content = st.session_state[json_cache_key]
+            downloaded = st.download_button(
+                label="📋 JSON",
+                data=content,
+                file_name=filename,
+                mime="application/json",
+                help=f"File Ready For Download: {filename}",
+                key=f"download_json_{export_type}_{object_id}"
+            )
+            
+            if downloaded:
+                del st.session_state[json_cache_key]
+
+    def render_lazy_master_json_export_button(self, reports_list, xml_filename: str = None) -> None:
+        """
+        Render truly lazy master JSON export for all reports/searches
+        Click 1: Generate button -> Creates master JSON file
+        Click 2: Download button -> Downloads file and cleans up
+        """
+        cache_key = 'lazy_master_export_ready'
+        
+        if cache_key not in st.session_state:
+            if st.button("🗂️ Export ALL", help="Generate and download ALL items as complete JSON", 
+                        key="generate_lazy_master_export"):
+                
+                with st.spinner("Generating master export... This may take a moment."):
+                    try:
+                        from .json_export_generator import JSONExportGenerator
+                        json_generator = JSONExportGenerator(self.analysis)
+                        master_filename, master_content = json_generator.generate_master_json(
+                            xml_filename or 'unknown.xml', reports_list
+                        )
+                        
+                        # Cache the result
+                        st.session_state[cache_key] = (master_filename, master_content)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Master JSON export generation failed: {str(e)}")
+            
+            # Show count caption if available
+            if reports_list:
+                st.caption(f"Will generate JSON for {len(reports_list)} items")
+        else:
+            # Show download button
+            master_filename, master_content = st.session_state[cache_key]
+            downloaded = st.download_button(
+                label="🗂️ Export ALL",
+                data=master_content,
+                file_name=master_filename,
+                mime="application/json",
+                key="download_lazy_master_json",
+                help=f"File Ready For Download: {master_filename}"
+            )
+            
+            if downloaded:
+                del st.session_state[cache_key]

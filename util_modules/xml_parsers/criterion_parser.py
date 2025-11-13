@@ -31,6 +31,31 @@ class SearchCriterion:
 class CriterionParser(XMLParserBase):
     """Parser for search criteria elements"""
     
+    @staticmethod
+    def is_patient_demographics_column(column_name: str) -> bool:
+        """
+        Detect patient demographics/LSOA columns in a future-proof way.
+        
+        Handles patterns like:
+        - LONDON_LOWER_AREA_2011 (current)
+        - LONDON_LOWER_AREA_2019 (potential)
+        - LONDON_LOWER_AREA_2021 (future)
+
+        """
+        if not column_name:
+            return False
+        
+        column_upper = column_name.upper()
+        
+        # LSOA pattern: contains LOWER_AREA followed by a year
+        if 'LOWER_AREA' in column_upper and any(year in column_upper for year in ['2011', '2015', '2021', '2031']):
+            return True
+            
+        # Future patient demographics patterns can be added here
+        # e.g., 'MSOA_', 'WARD_', 'POSTCODE_AREA_' etc.
+        
+        return False
+    
     def parse_criterion(self, criterion_elem: ET.Element) -> Optional[SearchCriterion]:
         """Parse individual search criterion"""
         try:
@@ -256,33 +281,63 @@ class CriterionParser(XMLParserBase):
                 'in_not_in': self.parse_child_text(column_elem, 'inNotIn')
             }
             
+            # Tag patient demographics columns for special handling
+            if isinstance(column_value, str) and self.is_patient_demographics_column(column_value):
+                result['column_type'] = 'patient_demographics'
+                result['demographics_type'] = 'LSOA'  # Currently only LSOA, can expand for MSOA, etc.
+            elif isinstance(column_value, list):
+                # Handle multiple columns (check if any are patient demographics)
+                demographics_columns = [col for col in column_value if self.is_patient_demographics_column(col)]
+                if demographics_columns:
+                    result['column_type'] = 'patient_demographics'
+                    result['demographics_type'] = 'LSOA'
+            
             # Parse range values - handle both namespaced and non-namespaced
             range_elem = self.find_element_both(column_elem, 'rangeValue')
             if range_elem is not None:
                 result['range'] = self._parse_range_value(range_elem)
             
-            # Parse singleValue for temporal variable patterns (like <singleValue><variable>...)
+            # Parse singleValue for temporal variable patterns and geographical values
             single_value_elem = self.find_element_both(column_elem, 'singleValue')
             if single_value_elem is not None:
                 variable_elem = self.find_element_both(single_value_elem, 'variable')
                 if variable_elem is not None:
-                    # Create a range-like structure for temporal variables
-                    result['range'] = {
-                        'from': {
-                            'operator': 'IN',  # Default operator for temporal variables
-                            'value': self.parse_child_text(variable_elem, 'value'),
-                            'unit': self.parse_child_text(variable_elem, 'unit'),
-                            'relation': self.parse_child_text(variable_elem, 'relation')
+                    value = self.parse_child_text(variable_elem, 'value')
+                    unit = self.parse_child_text(variable_elem, 'unit')
+                    relation = self.parse_child_text(variable_elem, 'relation')
+                    
+                    # Check if this is a patient demographics value (no unit/relation, just a string value)
+                    if value and not unit and not relation and result.get('column_type') == 'patient_demographics':
+                        result['range'] = {
+                            'from': {
+                                'operator': 'IN',
+                                'value': value,
+                                'value_type': 'demographics_code'  # Tag for special handling
+                            }
                         }
-                    }
+                    else:
+                        # Standard temporal variable pattern
+                        result['range'] = {
+                            'from': {
+                                'operator': 'IN',  # Default operator for temporal variables
+                                'value': value,
+                                'unit': unit,
+                                'relation': relation
+                            }
+                        }
                 else:
                     # Fallback: treat singleValue content directly as value
-                    result['range'] = {
+                    value = self.get_text(single_value_elem)
+                    range_data = {
                         'from': {
                             'operator': 'IN',
-                            'value': self.get_text(single_value_elem)
+                            'value': value
                         }
                     }
+                    # Tag patient demographics values for special handling
+                    if result.get('column_type') == 'patient_demographics':
+                        range_data['from']['value_type'] = 'demographics_code'
+                    result['range'] = range_data
             
             # Parse parameter information - handle both namespaced and non-namespaced
             param_elem = self.find_element_both(column_elem, 'parameter')

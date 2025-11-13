@@ -14,7 +14,7 @@ from .linked_criteria_handler import filter_top_level_criteria, has_linked_crite
 from ..xml_parsers.criterion_parser import SearchCriterion, check_criterion_parameters
 from ..core import FolderManager, SearchManager
 from ..utils.text_utils import pluralize_unit, format_operator_text
-from ..utils.export_debug import log_export_created, log_memory_after_export
+# Export functionality moved to centralized UIExportManager
 from .linked_criteria_handler import (
     render_linked_criteria, 
     filter_linked_value_sets_from_main,
@@ -178,177 +178,49 @@ def render_detailed_rules(reports, analysis=None):
         export_col1, export_col2, export_col3 = st.columns([1.5, 1, 1])
         
         with export_col1:
-            # Master JSON Export as fragment using lazy single-click pattern  
-            @st.fragment
-            def master_export_fragment():
-                if analysis:
-                    cache_key = 'master_export_ready'
-                    
-                    if cache_key not in st.session_state:
-                        if st.button("🗂️ Export ALL", help="Generate and download ALL searches as complete JSON", key="generate_master_export"):
-                            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-                            with st.spinner("Generating master export... This may take a moment."):
-                                try:
-                                    # Dynamic import to avoid circular dependency
-                                    import importlib
-                                    json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
-                                    JSONExportGenerator = json_module.JSONExportGenerator
-                                    
-                                    json_generator = JSONExportGenerator(analysis)
-                                    master_filename, master_content = json_generator.generate_master_json(xml_filename, reports)
-                                    
-                                    # Debug logging for export file creation
-                                    log_export_created("Search Rule Visualizer", "JSON", len(master_content.encode('utf-8')), master_filename)
-                                    log_memory_after_export("Search Rule Visualizer", "JSON")
-                                    
-                                    # Store in session state for immediate download
-                                    st.session_state[cache_key] = (master_filename, master_content)
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"Master JSON export generation failed: {str(e)}")
-                        
-                        if hasattr(analysis, 'searches') and analysis.searches:
-                            st.caption(f"Will generate JSON for {len(analysis.searches)} searches")
-                    else:
-                        # Show download button - export is ready
-                        master_filename, master_content = st.session_state[cache_key]
-                        downloaded = st.download_button(
-                            label="🗂️ Export ALL",
-                            data=master_content,
-                            file_name=master_filename,
-                            mime="application/json",
-                            key="download_master_json",
-                            help=f"File Ready For Download: {master_filename}"
-                        )
-                        
-                        if downloaded:
-                            del st.session_state[cache_key]
-                else:
-                    st.button("🗂️ Export ALL", disabled=True, help="Analysis data not available", key="export_master_json_disabled")
-            
-            master_export_fragment()
+            # Master JSON Export using centralized UIExportManager
+            if analysis:
+                from ..export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager(analysis)
+                xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                export_manager.render_lazy_master_json_export_button(reports, xml_filename)
+            else:
+                st.button("🗂️ Export ALL", disabled=True, help="Analysis data not available", key="export_master_json_disabled")
         
         with export_col2:
-            # Excel export as fragment
-            @st.fragment
-            def excel_export_fragment():
-                if selected_search:
-                    clean_name = SearchManager.clean_search_name(selected_search.name)
-                    # Excel Export - Lazy generation with session state caching
-                    excel_cache_key = f'detailed_excel_{selected_search.id}'
-                    if excel_cache_key not in st.session_state:
-                        analysis = st.session_state.get('search_analysis')
-                        if analysis:
-                            try:
-                                # Dynamic import to avoid circular dependency
-                                import importlib
-                                export_module = importlib.import_module('util_modules.export_handlers.search_export')
-                                SearchExportHandler = export_module.SearchExportHandler
-                                
-                                export_handler = SearchExportHandler(analysis)
-                                
-                                # Determine if this is a child search
-                                include_parent_info = selected_search.parent_guid is not None
-                                
-                                filename, content = export_handler.generate_search_export(
-                                    selected_search, 
-                                    include_parent_info=include_parent_info
-                                )
-                                st.session_state[excel_cache_key] = (filename, content)
-                            except Exception as e:
-                                st.error(f"Excel export generation failed: {str(e)}")
-                                st.session_state[excel_cache_key] = None
-                        else:
-                            st.session_state[excel_cache_key] = None
-                    
-                    if st.session_state.get(excel_cache_key):
-                        filename, content = st.session_state[excel_cache_key]
-                        st.download_button(
-                            label="📊 Excel",
-                            data=content,
-                            file_name=filename,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            help=f"Export search logic to Excel: {SearchManager.clean_search_name(selected_search.name)}",
-                            key=f"export_excel_nav_{selected_search.id}"
-                        )
-                    else:
-                        st.button(
-                            "📊 Excel",
-                            disabled=True,
-                            help="Analysis data not available",
-                            key=f"export_excel_nav_disabled_{selected_search.id if selected_search else 'none'}"
-                        )
-                else:
-                    st.button(
-                        "📊 Excel",
-                        disabled=True,
-                        help="Select a search to export to Excel",
-                        key="export_excel_nav_no_search"
-                    )
-            
-            excel_export_fragment()
+            # Excel export using centralized UIExportManager
+            if selected_search and analysis:
+                from ..export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager(analysis)
+                clean_name = SearchManager.clean_search_name(selected_search.name)
+                export_manager.render_lazy_excel_export_button(
+                    selected_search, clean_name, selected_search.id, "search"
+                )
+            else:
+                st.button(
+                    "📊 Excel",
+                    disabled=True,
+                    help="Select a search to export to Excel",
+                    key="export_excel_nav_no_search"
+                )
         
         with export_col3:
-            # JSON export as fragment
-            @st.fragment
-            def json_export_fragment():
-                if selected_search:
-                    clean_name = SearchManager.clean_search_name(selected_search.name)
-                    analysis = st.session_state.get('search_analysis')
-                    search_export_key = f'search_export_ready_{selected_search.id}'
-                    
-                    if analysis:
-                        if search_export_key not in st.session_state:
-                            # Generate button
-                            if st.button("📋 JSON", help=f"Generate JSON export for: {clean_name}", key=f"generate_json_{selected_search.id}"):
-                                xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-                                with st.spinner(f"Generating JSON export for {clean_name}..."):
-                                    try:
-                                        # Dynamic import to avoid circular dependency
-                                        import importlib
-                                        json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
-                                        JSONExportGenerator = json_module.JSONExportGenerator
-                                        
-                                        json_generator = JSONExportGenerator(analysis)
-                                        json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
-                                        
-                                        # Debug logging for export file creation
-                                        log_export_created("Search Rule Visualizer", "JSON", len(json_content.encode('utf-8')), json_filename)
-                                        log_memory_after_export("Search Rule Visualizer", "JSON")
-                                        
-                                        # Store in session state for immediate download
-                                        st.session_state[search_export_key] = (json_filename, json_content)
-                                        st.rerun()
-                                        
-                                    except Exception as e:
-                                        st.error(f"JSON export generation failed: {str(e)}")
-                        else:
-                            # Show download button - JSON is ready in memory
-                            json_filename, json_content = st.session_state[search_export_key]
-                            downloaded = st.download_button(
-                                label="📋 JSON",
-                                data=json_content,
-                                file_name=json_filename,
-                                mime="application/json",
-                                key=f"download_json_{selected_search.id}",
-                                help=f"File Ready For Download: {json_filename}"
-                            )
-                            
-                            # Clean up after download
-                            if downloaded:
-                                del st.session_state[search_export_key]
-                    else:
-                        st.button("📋 JSON", disabled=True, help="Analysis data not available", key=f"export_json_nav_disabled_{selected_search.id}")
-                else:
-                    st.button(
-                        "📋 JSON",
-                        disabled=True,
-                        help="Select a search to export to JSON",
-                        key="export_json_nav_no_search"
-                    )
-            
-            json_export_fragment()
+            # JSON export using centralized UIExportManager
+            if selected_search and analysis:
+                from ..export_handlers.ui_export_manager import UIExportManager
+                export_manager = UIExportManager(analysis)
+                clean_name = SearchManager.clean_search_name(selected_search.name)
+                xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                export_manager.render_lazy_json_export_button(
+                    selected_search, clean_name, selected_search.id, "search", xml_filename
+                )
+            else:
+                st.button(
+                    "📋 JSON",
+                    disabled=True,
+                    help="Select a search to generate JSON export",
+                    key="generate_json_no_search"
+                )
     
     # Remove the "Show All Searches in Folder" checkbox as it's not useful on large files
     
@@ -389,8 +261,8 @@ def _render_single_detailed_rule(selected_search, reports):
     # Header - export buttons are now in main navigation
     st.markdown(f"### {classification} {clean_name}")
     
+    st.subheader(f"📋 {selected_search.name}")
     if selected_search.description:
-        st.markdown("### 📋 Search Description")
         with st.container(border=True):
             st.write(selected_search.description)
     
@@ -404,13 +276,57 @@ def _render_single_detailed_rule(selected_search, reports):
             st.warning(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)")
     else:
         if selected_search.parent_type == 'ACTIVE':
-            st.info("🔵 **Base Population:** All currently registered patients")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> All currently registered patients
+            </div>
+            """, unsafe_allow_html=True)
         elif selected_search.parent_type == 'ALL':
-            st.info("🔵 **Base Population:** All patients (including left and deceased)")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> All patients (including left and deceased)
+            </div>
+            """, unsafe_allow_html=True)
         elif selected_search.parent_type:
-            st.info(f"🔵 **Base Population:** {selected_search.parent_type} patients")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> {selected_search.parent_type} patients
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.info("🔵 **Base Population:** Custom patient population")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> Custom patient population
+            </div>
+            """, unsafe_allow_html=True)
     
     # Skip report type-specific information for searches - they don't need report classification
     
@@ -432,7 +348,18 @@ def _render_single_detailed_rule(selected_search, reports):
             
             render_criteria_group(group, rule_name)
     else:
-        st.info("No search criteria found for this item.")
+        st.markdown(f"""
+                <div style="
+                background-color: #660022;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+                ">
+                No search criteria found for this item.
+                </div>
+                """, unsafe_allow_html=True)
 
 
 def render_individual_search_details(selected_search, reports, show_dependencies=False):
@@ -443,8 +370,8 @@ def render_individual_search_details(selected_search, reports, show_dependencies
     
     # Export functionality is now handled in main navigation row
     
+    st.subheader(f"📋 {selected_search.name}")
     if selected_search.description:
-        st.markdown("### 📋 Search Description")
         with st.container(border=True):
             st.write(selected_search.description)
     
@@ -458,13 +385,57 @@ def render_individual_search_details(selected_search, reports, show_dependencies
             st.warning(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)")
     else:
         if selected_search.parent_type == 'ACTIVE':
-            st.info("🔵 **Base Population:** All currently registered patients")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> All currently registered patients
+            </div>
+            """, unsafe_allow_html=True)
         elif selected_search.parent_type == 'ALL':
-            st.info("🔵 **Base Population:** All patients (including left and deceased)")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> All patients (including left and deceased)
+            </div>
+            """, unsafe_allow_html=True)
         elif selected_search.parent_type:
-            st.info(f"🔵 **Base Population:** {selected_search.parent_type} patients")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> {selected_search.parent_type} patients
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.info("🔵 **Base Population:** Custom patient population")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Base Population:</strong> Custom patient population
+            </div>
+            """, unsafe_allow_html=True)
     
     # Skip report type-specific information for searches - they don't need report classification
     
@@ -486,7 +457,18 @@ def render_individual_search_details(selected_search, reports, show_dependencies
             
             render_criteria_group(group, rule_name)
     else:
-        st.info("No search criteria found for this item.")
+        st.markdown(f"""
+                <div style="
+                background-color: #660022;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+                ">
+                No search criteria found for this item.
+                </div>
+                """, unsafe_allow_html=True)
 
 
 def render_criteria_group(group: CriteriaGroup, rule_name: str):
@@ -906,6 +888,13 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                     elif any(col in ['AUTHOR', 'CURRENTLY_CONTRACTED'] for col in column_upper_list):
                         # EMISINTERNAL multi-column pattern for user authorization
                         st.caption("• User authorization: Active users only")
+                    elif any(filters[0].get('column_type') == 'patient_demographics' for _ in filters):
+                        # Patient demographics filters (LSOA codes, etc.)
+                        filter_desc = render_patient_demographics_filter(filters[0])
+                        if filter_desc:
+                            st.caption(f"• {filter_desc}")
+                        else:
+                            st.caption("• Patient demographics filtering")
                     else:
                         # Use the existing render_column_filter function for other types
                         filter_desc = render_column_filter(filters[0])
@@ -1885,3 +1874,51 @@ def export_rule_analysis(analysis, xml_filename: str):
     report_text, filename = generate_rule_analysis_report(analysis, xml_filename)
     st.success("✅ Analysis report ready for download!")
     return report_text, filename
+
+
+def render_patient_demographics_filter(column_filter):
+    """Render patient demographics column filter description with area codes using EMIS-style phrasing"""
+    column_display = column_filter.get('column_display', column_filter.get('column_name', 'Unknown'))
+    in_not_in = column_filter.get('in_not_in', 'IN')
+    
+    # Extract year from column name for EMIS-style display
+    year_match = None
+    column_upper = column_display.upper()
+    if '2011' in column_upper:
+        year_match = '2011'
+    elif '2015' in column_upper:
+        year_match = '2015'
+    elif '2021' in column_upper:
+        year_match = '2021'
+    elif '2031' in column_upper:
+        year_match = '2031'
+    
+    year_text = f" ({year_match})" if year_match else ""
+    action = "Include" if in_not_in == "IN" else "Exclude"
+    
+    # Check for grouped patient demographics values
+    grouped_values = column_filter.get('grouped_demographics_values', [])
+    demographics_count = column_filter.get('demographics_count', 0)
+    
+    if grouped_values and demographics_count > 1:
+        # Multiple LSOA codes - show first few and count
+        if demographics_count <= 5:
+            # Show all values for small lists
+            all_codes = ", ".join(grouped_values)
+            return f"{action} Patients where the Lower Layer Area{year_text} is in: {all_codes}"
+        else:
+            # Show first 3 and count for larger lists
+            first_few = ", ".join(grouped_values[:3])
+            remaining = demographics_count - 3
+            summary_text = f"{action} Patients where the Lower Layer Area{year_text} is in {demographics_count} areas:"
+            return f"{summary_text} {first_few} and {remaining} other LSOA areas"
+    else:
+        # Single or fallback patient demographics code
+        values = column_filter.get('values', [])
+        if values and len(values) > 0:
+            if len(values) == 1:
+                return f"{action} Patients where the Lower Layer Area{year_text} is in: {values[0]}"
+            else:
+                return f"{action} Patients where the Lower Layer Area{year_text} is in: {', '.join(values[:3])}{'...' if len(values) > 3 else ''}"
+        else:
+            return f"{action} Patients where the Lower Layer Area{year_text} meets specified criteria"

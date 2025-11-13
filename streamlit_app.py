@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 # Page configuration
 st.set_page_config(
     page_title="The Unofficial EMIS XML Toolkit",
-    page_icon="🏥",
+    page_icon="img/favicon.ico",
     layout="wide"
 )
 
@@ -71,8 +71,8 @@ def main():
     
     with col1:
         # Clean header without button
-        st.header("⚕️ The Unofficial EMIS XML Toolkit")
-        st.markdown("*Comprehensive EMIS XML analysis and clinical code extraction for NHS healthcare teams*")
+        st.image("img/clinxml.svg", width=620)
+        st.caption("*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Comprehensive EMIS XML analysis and clinical code extraction for NHS healthcare teams*")
         
         # Dynamic MKB version text
         mkb_version = version_info.get('emis_version', 'the latest MKB lookup table')
@@ -81,7 +81,6 @@ def main():
         else:
             mkb_text = mkb_version
         
-        st.markdown(f"Upload EMIS XML files to analyze search logic, visualize report structures, and translate clinical codes to UK SNOMED using {mkb_text}.")
         
     
     with col2:
@@ -189,82 +188,137 @@ def main():
                             debug_logger.log_xml_parsing_result(emis_guids)
                         
                         if not emis_guids:
-                            if debug_logger:
-                                debug_logger.log_error(Exception("No EMIS GUIDs found"), "XML parsing")
-                            st.error("No EMIS GUIDs found in the XML file")
-                            return
-                        
-                        # Check if EMIS lookup cache needs building for terminology server integration
-                        from util_modules.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
-                        
-                        # Skip cache building if we already loaded from cache
-                        load_source = version_info.get('load_source', 'unknown')
-                        if load_source == 'cache':
-                            # We already loaded from cache, no need to rebuild
-                            cache_built = True
+                            # Check if this XML contains valid searches/reports even without clinical codes
+                            # This handles patient demographics filtering XMLs and other non-clinical patterns
+                            try:
+                                import xml.etree.ElementTree as ET
+                                root = ET.fromstring(xml_content)
+                                
+                                # Check for report elements (with any namespace)
+                                reports_found = (
+                                    root.findall('.//report') or 
+                                    root.findall('.//{http://www.e-mis.com/emisopen}report') or
+                                    root.findall('.//search') or
+                                    root.findall('.//{http://www.e-mis.com/emisopen}search')
+                                )
+                                
+                                if reports_found:
+                                    # Valid XML with searches/reports but no clinical codes
+                                    if debug_logger:
+                                        debug_logger.log_user_action("xml_structure_validation", {"pattern": "patient_demographics_filtering", "clinical_codes": False})
+                                    st.markdown("""
+                                    <div style="
+                                        background-color: #28546B;
+                                        padding: 0.75rem;
+                                        border-radius: 0.5rem;
+                                        color: #FAFAFA;
+                                        text-align: left;
+                                        margin-bottom: 0.5rem;
+                                    ">
+                                        📍 This XML contains patient demographic searches, but no detected clinical codes. Analysis will proceed with structure-only processing.
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    # Set empty clinical codes but continue processing
+                                    translated_codes = {}
+                                else:
+                                    # No reports found - truly invalid XML
+                                    if debug_logger:
+                                        debug_logger.log_error(Exception("No EMIS GUIDs or valid reports found"), "XML parsing")
+                                    st.error("No EMIS GUIDs or valid search reports found in the XML file")
+                                    return
+                                    
+                            except Exception as parse_error:
+                                if debug_logger:
+                                    debug_logger.log_error(parse_error, "XML structure validation")
+                                st.error(f"Error validating XML structure: {str(parse_error)}")
+                                return
                         else:
-                            cache_info = get_cache_info(lookup_df, version_info)
+                            # Normal processing path with clinical codes
+                            if debug_logger:
+                                debug_logger.log_xml_parsing_result(emis_guids)
+                        
+                        # Only do clinical code processing if we have EMIS GUIDs
+                        if emis_guids:
+                            # Check if EMIS lookup cache needs building for terminology server integration
+                            from util_modules.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
                             
-                            if cache_info["status"] == "not_cached":
-                                # Cache needs building - show progress
-                                if progress_bar:
-                                    progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
-                                
-                                cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                                
-                                if cache_built:
-                                    st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
-                            elif cache_info["status"] == "cached":
-                                # Cache already exists - no delay needed
+                            # Skip cache building if we already loaded from cache
+                            load_source = version_info.get('load_source', 'unknown')
+                            if load_source == 'cache':
+                                # We already loaded from cache, no need to rebuild
                                 cache_built = True
                             else:
-                                # Cache check failed - try to build anyway
-                                cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                        
-                        if progress_bar:
-                            progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
-                        
-                        # Show progress as toast notification
-                        st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
-                        
-                        # Translate to SNOMED codes with progress tracking
-                        if progress_bar:
-                            progress_bar.progress(30, text="Processing clinical codes...")
-                        
-                        # Get deduplication mode from session state, default to unique_codes
-                        deduplication_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-                        
-                        translated_codes = translate_emis_to_snomed(
-                            emis_guids, 
-                            lookup_df, 
-                            emis_guid_column, 
-                            snomed_code_column,
-                            deduplication_mode
-                        )
-                        
-                        if progress_bar:
-                            progress_bar.progress(75, text="Translation complete, generating statistics...")
-                        
-                        # Show progress as toast notification
-                        st.toast("Creating audit statistics and finalizing results...", icon="📊")
-                        
-                        # Log classification results
-                        if debug_logger:
-                            debug_logger.log_classification_results(translated_codes)
+                                cache_info = get_cache_info(lookup_df, version_info)
+                                
+                                if cache_info["status"] == "not_cached":
+                                    # Cache needs building - show progress
+                                    if progress_bar:
+                                        progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
+                                    
+                                    cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                                    
+                                    if cache_built:
+                                        st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
+                                elif cache_info["status"] == "cached":
+                                    # Cache already exists - no delay needed
+                                    cache_built = True
+                                else:
+                                    # Cache check failed - try to build anyway
+                                    cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                            
+                            if progress_bar:
+                                progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
+                            
+                            # Show progress as toast notification
+                            st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
+                            
+                            # Translate to SNOMED codes with progress tracking
+                            if progress_bar:
+                                progress_bar.progress(30, text="Processing clinical codes...")
+                            
+                            # Get deduplication mode from session state, default to unique_codes
+                            deduplication_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+                            
+                            translated_codes = translate_emis_to_snomed(
+                                emis_guids, 
+                                lookup_df, 
+                                emis_guid_column, 
+                                snomed_code_column,
+                                deduplication_mode
+                            )
+                            
+                            if progress_bar:
+                                progress_bar.progress(75, text="Translation complete, generating statistics...")
+                            
+                            # Show progress as toast notification
+                            st.toast("Creating audit statistics and finalizing results...", icon="📊")
+                            
+                            # Log classification results
+                            if debug_logger:
+                                debug_logger.log_classification_results(translated_codes)
+                        else:
+                            # No clinical codes - skip translation but still show progress
+                            if progress_bar:
+                                progress_bar.progress(30, text="No clinical codes found, processing structure only...")
+                            st.toast("Processing patient demographics filters and XML structure...", icon="📍")
                         
                         # Calculate processing time and memory usage
                         processing_time = time.time() - start_time
                         memory_end = process.memory_info().rss / 1024 / 1024  # MB
                         memory_peak = max(memory_start, memory_end)
                         
-                        # Create audit statistics
+                        # Create audit statistics (handle case with no clinical codes)
                         if progress_bar:
                             progress_bar.progress(85, text="Creating audit statistics...")
+                        
+                        # Use empty dict for translated_codes if no clinical codes found
+                        if 'translated_codes' not in locals():
+                            translated_codes = {}
                         
                         audit_stats = create_processing_stats(
                             uploaded_xml.name,
                             xml_content,
-                            emis_guids,
+                            emis_guids or [],  # Use empty list if None
                             translated_codes,
                             processing_time
                         )
@@ -310,10 +364,10 @@ def main():
                             st.session_state.search_results = None
                             st.session_state.report_results = None
                         
-                        # Calculate success rate for logging
+                        # Calculate success rate for logging - handle empty translated_codes for patient demographics XMLs
                         total_found = sum(1 for item in translated_codes.get('clinical', []) if item.get('Mapping Found') == 'Found')
                         total_found += sum(1 for item in translated_codes.get('medications', []) if item.get('Mapping Found') == 'Found')
-                        total_items = len(translated_codes['clinical']) + len(translated_codes['medications'])
+                        total_items = len(translated_codes.get('clinical', [])) + len(translated_codes.get('medications', []))
                         success_rate = (total_found / total_items * 100) if total_items > 0 else 100
                         
                         # Log processing completion
@@ -332,10 +386,10 @@ def main():
                             time.sleep(1.0)  # Longer pause to show completion message
                             progress_bar.empty()
                         
-                        # Show success with detailed toast notification
-                        clinical_count = len(translated_codes['clinical'])
-                        medication_count = len(translated_codes['medications'])
-                        refset_count = len(translated_codes['refsets'])
+                        # Show success with detailed toast notification - handle empty translated_codes for patient demographics XMLs
+                        clinical_count = len(translated_codes.get('clinical', []))
+                        medication_count = len(translated_codes.get('medications', []))
+                        refset_count = len(translated_codes.get('refsets', []))
                         pseudo_refset_count = len(translated_codes.get('pseudo_refsets', []))
                         clinical_pseudo_count = len(translated_codes.get('clinical_pseudo_members', []))
                         medication_pseudo_count = len(translated_codes.get('medication_pseudo_members', []))
@@ -396,9 +450,23 @@ def main():
                         st.rerun()
                 
                 except Exception as e:
+                    # Print detailed error information to console for debugging
+                    import traceback
+                    full_error = traceback.format_exc()
+                    
+                    print("="*80)
+                    print("GEOGRAPHICAL XML PROCESSING ERROR")
+                    print("="*80)
+                    print(f"Error type: {type(e).__name__}")
+                    print(f"Error message: {str(e)}")
+                    print("\nFull traceback:")
+                    print(full_error)
+                    print("="*80)
+                    
                     if debug_logger:
                         debug_logger.log_error(e, "XML processing")
                     st.error(f"Error processing XML: {str(e)}")
+                    
                     # Clear the rendering message if it exists
                     if 'rendering_placeholder' in locals():
                         rendering_placeholder.empty()
@@ -410,23 +478,46 @@ def main():
                     st.rerun()
         
         else:
-            st.info("📤 Upload an XML file to begin processing")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                📤 Upload an XML file to begin processing
+            </div>
+            """, unsafe_allow_html=True)
     
     # Full-width results section - only show when not processing
     if not st.session_state.get('is_processing', False):
+        
         st.subheader("📊 Results")
         render_results_tabs(st.session_state.get('results'))
     elif st.session_state.get('is_processing', False):
         # Show processing indicator
         st.subheader("⏳ Processing...")
-        st.info("Processing your XML file. This may take a few moments for large files.")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            Processing your XML file. This may take a few moments for large files.
+        </div>
+        """, unsafe_allow_html=True)
 
     # Footer
     st.markdown("---")
     st.markdown(
         """
         <div style='text-align: center; color: #aaa;'>
-        <p>The Unofficial EMIS XML Toolkit | Comprehensive EMIS XML analysis and clinical code extraction</p>
+        <p>ClinXML - The Unofficial EMIS XML Toolkit | Comprehensive XML analysis and clinical code extraction</p>
         <p style='font-size: 0.8em; margin-top: 10px;'>
         <strong>Disclaimer:</strong> EMIS and EMIS Web are trademarks of Optum Inc. This unofficial toolkit is not affiliated with, 
         endorsed by, or sponsored by Optum Inc, EMIS Health, or any of their subsidiaries. All trademarks are the property of their respective owners.

@@ -69,16 +69,24 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     from ...core.report_classifier import ReportClassifier
     
     if not reports:
-        st.info(f"{icon} No {report_type_name}s found in this XML file")
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            {icon} No {report_type_name}s found in this XML file
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     # Initialize session state for tracking rendering completion
     rendering_state_key = f"{report_type_name.lower().replace(' ', '_')}_rendering_complete"
     if rendering_state_key not in st.session_state:
         st.session_state[rendering_state_key] = False
-    
-    # Efficient side-by-side layout like Search Analysis tab
-    st.markdown("---")
     
     # Use columns for folder selection, report selection, and export buttons
     col1, col2, col3 = st.columns([3, 4, 0.8])
@@ -184,7 +192,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
         if selected_folder:
             st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
         elif analysis.folders:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s from all folders")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                {icon} Showing all {len(folder_reports)} {report_type_name}s from all folders
+            </div>
+            """, unsafe_allow_html=True)
         else:
             st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
     
@@ -287,7 +306,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
             
             # Update status indicator now that export buttons are ready
             with status_placeholder.container():
-                st.success("✅ Rendering Complete")
+                st.markdown("""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    ✓&nbsp;&nbsp;Rendering Complete
+                </div>
+                """, unsafe_allow_html=True)
                 
         else:
             # Show disabled buttons when no report selected
@@ -328,7 +358,18 @@ def render_reports_tab(analysis):
     """
     
     if not analysis or not analysis.reports:
-        st.info("📋 No reports found in this XML file")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            📋 No reports found in this XML file
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     # Import here to avoid circular imports
@@ -350,10 +391,20 @@ def render_reports_tab(analysis):
         folder_count = len(analysis.folders) if analysis.folders else 0
         st.metric("📁 Folders", folder_count)
         
-    st.info("💡 Use individual report tabs (List Reports, Audit Reports, Aggregate Reports) for type-specific counts.")
+    st.markdown("""
+    <div style="
+        background-color: #28546B;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        color: #FAFAFA;
+        text-align: left;
+        margin-bottom: 0.5rem;
+    ">
+        💡 Use individual report tabs (List Reports, Audit Reports, Aggregate Reports) for type-specific counts.
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Folder browser section
-    st.markdown("---")
+
     
     # Folder selection (if folders exist)
     selected_folder = None
@@ -568,9 +619,6 @@ def render_report_visualization(report, analysis):
         else:
             report_type = "[Search]"
     
-    # Create spinner container area (below XML upload, above detailed content)
-    st.markdown("---")
-    
     # SIZE-ADAPTIVE: Monitor memory usage only for medium/large reports
     initial_memory = _monitor_memory_usage(f"before rendering {report.name}", report_size) if report_size != "small" else 0
     
@@ -590,29 +638,109 @@ def render_report_visualization(report, analysis):
     
     # Report header with useful info
     if metadata['description']:
-        st.markdown(f"**Description:** {metadata['description']}")
+        with st.container(border=True):
+            st.write(metadata['description'])
     
-    # Parent relationship context
-    if metadata['parent_info']:
-        st.markdown(f"**Parent Search:** {metadata['parent_info']}")
-    elif hasattr(report, 'parent_type'):
+    # Parent relationship context with search date in blue info bar
+    parent_col1, parent_col2 = st.columns([4, 2])
+    
+    with parent_col1:
         if report.parent_type == 'ACTIVE':
-            st.markdown(f"**Population:** All currently registered regular patients")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Population:</strong> All currently registered regular patients
+            </div>
+            """, unsafe_allow_html=True)
         elif report.parent_type == 'ALL':
-            st.markdown(f"**Population:** All patients (including left and deceased)")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Population:</strong> All patients (including left and deceased)
+            </div>
+            """, unsafe_allow_html=True)
         elif report.parent_type == 'POP':
-            st.markdown(f"**Population:** Population-based (filtered)")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Population:</strong> Population-based (filtered)
+            </div>
+            """, unsafe_allow_html=True)
         elif hasattr(report, 'parent_guid') and report.parent_guid:
             parent_name = get_parent_search_name(report, analysis)
             if parent_name:
-                st.markdown(f"**Parent Search:** {parent_name}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                margin-bottom: 0.5rem;
+                ">
+                    <strong>Parent Search:</strong> {parent_name}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.markdown(f"**Parent Search:** Custom search ({report.parent_guid[:8]}...)")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                margin-bottom: 0.5rem;
+                ">
+                    <strong>Parent Search:</strong> Custom search ({report.parent_guid[:8]}...)
+                </div>
+                """, unsafe_allow_html=True)
         elif report.parent_type:
-            st.markdown(f"**Parent Type:** {report.parent_type}")
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Parent Type:</strong> {report.parent_type}
+            </div>
+            """, unsafe_allow_html=True)
     
-    st.markdown(f"**Search Date:** {metadata['search_date']}")
-    
+    with parent_col2:
+        # Simple inline styled element
+        st.markdown(f"""
+        <div style="
+            background-color: #5B2758;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            <strong>Search Date:</strong> {metadata['search_date']}
+        </div>
+        """, unsafe_allow_html=True)
+ 
     # STAGE 2: Process column groups (with progress and spinner on cache miss)
     if hasattr(report, 'column_groups') and report.column_groups:
         column_processing = _process_column_groups(

@@ -46,7 +46,18 @@ def render_analytics_tab():
     - Error (red): Poor performance/low accuracy
     """
     if 'audit_stats' not in st.session_state:
-        st.info("🔍 Analytics will appear here after processing an XML file")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            🔍 Analytics will appear here after processing an XML file
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     audit_stats = st.session_state.audit_stats
@@ -56,309 +67,640 @@ def render_analytics_tab():
     # File and Processing Information
     st.write("### 📁 File Information")
     
-    # Filename in full width
-    st.info(f"**Filename:** {audit_stats['xml_stats']['filename']}")
-    
-    # Metrics in columns with color coding
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        file_size_mb = audit_stats['xml_stats']['file_size_bytes'] / (1024 * 1024)
-        if file_size_mb > 10:
-            st.error(f"**File Size:** {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)")
-        elif file_size_mb > 1:
-            st.warning(f"**File Size:** {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)")
-        else:
-            st.success(f"**File Size:** {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)")
-    
-    with col2:
-        processing_time = audit_stats['xml_stats']['processing_time_seconds']
-        if processing_time > 120:
-            st.error(f"**Processing Time:** {processing_time:.2f}s")
-        elif processing_time > 60:
-            st.warning(f"**Processing Time:** {processing_time:.2f}s")
-        else:
-            st.success(f"**Processing Time:** {processing_time:.2f}s")
-    
-    with col3:
-        st.info(f"**Processed:** {audit_stats['xml_stats']['processing_timestamp']}")
+    with st.container(border=True):
+        # Filename in full width
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            <strong>Filename:</strong> {audit_stats['xml_stats']['filename']}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Metrics in columns with color coding
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            file_size_mb = audit_stats['xml_stats']['file_size_bytes'] / (1024 * 1024)
+            if file_size_mb > 10:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>File Size:</strong> {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)
+                </div>
+                """, unsafe_allow_html=True)
+            elif file_size_mb > 1:
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>File Size:</strong> {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>File Size:</strong> {audit_stats['xml_stats']['file_size_bytes']:,} bytes ({file_size_mb:.1f} MB)
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            processing_time = audit_stats['xml_stats']['processing_time_seconds']
+            if processing_time > 120:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Processing Time:</strong> {processing_time:.2f}s
+                </div>
+                """, unsafe_allow_html=True)
+            elif processing_time > 60:
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Processing Time:</strong> {processing_time:.2f}s
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Processing Time:</strong> {processing_time:.2f}s
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 1rem;
+            ">
+                <strong>Processed:</strong> {audit_stats['xml_stats']['processing_timestamp']}
+            </div>
+            """, unsafe_allow_html=True)
     
     # XML Structure Analysis
-    st.write("### 🏗️ XML Structure Analysis")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
-    with col1:
-        valuesets = audit_stats['xml_structure']['total_valuesets']
-        if valuesets > 50:
-            st.error(f"**Total ValueSets:** {valuesets}")
-        elif valuesets > 20:
-            st.warning(f"**Total ValueSets:** {valuesets}")
-        else:
-            st.success(f"**Total ValueSets:** {valuesets}")
-    
-    with col2:
-        unique_guids = audit_stats['xml_structure']['unique_emis_guids']
-        if unique_guids > 1000:
-            st.error(f"**Unique EMIS GUIDs:** {unique_guids:,}")
-        elif unique_guids > 500:
-            st.warning(f"**Unique EMIS GUIDs:** {unique_guids:,}")
-        else:
-            st.success(f"**Unique EMIS GUIDs:** {unique_guids:,}")
-    
-    with col3:
-        total_refs = audit_stats['xml_structure']['total_guid_occurrences']
-        if total_refs > 2000:
-            st.info(f"**Total GUID References:** {total_refs:,}")
-        else:
-            st.success(f"**Total GUID References:** {total_refs:,}")
-    
-    with col4:
-        dup_rate = audit_stats['xml_structure']['duplicate_guid_ratio']
-        if dup_rate > 20:
-            st.error(f"**Duplication Rate:** {dup_rate}%")
-        elif dup_rate > 10:
-            st.warning(f"**Duplication Rate:** {dup_rate}%")
-        else:
-            st.success(f"**Duplication Rate:** {dup_rate}%")
-    
-    with col5:
-        # Clinical Searches count
-        search_results = st.session_state.get('search_results')
-        search_count = len(search_results.searches) if search_results and hasattr(search_results, 'searches') else 0
-        if search_count > 0:
-            st.success(f"**Clinical Searches:** {search_count}")
-        else:
-            st.info(f"**Clinical Searches:** {search_count}")
-    
-    with col6:
-        # Reports count with breakdown
-        report_results = st.session_state.get('report_results')
-        if report_results and hasattr(report_results, 'report_breakdown'):
-            total_reports = sum(len(reports) for reports in report_results.report_breakdown.values())
-            if total_reports > 0:
-                st.success(f"**Reports Found:** {total_reports}")
+    with st.container(border=True):
+        st.write("### 🏗️ XML Structure Analysis")
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        
+        with col1:
+            valuesets = audit_stats['xml_structure']['total_valuesets']
+            if valuesets > 50:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Total ValueSets:</strong> {valuesets}
+                </div>
+                """, unsafe_allow_html=True)
+            elif valuesets > 20:
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Total ValueSets:</strong> {valuesets}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"**Reports Found:** {total_reports}")
-        else:
-            st.info(f"**Reports Found:** 0")
-    
-    # Show folder count in a second row
-    st.write("")  # Add some spacing
-    col_folder1, col_folder2, col_folder_spacer = st.columns([1, 1, 4])
-    
-    with col_folder1:
-        # Folders count
-        analysis = st.session_state.get('search_analysis')
-        folder_count = len(analysis.folders) if analysis and hasattr(analysis, 'folders') else 0
-        if folder_count > 0:
-            st.success(f"**Folders Found:** {folder_count}")
-        else:
-            st.info(f"**Folders Found:** {folder_count}")
-    
-    with col_folder2:
-        # Report type breakdown as detailed info
-        if report_results and hasattr(report_results, 'report_breakdown'):
-            breakdown_parts = []
-            for report_type, reports in report_results.report_breakdown.items():
-                if reports:
-                    count = len(reports)
-                    breakdown_parts.append(f"{count} {report_type.capitalize()}")
-            
-            if breakdown_parts:
-                breakdown_text = ", ".join(breakdown_parts)
-                st.info(f"**Report Types:** {breakdown_text}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Total ValueSets:</strong> {valuesets}
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            unique_guids = audit_stats['xml_structure']['unique_emis_guids']
+            if unique_guids > 1000:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Unique EMIS GUIDs:</strong> {unique_guids:,}
+                </div>
+                """, unsafe_allow_html=True)
+            elif unique_guids > 500:
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Unique EMIS GUIDs:</strong> {unique_guids:,}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"**Report Types:** None")
-        else:
-            st.info(f"**Report Types:** None")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Unique EMIS GUIDs:</strong> {unique_guids:,}
+                </div>
+                """, unsafe_allow_html=True)
+    
+        with col3:
+            total_refs = audit_stats['xml_structure']['total_guid_occurrences']
+            if total_refs > 2000:
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Total GUID References:</strong> {total_refs:,}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Total GUID References:</strong> {total_refs:,}
+                </div>
+                """, unsafe_allow_html=True)
+    
+        with col4:
+            dup_rate = audit_stats['xml_structure']['duplicate_guid_ratio']
+            if dup_rate > 20:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Duplication Rate:</strong> {dup_rate}%
+                </div>
+                """, unsafe_allow_html=True)
+            elif dup_rate > 10:
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Duplication Rate:</strong> {dup_rate}%
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Duplication Rate:</strong> {dup_rate}%
+                </div>
+                """, unsafe_allow_html=True)
+    
+        with col5:
+            # Clinical Searches count
+            search_results = st.session_state.get('search_results')
+            search_count = len(search_results.searches) if search_results and hasattr(search_results, 'searches') else 0
+            if search_count > 0:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Clinical Searches:</strong> {search_count}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Clinical Searches:</strong> {search_count}
+                </div>
+                """, unsafe_allow_html=True)
+    
+        with col6:
+            # Reports count with breakdown
+            report_results = st.session_state.get('report_results')
+            if report_results and hasattr(report_results, 'report_breakdown'):
+                total_reports = sum(len(reports) for reports in report_results.report_breakdown.values())
+                if total_reports > 0:
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Reports Found:</strong> {total_reports}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Reports Found:</strong> {total_reports}
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Reports Found:</strong> 0
+                </div>
+                """, unsafe_allow_html=True)
+    
+        # Show folder count in a second row
+        col_folder1, col_folder2, col_folder_spacer = st.columns([1, 1, 4])
+        
+        with col_folder1:
+            # Folders count
+            analysis = st.session_state.get('search_analysis')
+            folder_count = len(analysis.folders) if analysis and hasattr(analysis, 'folders') else 0
+            if folder_count > 0:
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Folders Found:</strong> {folder_count}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Folders Found:</strong> {folder_count}
+                </div>
+                """, unsafe_allow_html=True)
+    
+        with col_folder2:
+            # Report type breakdown as detailed info
+            if report_results and hasattr(report_results, 'report_breakdown'):
+                breakdown_parts = []
+                for report_type, reports in report_results.report_breakdown.items():
+                    if reports:
+                        count = len(reports)
+                        breakdown_parts.append(f"{count} {report_type.capitalize()}")
+                
+                if breakdown_parts:
+                    breakdown_text = ", ".join(breakdown_parts)
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Report Types:</strong> {breakdown_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Report Types:</strong> None
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Report Types:</strong> None
+                </div>
+                """, unsafe_allow_html=True)
     
     # Enhanced Translation Accuracy using unified pipeline data
-    st.write("### 🎯 Translation Accuracy")
+    with st.container(border=True):
+        st.write("### 🎯 Translation Accuracy")
     
-    # Get unified data for accurate counts
-    from .tab_helpers import get_unified_clinical_data
-    unified_results = get_unified_clinical_data()
-    
-    if unified_results:
-        # Use unified pipeline data for accurate counts
-        clinical_codes = unified_results.get('clinical_codes', [])
-        pseudo_members = unified_results.get('clinical_pseudo_members', [])
-        medications = unified_results.get('medications', [])
-        refsets = unified_results.get('refsets', [])
-        pseudo_refsets = unified_results.get('pseudo_refsets', [])
+        # Get unified data for accurate counts
+        from .tab_helpers import get_unified_clinical_data
+        unified_results = get_unified_clinical_data()
         
-        # Calculate found vs total for each category
-        clinical_found = len([c for c in clinical_codes if c.get('Mapping Found') == 'Found'])
-        clinical_total = len(clinical_codes)
-        
-        pseudo_members_found = len([c for c in pseudo_members if c.get('Mapping Found') == 'Found'])
-        pseudo_members_total = len(pseudo_members)
-        
-        medications_found = len([m for m in medications if m.get('Mapping Found') == 'Found'])
-        medications_total = len(medications)
-        
-        # Separate search vs report codes
-        search_clinical = [c for c in clinical_codes if c.get('Source Type', '').lower() == 'search' or 'search' in c.get('Source Type', '').lower()]
-        report_clinical = [c for c in clinical_codes if 'report' in c.get('Source Type', '').lower()]
-        
-        search_found = len([c for c in search_clinical if c.get('Mapping Found') == 'Found'])
-        search_total = len(search_clinical)
-        report_found = len([c for c in report_clinical if c.get('Mapping Found') == 'Found'])
-        report_total = len(report_clinical)
-        
-        total_clinical = clinical_total + pseudo_members_total
-        total_found = clinical_found + pseudo_members_found
-    else:
-        # Fallback to legacy data if unified not available
-        trans_accuracy = audit_stats['translation_accuracy']
-        report_results = st.session_state.get('report_results')
-        report_clinical_count = 0
-        if report_results and hasattr(report_results, 'clinical_codes'):
-            report_clinical_count = len(report_results.clinical_codes)
-        
-        search_found = trans_accuracy['clinical_codes']['found']
-        search_total = trans_accuracy['clinical_codes']['total']
-        report_found = report_clinical_count
-        report_total = report_clinical_count
-        total_clinical = search_total + report_clinical_count
-        total_found = search_found + report_clinical_count
-        
-        # Legacy fallback values
-        pseudo_members_found = 0
-        pseudo_members_total = 0
-        medications_found = trans_accuracy.get('medications', {}).get('found', 0)
-        medications_total = trans_accuracy.get('medications', {}).get('total', 0)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("**Search Codes**")
-        
-        # Search clinical codes
-        render_success_rate_metric(
-            "Search Clinical Codes",
-            search_found,
-            search_total
-        )
-        
-        # Original clinical codes metric (for reference)
-        st.caption(f"Parsed from clinical searches")
-    
-    with col2:
-        st.markdown("**Report Codes**") 
-        
-        # Report clinical codes
-        render_success_rate_metric(
-            "Report Clinical Codes",
-            report_found,
-            report_total
-        )
-        
-        if report_total > 0:
-            st.caption(f"Parsed from report structures")
-        else:
-            st.caption("No reports found in XML")
-    
-    with col3:
-        st.markdown("**Combined Totals**")
-        
-        # Combined clinical codes
-        render_success_rate_metric(
-            "All Clinical Codes",
-            total_found,
-            total_clinical
-        )
-        
-        st.caption(f"Search + Report codes combined")
-    
-    # Additional metrics section
-    st.write("---")
-    col_additional1, col_additional2 = st.columns(2)
-    
-    with col_additional1:
-        st.markdown("**Other Standalone Items**")
-        
-        render_success_rate_metric(
-            "Standalone Medications",
-            medications_found,
-            medications_total
-        )
-    
-    with col_additional2:
-        st.markdown("**Pseudo-Refset Members**")
-        
-        # Clinical members (unified data)
-        render_success_rate_metric(
-            "Clinical Members",
-            pseudo_members_found,
-            pseudo_members_total
-        )
-        
-        # Medication members - separate pseudo medication members if available
         if unified_results:
-            # Count medication pseudo-members if they exist
-            medication_pseudo_found = 0
-            medication_pseudo_total = 0
-            st.info("Medication Members: No items to process")
+            # Use unified pipeline data for accurate counts
+            clinical_codes = unified_results.get('clinical_codes', [])
+            pseudo_members = unified_results.get('clinical_pseudo_members', [])
+            medications = unified_results.get('medications', [])
+            refsets = unified_results.get('refsets', [])
+            pseudo_refsets = unified_results.get('pseudo_refsets', [])
+            
+            # Calculate found vs total for each category
+            clinical_found = len([c for c in clinical_codes if c.get('Mapping Found') == 'Found'])
+            clinical_total = len(clinical_codes)
+            
+            pseudo_members_found = len([c for c in pseudo_members if c.get('Mapping Found') == 'Found'])
+            pseudo_members_total = len(pseudo_members)
+            
+            medications_found = len([m for m in medications if m.get('Mapping Found') == 'Found'])
+            medications_total = len(medications)
+            
+            # Separate search vs report codes
+            search_clinical = [c for c in clinical_codes if c.get('Source Type', '').lower() == 'search' or 'search' in c.get('Source Type', '').lower()]
+            report_clinical = [c for c in clinical_codes if 'report' in c.get('Source Type', '').lower()]
+            
+            search_found = len([c for c in search_clinical if c.get('Mapping Found') == 'Found'])
+            search_total = len(search_clinical)
+            report_found = len([c for c in report_clinical if c.get('Mapping Found') == 'Found'])
+            report_total = len(report_clinical)
+            
+            total_clinical = clinical_total + pseudo_members_total
+            total_found = clinical_found + pseudo_members_found
         else:
-            # Legacy fallback
-            medication_pseudo_found = trans_accuracy.get('pseudo_refset_medications', {}).get('found', 0)
-            medication_pseudo_total = trans_accuracy.get('pseudo_refset_medications', {}).get('total', 0)
-            render_success_rate_metric(
-                "Medication Members",
-                medication_pseudo_found,
-                medication_pseudo_total
-            )
+            # Fallback to legacy data if unified not available
+            trans_accuracy = audit_stats['translation_accuracy']
+            report_results = st.session_state.get('report_results')
+            report_clinical_count = 0
+            if report_results and hasattr(report_results, 'clinical_codes'):
+                report_clinical_count = len(report_results.clinical_codes)
+            
+            search_found = trans_accuracy['clinical_codes']['found']
+            search_total = trans_accuracy['clinical_codes']['total']
+            report_found = report_clinical_count
+            report_total = report_clinical_count
+            total_clinical = search_total + report_clinical_count
+            total_found = search_found + report_clinical_count
+            
+            # Legacy fallback values
+            pseudo_members_found = 0
+            pseudo_members_total = 0
+            medications_found = trans_accuracy.get('medications', {}).get('found', 0)
+            medications_total = trans_accuracy.get('medications', {}).get('total', 0)
     
-    # Enhanced overall success rate including report data
-    st.write("---")
-    
-    # Calculate overall metrics using unified data
-    if unified_results:
-        # Use unified pipeline data for accurate overall metrics
-        overall_found = clinical_found + pseudo_members_found + medications_found
-        overall_total = clinical_total + pseudo_members_total + medications_total
-        
-        col_overall1, col_overall2 = st.columns(2)
-        
-        with col_overall1:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**Search Codes**")
+            
+            # Search clinical codes
             render_success_rate_metric(
-                "Overall Success Rate",
-                overall_found,
-                overall_total
+                "Search Clinical Codes",
+                search_found,
+                search_total
             )
-            st.caption("All codes (clinical + pseudo-members + medications)")
+            
+            # Original clinical codes metric (for reference)
+            st.caption(f"Parsed from clinical searches")
         
-        with col_overall2:
+        with col2:
+            st.markdown("**Report Codes**") 
+            
+            # Report clinical codes
             render_success_rate_metric(
-                "Combined Clinical Success",
+                "Report Clinical Codes",
+                report_found,
+                report_total
+            )
+            
+            if report_total > 0:
+                st.caption(f"Parsed from report structures")
+            else:
+                st.caption("No reports found in XML")
+        
+        with col3:
+            st.markdown("**Combined Totals**")
+            
+            # Combined clinical codes
+            render_success_rate_metric(
+                "All Clinical Codes",
                 total_found,
                 total_clinical
             )
-            st.caption("Clinical codes + pseudo-members combined")
-    else:
-        # Legacy fallback
-        original_overall_found = trans_accuracy['overall']['found']
-        original_overall_total = trans_accuracy['overall']['total']
-        enhanced_overall_found = original_overall_found + report_total
-        enhanced_overall_total = original_overall_total + report_total
+            
+            st.caption(f"Search + Report codes combined")
+    
+        # Additional metrics section
+        col_additional1, col_additional2 = st.columns(2)
         
-        col_overall1, col_overall2 = st.columns(2)
-        
-        with col_overall1:
+        with col_additional1:
+            st.markdown("**Other Standalone Items**")
+            
             render_success_rate_metric(
-                "Original Overall Success",
-                original_overall_found,
-                original_overall_total
+                "Standalone Medications",
+                medications_found,
+                medications_total
             )
-            st.caption("Based on main translation only")
         
-        with col_overall2:
+        with col_additional2:
+            st.markdown("**Pseudo-Refset Members**")
+            
+            # Clinical members (unified data)
             render_success_rate_metric(
-                "Enhanced Overall Success",
-                enhanced_overall_found,
-                enhanced_overall_total
+                "Clinical Members",
+                pseudo_members_found,
+                pseudo_members_total
             )
-            st.caption("Including search + report codes")
+            
+            # Medication members - separate pseudo medication members if available
+            if unified_results:
+                # Count medication pseudo-members if they exist
+                medication_pseudo_found = 0
+                medication_pseudo_total = 0
+                st.markdown("""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    Medication Members: No items to process
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Legacy fallback
+                medication_pseudo_found = trans_accuracy.get('pseudo_refset_medications', {}).get('found', 0)
+                medication_pseudo_total = trans_accuracy.get('pseudo_refset_medications', {}).get('total', 0)
+                render_success_rate_metric(
+                    "Medication Members",
+                    medication_pseudo_found,
+                    medication_pseudo_total
+                )
+    
+        # Enhanced overall success rate including report data
+        st.write("---")
+        
+        # Calculate overall metrics using unified data
+        if unified_results:
+            # Use unified pipeline data for accurate overall metrics
+            overall_found = clinical_found + pseudo_members_found + medications_found
+            overall_total = clinical_total + pseudo_members_total + medications_total
+            
+            col_overall1, col_overall2 = st.columns(2)
+            
+            with col_overall1:
+                render_success_rate_metric(
+                    "Overall Success Rate",
+                    overall_found,
+                    overall_total
+                )
+                st.caption("All codes (clinical + pseudo-members + medications)")
+            
+            with col_overall2:
+                render_success_rate_metric(
+                    "Combined Clinical Success",
+                    total_found,
+                    total_clinical
+                )
+                st.caption("Clinical codes + pseudo-members combined")
+        else:
+            # Legacy fallback
+            original_overall_found = trans_accuracy['overall']['found']
+            original_overall_total = trans_accuracy['overall']['total']
+            enhanced_overall_found = original_overall_found + report_total
+            enhanced_overall_total = original_overall_total + report_total
+            
+            col_overall1, col_overall2 = st.columns(2)
+            
+            with col_overall1:
+                render_success_rate_metric(
+                    "Original Overall Success",
+                    original_overall_found,
+                    original_overall_total
+                )
+                st.caption("Based on main translation only")
+            
+            with col_overall2:
+                render_success_rate_metric(
+                    "Enhanced Overall Success",
+                    enhanced_overall_found,
+                    enhanced_overall_total
+                )
+                st.caption("Including search + report codes")
     
     # Code System Breakdown and Quality Indicators side by side
     breakdown_col, quality_col = st.columns([1, 2])
@@ -379,9 +721,31 @@ def render_analytics_tab():
             # Include children flags
             include_children = quality['has_include_children_flags']
             if include_children > 0:
-                st.success(f"**Codes With 'Include Children = True':** {include_children}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Codes With 'Include Children = True':</strong> {include_children}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"**Codes With 'Include Children = True':** {include_children}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Codes With 'Include Children = True':</strong> {include_children}
+                </div>
+                """, unsafe_allow_html=True)
             
             # Display names present
             display_names = quality['has_display_names']
@@ -389,35 +753,145 @@ def render_analytics_tab():
             if total_references > 0:
                 display_percentage = (display_names / total_references) * 100
                 if display_percentage >= 90:
-                    st.success(f"**Display Names Present:** {display_names} ({display_percentage:.0f}%)")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Display Names Present:</strong> {display_names} ({display_percentage:.0f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
                 elif display_percentage >= 70:
-                    st.warning(f"**Display Names Present:** {display_names} ({display_percentage:.0f}%)")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #7A5F0B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Display Names Present:</strong> {display_names} ({display_percentage:.0f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.error(f"**Display Names Present:** {display_names} ({display_percentage:.0f}%)")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #660022;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1rem;
+                    ">
+                        <strong>Display Names Present:</strong> {display_names} ({display_percentage:.0f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
-                st.info(f"**Display Names Present:** {display_names}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Display Names Present:</strong> {display_names}
+                </div>
+                """, unsafe_allow_html=True)
             
             # EMISINTERNAL codes (should be excluded)
             emis_internal = quality['emisinternal_codes_excluded']
             if emis_internal > 0:
-                st.warning(f"**EMISINTERNAL Codes (Excluded):** {emis_internal}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #7A5F0B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>EMISINTERNAL Codes (Excluded):</strong> {emis_internal}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.success(f"**EMISINTERNAL Codes (Excluded):** {emis_internal}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>EMISINTERNAL Codes (Excluded):</strong> {emis_internal}
+                </div>
+                """, unsafe_allow_html=True)
         
         with col2:
             # Table context
             table_context = quality['has_table_context']
             if table_context > 0:
-                st.success(f"**Table Context Available:** {table_context}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Table Context Available:</strong> {table_context}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"**Table Context Available:** {table_context}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Table Context Available:</strong> {table_context}
+                </div>
+                """, unsafe_allow_html=True)
             
             # Column context
             column_context = quality['has_column_context']
             if column_context > 0:
-                st.success(f"**Column Context Available:** {column_context}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Column Context Available:</strong> {column_context}
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"**Column Context Available:** {column_context}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1rem;
+                ">
+                    <strong>Column Context Available:</strong> {column_context}
+                </div>
+                """, unsafe_allow_html=True)
             
             # Add a spacer to balance the layout
             st.write("")

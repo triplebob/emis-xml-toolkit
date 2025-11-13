@@ -44,9 +44,9 @@ def get_success_highlighting_function(success_column: str = 'Mapping Found'):
     """
     def highlight_success(row):
         if row[success_column] == 'Found':
-            return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green with light text
+            return ['background-color: #1F4E3D; color: #FAFAFA'] * len(row)  # Green for found
         else:
-            return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red with light text
+            return ['background-color: #660022; color: #FAFAFA'] * len(row)  # Wine red for not found
     
     return highlight_success
 
@@ -59,7 +59,7 @@ def get_warning_highlighting_function():
         Function for styling DataFrame rows with warning colors
     """
     def highlight_warning(row):
-        return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow/orange with light text
+        return ['background-color: #7A5F0B; color: #FAFAFA'] * len(row)  # Amber for warning
     
     return highlight_warning
 
@@ -91,7 +91,18 @@ def render_section_with_data(
     if title and title.strip():  # Only show subheader if title is provided and not empty
         st.subheader(title)
     if info_text:
-        st.info(info_text)
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            {info_text}
+        </div>
+        """, unsafe_allow_html=True)
     
     if data:
         # Get current modes for cache key
@@ -412,18 +423,62 @@ def render_success_rate_metric(
         warning_threshold: Threshold for warning color (yellow)
     """
     if total == 0:
-        st.info(f"**{label}:** No items to process")
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            <strong>{label}:</strong> No items to process
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     rate = (found / total) * 100
-    text = f"**{label}:** {rate:.0f}% ({found}/{total} found)"
+    text_content = f"<strong>{label}:</strong> {rate:.0f}% ({found}/{total} found)"
     
     if rate >= success_threshold:
-        st.success(text)
+        st.markdown(f"""
+        <div style="
+            background-color: #1F4E3D;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            {text_content}
+        </div>
+        """, unsafe_allow_html=True)
     elif rate >= warning_threshold:
-        st.warning(text)
+        st.markdown(f"""
+        <div style="
+            background-color: #7A5F0B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            {text_content}
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.error(text)
+        st.markdown(f"""
+        <div style="
+            background-color: #660022;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 1rem;
+        ">
+            {text_content}
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def create_expandable_sections(

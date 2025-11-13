@@ -18,10 +18,15 @@ def create_processing_stats(xml_filename, xml_content, emis_guids, translated_co
         'processing_time_seconds': processing_time
     }
     
-    # XML structure analysis
-    valueset_count = len(set(guid['valueSet_guid'] for guid in emis_guids))
-    unique_guids_count = len(set(guid['emis_guid'] for guid in emis_guids))
-    total_guid_occurrences = len(emis_guids)
+    # XML structure analysis - handle empty GUID lists for geographical XMLs
+    if emis_guids:
+        valueset_count = len(set(guid['valueSet_guid'] for guid in emis_guids if 'valueSet_guid' in guid))
+        unique_guids_count = len(set(guid['emis_guid'] for guid in emis_guids if 'emis_guid' in guid))
+        total_guid_occurrences = len(emis_guids)
+    else:
+        valueset_count = 0
+        unique_guids_count = 0
+        total_guid_occurrences = 0
     
     xml_structure_stats = {
         'total_valuesets': valueset_count,
@@ -30,24 +35,25 @@ def create_processing_stats(xml_filename, xml_content, emis_guids, translated_co
         'duplicate_guid_ratio': round((total_guid_occurrences - unique_guids_count) / total_guid_occurrences * 100, 2) if total_guid_occurrences > 0 else 0
     }
     
-    # Code system breakdown
+    # Code system breakdown - handle empty GUID lists
     code_systems = {}
-    for guid in emis_guids:
-        system = guid['code_system']
-        code_systems[system] = code_systems.get(system, 0) + 1
+    if emis_guids:
+        for guid in emis_guids:
+            system = guid.get('code_system', 'Unknown')
+            code_systems[system] = code_systems.get(system, 0) + 1
     
-    # Translation accuracy stats
-    clinical_found = sum(1 for code in translated_codes['clinical'] if code['Mapping Found'] == 'Found')
-    clinical_total = len(translated_codes['clinical'])
+    # Translation accuracy stats - handle empty results for geographical XMLs
+    clinical_found = sum(1 for code in translated_codes.get('clinical', []) if code.get('Mapping Found') == 'Found')
+    clinical_total = len(translated_codes.get('clinical', []))
     
-    medication_found = sum(1 for code in translated_codes['medications'] if code['Mapping Found'] == 'Found')
-    medication_total = len(translated_codes['medications'])
+    medication_found = sum(1 for code in translated_codes.get('medications', []) if code.get('Mapping Found') == 'Found')
+    medication_total = len(translated_codes.get('medications', []))
     
-    pseudo_clinical_found = sum(1 for code in translated_codes['clinical_pseudo_members'] if code['Mapping Found'] == 'Found')
-    pseudo_clinical_total = len(translated_codes['clinical_pseudo_members'])
+    pseudo_clinical_found = sum(1 for code in translated_codes.get('clinical_pseudo_members', []) if code.get('Mapping Found') == 'Found')
+    pseudo_clinical_total = len(translated_codes.get('clinical_pseudo_members', []))
     
-    pseudo_medication_found = sum(1 for code in translated_codes['medication_pseudo_members'] if code['Mapping Found'] == 'Found')
-    pseudo_medication_total = len(translated_codes['medication_pseudo_members'])
+    pseudo_medication_found = sum(1 for code in translated_codes.get('medication_pseudo_members', []) if code.get('Mapping Found') == 'Found')
+    pseudo_medication_total = len(translated_codes.get('medication_pseudo_members', []))
     
     translation_stats = {
         'clinical_codes': {
@@ -79,14 +85,14 @@ def create_processing_stats(xml_filename, xml_content, emis_guids, translated_co
         }
     }
     
-    # Category distribution
+    # Category distribution - handle empty translated_codes for geographical XMLs
     category_distribution = {
-        'clinical_codes': len(translated_codes['clinical']),
-        'medications': len(translated_codes['medications']),
-        'refsets': len(translated_codes['refsets']),
-        'pseudo_refsets': len(translated_codes['pseudo_refsets']),
-        'pseudo_refset_clinical_members': len(translated_codes['clinical_pseudo_members']),
-        'pseudo_refset_medication_members': len(translated_codes['medication_pseudo_members'])
+        'clinical_codes': len(translated_codes.get('clinical', [])),
+        'medications': len(translated_codes.get('medications', [])),
+        'refsets': len(translated_codes.get('refsets', [])),
+        'pseudo_refsets': len(translated_codes.get('pseudo_refsets', [])),
+        'pseudo_refset_clinical_members': len(translated_codes.get('clinical_pseudo_members', [])),
+        'pseudo_refset_medication_members': len(translated_codes.get('medication_pseudo_members', []))
     }
     
     # Validation flags and quality metrics

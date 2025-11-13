@@ -1,5 +1,101 @@
 # Changelog
 
+## v2.2.3 - Professional Theming & Infrastructure Improvements (November 2025)
+
+### 🚀 **Patient Demographics & LSOA Filtering Implementation**
+
+**Enhanced Demographic Support:**
+- **Future-Proof Detection**: Patient demographics column detection supporting current LSOA 2011 census data, and future-proofed year variation
+- **Grouped Criteria Analysis**: Multiple criteria with shared IDs but different demographic values properly grouped and displayed
+- **EMIS-Style Phrasing**: Patient demographics criteria shown with proper EMIS terminology and formatting
+- **Demographics-Only XMLs**: Proper UI rendering for XMLs containing only demographic data without clinical codes
+- **Individual LSOA Display**: Enhanced Excel exports showing individual LSOA codes with comprehensive demographics patterns
+
+**Enhanced Export Integration:**
+- **JSON Export Enhancement**: Patient demographics criteria patterns properly handled in structured export format
+- **Excel Export Enhancement**: Demographics criteria patterns with individual LSOA code display
+- **Test Coverage**: Manual testing completed with real XML demographics data for validation
+
+### 🏗️ **Export System Centralisation & Memory optimisation**
+
+**Unified Export Architecture:**
+- **Centralised UIExportManager**: All export functionality consolidated in `export_handlers/ui_export_manager.py` (hopefully)
+- **True Lazy Loading**: Two-click lazy pattern implementation (Click 1: Generate file, Click 2: Download & cleanup)
+- **Memory Leak Prevention**: Export files automatically deleted from session state after download
+- **Consistent Experience**: Unified export workflow across Audit Reports, Aggregate Reports, and Search Rule Logic Browser
+
+**Tab Integration:**
+- **Audit Report Tab**: Centralised lazy exports replacing pre-generation patterns
+- **Aggregate Report Tab**: Centralised lazy exports with automatic cleanup
+- **Search Rule Visualiser**: Centralised lazy exports with inline export code removal
+- **Memory Management**: Automatic session state cleanup preventing memory accumulation
+
+### 🎨 **Complete Custom Theme Implementation**
+
+**Professional Interface:**
+- **Custom Colour Palette**: Medical-grade dark theme with Blue (#28546B), Purple (#5B2758), Green (#1F4E3D), Amber (#7A5F0B), Red (#660022)
+- **RAG Colour System**: Red-Amber-Green rating system for analytics metrics and data quality indicators
+- **Component Replacement**: All `st.info()`, `st.success()`, `st.warning()`, `st.error()` replaced with custom styled components
+- **Visual Consistency**: Eliminated all default Streamlit styling inconsistencies across application
+
+**Comprehensive Interface Theming:**
+- **Clinical Codes Tab**: Complete theming including pseudo-refsets, usage notes, and table styling
+- **Analytics Tab**: RAG-rated analytics with custom colour coding for performance metrics
+- **Terminology Server**: Comprehensive interface theming with connection status and expansion results
+- **Report Tabs**: Unified theming across List, Audit, and Aggregate report interfaces
+- **Main Application**: Upload prompts, processing status, and demographics info themed
+
+**Enhanced User Experience:**
+- **Table Row Theming**: Custom styling for all data tables with theme-consistent RAG colour coding
+- **UI Helper Functions**: Updated styling functions for consistent table theming across all data displays
+- **Professional Appearance**: Enhanced readability and interface for NHS healthcare teams
+- **Theme Documentation**: Complete colour reference guide (`docs/theme-colors.md`) with usage patterns
+
+### ⚡ **Fragment Implementation & Performance**
+
+**Selective Rerendering:**
+- **Export Fragment optimisation**: Export functionality converted to `@st.fragment` decorators in Search Rule Logic Browser
+- **Full App Rerun Elimination**: Export interactions no longer trigger unnecessary full application reruns
+- **Button Interaction optimisation**: Export button clicks perform targeted updates instead of full page refreshes
+
+### 🔧 **Interface & Branding Improvements**
+
+**Sidebar Enhancements:**
+- **Configurable Width**: Default sidebar width set to 350px with user resize capability
+- **Logo Integration**: Professional logo positioning at bottom of sidebar with responsive hide on small screens
+- **SVG Implementation**: Scalable vector logo with theme colour integration and proper positioning
+- **Media Query Responsive**: Logo automatically hidden when window height ≤ 800px to prevent content overlap
+
+**Application Branding:**
+- **ClinXML Rebrand**: Professional product name whilst maintaining "The Unofficial EMIS XML Toolkit" descriptive subtitle
+- **Visual Identity**: Medical cross logo in theme blue for professional healthcare software appearance
+- **Professional Layout**: Clean, medical-grade interface suitable for NHS healthcare teams
+
+---
+
+### **Performance Impact**
+
+**Memory optimisation:**
+- Export system centralisation reduces memory fragmentation and prevents accumulation
+- Lazy loading patterns eliminate pre-generation memory overhead
+- Automatic cleanup prevents session state memory leaks
+
+**UI Responsiveness:**
+- Fragment implementation eliminates full app reruns during export operations
+- Custom theming provides consistent visual performance across all components
+- Enhanced user experience with professional medical interface standards
+
+**Infrastructure Improvements:**
+- Patient demographics filtering supports future census data releases
+- Centralised export architecture improves maintainability and consistency
+- Professional theming system provides scalable visual identity framework
+
+---
+
+*Version 2.2.3 delivers comprehensive patient demographics support, unified export architecture, and consistent theming whilst maintaining full backward compatibility.*
+
+---
+
 ## v2.2.2 - Export Architecture & UI Performance Improvements (November 2025)
 
 ### 🚀 **Export Architecture Overhaul**

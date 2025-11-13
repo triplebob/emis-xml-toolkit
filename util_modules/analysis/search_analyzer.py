@@ -197,10 +197,26 @@ class SearchAnalyzer:
             
             # Parse individual criteria
             criteria = []
+            
+            # Handle both direct criterion elements and criterion elements wrapped in criteria elements
+            # Pattern 1: Direct criterion elements under definition
             for criterion_elem in definition_elem.findall('.//emis:criterion', namespaces):
                 criterion = self.criterion_parser.parse_criterion(criterion_elem)
                 if criterion:
                     criteria.append(criterion)
+            
+            # Pattern 2: Criterion elements wrapped in criteria elements (patient demographics pattern)
+            # Look for <criteria><criterion> patterns
+            criteria_elements = self.ns.findall_with_path(definition_elem, 'criteria')
+            for criteria_elem in criteria_elements:
+                criterion_elems = self.ns.findall_with_path(criteria_elem, 'criterion')
+                for criterion_elem in criterion_elems:
+                    criterion = self.criterion_parser.parse_criterion(criterion_elem)
+                    if criterion:
+                        criteria.append(criterion)
+            
+            # Process patient demographics criteria grouping if detected
+            criteria = self._group_patient_demographics_criteria(criteria, member_operator)
             
             # Parse population criteria (references to other searches)
             population_criteria = []
@@ -442,3 +458,84 @@ class SearchAnalyzer:
                 max_depth = max(max_depth, depth)
         
         return max_depth
+    
+    def _group_patient_demographics_criteria(self, criteria: List[SearchCriterion], member_operator: str) -> List[SearchCriterion]:
+        """
+        Group patient demographics criteria that share the same criterion ID but have different demographic values.
+        
+        This handles the LSOA pattern where multiple criteria have the same ID but different area codes.
+        """
+        if not criteria:
+            return criteria
+        
+        # Group criteria by ID and check for patient demographics patterns
+        id_groups = {}
+        non_demographics = []
+        
+        for criterion in criteria:
+            # Check if this criterion has patient demographics column filters
+            has_demographics = False
+            demographics_values = []
+            
+            for column_filter in criterion.column_filters:
+                if column_filter.get('column_type') == 'patient_demographics':
+                    has_demographics = True
+                    # Extract the demographics value from the range
+                    range_data = column_filter.get('range', {})
+                    from_data = range_data.get('from', {})
+                    value = from_data.get('value')
+                    if value:
+                        demographics_values.append(value)
+            
+            if has_demographics and demographics_values:
+                # This is a patient demographics criterion - group by ID
+                if criterion.id not in id_groups:
+                    id_groups[criterion.id] = {
+                        'base_criterion': criterion,
+                        'demographics_values': demographics_values.copy(),
+                        'all_criteria': [criterion]
+                    }
+                else:
+                    # Add demographics values to existing group
+                    id_groups[criterion.id]['demographics_values'].extend(demographics_values)
+                    id_groups[criterion.id]['all_criteria'].append(criterion)
+            else:
+                # Non-demographics criterion - keep as-is
+                non_demographics.append(criterion)
+        
+        # Build result list
+        result = non_demographics.copy()
+        
+        for group_id, group_data in id_groups.items():
+            base_criterion = group_data['base_criterion']
+            all_values = group_data['demographics_values']
+            
+            if len(all_values) > 1:
+                # Multiple demographics values - create enhanced criterion with grouped values
+                enhanced_criterion = SearchCriterion(
+                    id=base_criterion.id,
+                    table=base_criterion.table,
+                    display_name=base_criterion.display_name,
+                    description=base_criterion.description,
+                    negation=base_criterion.negation,
+                    value_sets=base_criterion.value_sets,
+                    column_filters=base_criterion.column_filters.copy(),
+                    restrictions=base_criterion.restrictions,
+                    exception_code=base_criterion.exception_code,
+                    linked_criteria=base_criterion.linked_criteria
+                )
+                
+                # Add metadata about demographics grouping
+                if enhanced_criterion.column_filters:
+                    for column_filter in enhanced_criterion.column_filters:
+                        if column_filter.get('column_type') == 'patient_demographics':
+                            column_filter['grouped_demographics_values'] = all_values
+                            column_filter['demographics_count'] = len(all_values)
+                            column_filter['demographics_operator'] = member_operator
+                
+                result.append(enhanced_criterion)
+            else:
+                # Single demographics value - keep original
+                result.append(base_criterion)
+        
+        return result

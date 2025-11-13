@@ -75,7 +75,7 @@ def render_summary_tab(results):
     with col1_summary:
         st.metric("Total Containers", total_count)
     with col2_summary:
-        st.metric("Total Clinical Codes", total_clinical_count, delta=f"+{report_clinical_count} from reports" if report_clinical_count > 0 else None)
+        st.metric("Total Clinical Codes", total_clinical_count, delta=f"+{report_clinical_count} from reports" if report_clinical_count > 0 else None, delta_color="off")
     with col3_summary:
         st.metric("Standalone Medications", medication_count)
     with col4_summary:
@@ -92,7 +92,18 @@ def render_summary_tab(results):
         medication_pseudo = len(results.get('medication_pseudo_members', []))
         total_items = search_clinical_count + report_clinical_count + standalone_medications + clinical_pseudo + medication_pseudo + refset_count + pseudo_refset_count
         
-        st.success(f"✅ Processed {total_items} items: {search_clinical_count} search clinical codes, {report_clinical_count} report clinical codes, {standalone_medications} standalone medications, {clinical_pseudo} clinical in pseudo-refsets, {medication_pseudo} medications in pseudo-refsets, {refset_count} refsets, {pseudo_refset_count} pseudo-refsets")
+        st.markdown(f"""
+        <div style="
+            background-color: #1F4E3D;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            ✓&nbsp;&nbsp;Processed {total_items} items: {search_clinical_count} search clinical codes, {report_clinical_count} report clinical codes, {standalone_medications} standalone medications, {clinical_pseudo} clinical in pseudo-refsets, {medication_pseudo} medications in pseudo-refsets, {refset_count} refsets, {pseudo_refset_count} pseudo-refsets
+        </div>
+        """, unsafe_allow_html=True)
     
     # Clinical codes breakdown
     if search_clinical_count > 0 or report_clinical_count > 0:
@@ -107,32 +118,101 @@ def render_summary_tab(results):
             search_pct = (search_clinical_count / total_clinical_count * 100) if total_clinical_count > 0 else 0
             st.metric("Search %", f"{search_pct:.1f}%")
     
-    # Additional info rows with counts
-    col1_extra, col2_extra = st.columns(2)
-    
-    with col1_extra:
-        if clinical_pseudo_count > 0:
-            st.info(f"📋 {clinical_pseudo_count} clinical codes are part of pseudo-refsets")
-        else:
-            st.success("📋 0 clinical codes in pseudo-refsets")
-    
-    with col2_extra:
-        if medication_pseudo_count > 0:
-            st.info(f"💊 {medication_pseudo_count} medications are part of pseudo-refsets")
-        else:
-            st.success("💊 0 medications in pseudo-refsets")
-    
-    # Success rates
+    # Row 1: Clinical codes mapping success and pseudo-refsets
     if search_clinical_count > 0:
         clinical_found = len([c for c in results['clinical'] if c['Mapping Found'] == 'Found'])
-        st.info(f"Search clinical codes mapping success: {clinical_found}/{search_clinical_count} ({clinical_found/search_clinical_count*100:.1f}%)")
+        col1_clinical, col2_clinical = st.columns([6, 2])
+        
+        with col1_clinical:
+            st.markdown(f"""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                Search clinical codes mapping success: {clinical_found}/{search_clinical_count} ({clinical_found/search_clinical_count*100:.1f}%)
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2_clinical:
+            if clinical_pseudo_count > 0:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    📋 {clinical_pseudo_count} clinical codes are part of pseudo-refsets
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    📋 0 clinical codes in pseudo-refsets
+                </div>
+                """, unsafe_allow_html=True)
     
+    # Row 2: Medications mapping success and pseudo-refsets  
     if medication_count > 0:
         med_found = len([m for m in results['medications'] if m['Mapping Found'] == 'Found'])
-        st.info(f"Standalone medications mapping success: {med_found}/{medication_count} ({med_found/medication_count*100:.1f}%)")
+        col1_medication, col2_medication = st.columns([6, 2])
+        
+        with col1_medication:
+            st.markdown(f"""
+            <div style="
+                background-color: #5B2758;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                Standalone medications mapping success: {med_found}/{medication_count} ({med_found/medication_count*100:.1f}%)
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2_medication:
+            if medication_pseudo_count > 0:
+                st.markdown(f"""
+                <div style="
+                    background-color: #660022;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    💊 {medication_pseudo_count} medications are part of pseudo-refsets
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="
+                    background-color: #1F4E3D;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    💊 0 medications in pseudo-refsets
+                </div>
+                """, unsafe_allow_html=True)
 
 
-# Placeholder for other functions - will be filled in subsequent steps
 def render_clinical_codes_tab(results=None):
     
     # Switch to unified parsing approach using orchestrated analysis
@@ -181,9 +261,7 @@ def render_clinical_codes_tab(results=None):
         render_section_with_data(
             title="",  # Empty title since we rendered it above
             data=clinical_data,
-            info_text="These are clinical codes that are NOT part of any pseudo-refset and can be used directly. " + 
-                      ("Use the Mode toggle above to switch between 'Unique Codes' (show each code once across entire XML) and 'Per Source' (show codes per search/report with source tracking)." if st.session_state.get('current_deduplication_mode', 'unique_codes') == 'unique_per_entity' else 
-                       "Currently showing unique codes only (one instance per code across entire XML). Use the Mode toggle to show per-source tracking."),
+            info_text="These are clinical codes that are NOT part of any pseudo-refset and can be used directly.",
             empty_message="No standalone clinical codes found in this XML file",
             download_label="📥 Download Standalone Clinical Codes CSV",
             filename_prefix="standalone_clinical_codes",
@@ -198,7 +276,18 @@ def render_clinical_codes_tab(results=None):
     
     if pseudo_members_count > 0:
         # Show info directing users to dedicated tab
-        st.info(f"⚠️ **{pseudo_members_count} clinical codes are part of pseudo-refsets** - View and export them from the 'Pseudo-Refset Members' tab.")
+        st.markdown(f"""
+        <div style="
+            background-color: #660022;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            ⚠️ <strong>{pseudo_members_count} clinical codes are part of pseudo-refsets</strong> - View and export them from the 'Pseudo-Refset Members' tab.
+        </div>
+        """, unsafe_allow_html=True)
     else:
         # Show success when no pseudo-refset members exist
         st.success("✅ **All clinical codes are properly mapped!** This means all codes in your XML are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
@@ -254,9 +343,7 @@ def render_medications_tab(results):
             render_section_with_data(
                 title="",  # Empty title since we rendered it above
                 data=medications_data_filtered,
-                info_text="These are medications that are NOT part of any pseudo-refset and can be used directly. " + 
-                          ("Use the Mode toggle above to switch between 'Unique Codes' (show each medication once across entire XML) and 'Per Source' (show medications per search/report with source tracking)." if st.session_state.get('current_deduplication_mode', 'unique_codes') == 'unique_per_entity' else 
-                           "Currently showing unique medications only (one instance per medication across entire XML). Use the Mode toggle to show per-source tracking."),
+                info_text="These are medications that are NOT part of any pseudo-refset and can be used directly.",
                 empty_message="No standalone medications found in this XML file",
                 download_label="📥 Download Standalone Medications CSV",
                 filename_prefix="standalone_medications",
@@ -307,9 +394,9 @@ def render_medications_tab(results):
             # Color code pseudo-refset members differently
             def highlight_pseudo_medications(row):
                 if row['Mapping Found'] == 'Found':
-                    return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow/orange
+                    return ['background-color: #7A5F0B; color: #FAFAFA'] * len(row)  # Amber for found
                 else:
-                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red
+                    return ['background-color: #660022; color: #FAFAFA'] * len(row)  # Wine red for not found
             
             styled_pseudo_medications = medication_pseudo_df.style.apply(highlight_pseudo_medications, axis=1)
             st.dataframe(styled_pseudo_medications, width='stretch')
@@ -360,7 +447,7 @@ def render_refsets_tab(results):
                 refsets_data_filtered.append(filtered_refset)
             
             def highlight_refsets(row):
-                return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for refsets
+                return ['background-color: #1F4E3D; color: #FAFAFA'] * len(row)  # Green for refsets
             
             current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
             
@@ -368,16 +455,25 @@ def render_refsets_tab(results):
             render_section_with_data(
                 title="",  # Empty title since we rendered it above
                 data=refsets_data_filtered,
-                info_text="These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches. " + 
-                          ("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                           "Currently showing unique refsets only. Use the Mode toggle to show per-source tracking."),
+                info_text="These are true refsets that EMIS recognizes natively. They can be used directly by their SNOMED code in EMIS clinical searches.",
                 empty_message="No refsets found in this XML file",
                 download_label="📥 Download Refsets CSV",
                 filename_prefix="refsets",
                 highlighting_function=highlight_refsets
             )
         else:
-            st.info("No refsets found in this XML file")
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                No refsets found in this XML file
+            </div>
+            """, unsafe_allow_html=True)
     
     # Execute the refsets display fragment
     refsets_display_fragment()
@@ -434,12 +530,6 @@ def render_pseudo_refsets_tab(results):
         # Show appropriate dynamic message based on pseudo-refsets and mode
         if not display_pseudo_refsets:
             st.success("✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).")
-        else:
-            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-            if current_mode == 'unique_codes':
-                st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking.")
-            else:
-                st.info("ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
         
         # Use efficient render_section_with_data pattern for pseudo-refsets
         if display_pseudo_refsets:
@@ -452,20 +542,28 @@ def render_pseudo_refsets_tab(results):
             render_section_with_data(
                 title="",  # No title needed as it's already shown above
                 data=display_data,
-                info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                          "Currently showing unique pseudo-refsets only. Use the Mode toggle to show per-source tracking."),
+                info_text="ℹ️ These are ValueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets.",
                 empty_message="✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).",
                 download_label="📥 Download Pseudo-Refsets CSV",
                 filename_prefix="pseudo_refsets",
                 highlighting_function=get_warning_highlighting_function()
             )
             
-            st.warning("""
-            **Important Usage Notes:**
-            - These pseudo-refset containers cannot be referenced directly in EMIS clinical searches
-            - To use them, you must manually list all individual member codes within each valueset
-            - View the 'Pseudo-Refset Members' tab to see all member codes for each container
-            """)
+            st.markdown("""
+            <div style="
+                background-color: #28546B;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                <strong>Important Usage Notes:</strong><br>
+                • These pseudo-refset containers cannot be referenced directly in EMIS clinical searches<br>
+                • To use them, you must manually list all individual member codes within each valueset<br>
+                • View the 'Pseudo-Refset Members' tab to see all member codes for each container
+            </div>
+            """, unsafe_allow_html=True)
     
     # Execute the pseudo-refsets display fragment
     pseudo_refsets_display_fragment()
@@ -513,19 +611,12 @@ def render_pseudo_refset_members_tab(results):
         if not pseudo_members_data:
             st.success("✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
             return
-        else:
-            current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-            if current_mode == 'unique_codes':
-                st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing unique codes only. Use the Mode toggle to show per-source tracking.")
-            else:
-                st.info("⚠️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Currently showing per-source tracking. Use the Mode toggle to show unique codes only.")
         
         # Use efficient render_section_with_data pattern for pseudo-members
         render_section_with_data(
             title="",  # No title needed as it's already shown above
             data=pseudo_members_data,
-            info_text=("Use the Mode toggle above to switch between 'Unique Codes' and 'Per Source' to see source tracking." if current_mode == 'unique_per_entity' else 
-                      "Currently showing unique codes only. Use the Mode toggle to show per-source tracking."),
+            info_text="ℹ️ These clinical codes are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes.",
             empty_message="✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).",
             download_label="📥 Download Pseudo-Members CSV",
             filename_prefix="pseudo_members",
@@ -533,13 +624,22 @@ def render_pseudo_refset_members_tab(results):
         )
         
         # Add helpful information about pseudo-refsets
-        st.warning("""
-        **Important Usage Notes:**
-        - These codes are part of pseudo-refsets (ValueSets that EMIS does not recognize natively)
-        - To use these codes in EMIS clinical searches, you must manually list all individual member codes
-        - Pseudo-refset containers cannot be referenced directly by their container SNOMED code
-        - View the pseudo-refset containers in the 'All Pseudo-Refsets' tab
-        """)
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            <strong>Important Usage Notes:</strong><br>
+            • These codes are part of pseudo-refsets (ValueSets that EMIS does not recognize natively)<br>
+            • To use these codes in EMIS clinical searches, you must manually list all individual member codes<br>
+            • Pseudo-refset containers cannot be referenced directly by their container SNOMED code<br>
+            • View the pseudo-refset containers in the 'All Pseudo-Refsets' tab
+        </div>
+        """, unsafe_allow_html=True)
     
     # Execute the pseudo-members display fragment
     pseudo_members_display_fragment()
@@ -547,6 +647,35 @@ def render_pseudo_refset_members_tab(results):
 
 def render_clinical_codes_main_tab(results):
     """Render the Clinical Codes main tab (formerly XML Contents)"""
+    # Check if we have clinical data or if this is a non-clinical XML (patient demographics filtering, etc.)
+    has_clinical_data = results and len(results) > 0
+    
+    if not has_clinical_data:
+        # Handle XMLs with no clinical codes (patient demographics filtering, demographic filters, etc.)
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            📍 <strong>Non-Clinical XML Detected</strong>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+        This XML file contains searches or reports without clinical codes. This commonly occurs with:
+        - **Patient demographics filtering** (LSOA codes, postcodes, practice areas)
+        - **Demographic filtering** (age ranges, gender, registration status)
+        - **Administrative searches** (user authorization, practice codes)
+        
+        ℹ️ **Clinical code analysis is not applicable for this XML type.**
+        
+        👉 **Use the 'Search Analysis' tab** to view the search logic and filtering criteria.
+        """)
+        return
+    
     # Clinical Codes Configuration
     # Always enable report codes and source tracking - no longer configurable
     st.session_state.clinical_include_report_codes = True
@@ -593,7 +722,18 @@ def render_nhs_terminology_tab(results):
     """Render NHS Terminology Server integration tab"""
     if not NHS_TERMINOLOGY_AVAILABLE:
         st.error("❌ NHS Terminology Server integration not available")
-        st.info("The terminology server module failed to import. Please check the installation.")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            The terminology server module failed to import. Please check the installation.
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     # Get unified clinical data for expansion
@@ -620,7 +760,18 @@ def render_nhs_terminology_tab(results):
     all_clinical_codes.extend(refsets)
     
     if not all_clinical_codes:
-        st.info("ℹ️ No clinical codes found for expansion analysis")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            ℹ️ No clinical codes found for expansion analysis
+        </div>
+        """, unsafe_allow_html=True)
         return
     
     # Render the expansion interface
@@ -629,8 +780,14 @@ def render_nhs_terminology_tab(results):
 
 def render_results_tabs(results):
     """Render all result tabs with new 5-tab structure."""
-    if 'results' in st.session_state and st.session_state.results:
-        results = st.session_state.results
+    # Check if we have results OR if we have XML content (for patient demographics filtering XMLs)
+    # For patient demographics XMLs, results might be empty dict {} but that's still valid
+    has_clinical_results = 'results' in st.session_state and st.session_state.results is not None
+    has_xml_content = 'xml_content' in st.session_state and st.session_state.xml_content
+    
+    # Show tabs if we have either clinical results or XML content (including empty results from patient demographics XMLs)
+    if has_clinical_results or has_xml_content:
+        results = st.session_state.results if has_clinical_results else {}
         
         # Create new 5-tab main structure
         main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
@@ -664,4 +821,15 @@ def render_results_tabs(results):
             xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
             render_aggregate_reports_tab(xml_content, xml_filename)
     else:
-        st.info("Results will appear here after processing an XML file")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            Upload EMIS XML files to analyze search logic, visualize report structures, and translate clinical codes to UK SNOMED using MKB 226.
+        </div>
+        """, unsafe_allow_html=True)

@@ -36,8 +36,14 @@ from .tabs import (
 
 def render_results_tabs(results):
     """Render all result tabs with new 5-tab structure."""
-    if 'results' in st.session_state and st.session_state.results:
-        results = st.session_state.results
+    # Check if we have results OR if we have XML content (for patient demographics filtering XMLs)
+    # For patient demographics XMLs, results might be empty dict {} but that's still valid
+    has_clinical_results = 'results' in st.session_state and st.session_state.results is not None
+    has_xml_content = 'xml_content' in st.session_state and st.session_state.xml_content
+    
+    # Show tabs if we have either clinical results or XML content (including empty results from patient demographics XMLs)
+    if has_clinical_results or has_xml_content:
+        results = st.session_state.results if has_clinical_results else {}
         
         # Create new 5-tab main structure
         main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
@@ -71,11 +77,48 @@ def render_results_tabs(results):
             xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
             render_aggregate_reports_tab(xml_content, xml_filename)
     else:
-        st.info("Results will appear here after processing an XML file")
+        # Get dynamic MKB version text from session state
+        version_info = st.session_state.get('lookup_version_info', {})
+        mkb_version = version_info.get('emis_version', 'the latest MKB lookup table')
+        if mkb_version != 'the latest MKB lookup table':
+            mkb_text = f"MKB {mkb_version}"
+        else:
+            mkb_text = mkb_version
+        
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            Upload EMIS XML files to analyze search logic, visualize report structures, and translate clinical codes to UK SNOMED using {mkb_text}.
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def render_clinical_codes_main_tab(results):
     """Render the Clinical Codes main tab (formerly XML Contents)"""
+    # Check if we have clinical data or if this is a non-clinical XML (patient demographics filtering, etc.)
+    has_clinical_data = results and len(results) > 0
+    
+    if not has_clinical_data:
+        # Handle XMLs with no clinical codes (patient demographics filtering, demographic filters, etc.)
+        st.info("📍 **Non-Clinical XML Detected**")
+        st.markdown("""
+        This XML file contains searches or reports without clinical codes. This commonly occurs with:
+        - **Patient demographics filtering** (LSOA codes, postcodes, practice areas)
+        - **Demographic filtering** (age ranges, gender, registration status)
+        - **Administrative searches** (user authorization, practice codes)
+        
+        ℹ️ **Clinical code analysis is not applicable for this XML type.**
+        
+        👉 **Use the 'Search Analysis' tab** to view the search logic and filtering criteria.
+        """)
+        return
+    
     # Clinical Codes Configuration
     # Always enable report codes and source tracking - no longer configurable
     st.session_state.clinical_include_report_codes = True

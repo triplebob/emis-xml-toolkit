@@ -375,25 +375,22 @@ def render_detailed_rules_tab(analysis, xml_filename):
     from ...export_handlers import UIExportManager
     
     
-    # Detailed rule breakdown
-    with st.expander("🔧 Detailed Rule Breakdown", expanded=True):
-        # Import at the top of the function scope
-        from ...core.report_classifier import ReportClassifier
-        
-        
-        # Use searches from orchestrated results for the detailed rules (they need proper structure)
-        if hasattr(analysis, 'orchestrated_results') and analysis.orchestrated_results and hasattr(analysis.orchestrated_results, 'searches'):
-            # Use searches from orchestrated results
-            search_only_reports = analysis.orchestrated_results.searches
-        elif hasattr(analysis, 'searches') and analysis.searches:
-            # Direct orchestrated analysis - use searches directly
-            search_only_reports = analysis.searches
-        else:
-            # Legacy analysis - filter reports to get searches only
-            search_only_reports = ReportClassifier.filter_searches_only(analysis.reports)
-        
-            
-        
+    # Import at the top of the function scope
+    from ...core.report_classifier import ReportClassifier
+    
+    # Get search reports for both fragments
+    if hasattr(analysis, 'orchestrated_results') and analysis.orchestrated_results and hasattr(analysis.orchestrated_results, 'searches'):
+        # Use searches from orchestrated results
+        search_only_reports = analysis.orchestrated_results.searches
+    elif hasattr(analysis, 'searches') and analysis.searches:
+        # Direct orchestrated analysis - use searches directly
+        search_only_reports = analysis.searches
+    else:
+        # Legacy analysis - filter reports to get searches only
+        search_only_reports = ReportClassifier.filter_searches_only(analysis.reports)
+    
+    # Detailed rule breakdown in single expander
+    with st.expander("🔧 Search Logic Browser", expanded=True):
         render_detailed_rules(search_only_reports, analysis)
     
     

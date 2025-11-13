@@ -102,37 +102,43 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
             st.toast(f"Found {list_count} List Report{'s' if list_count != 1 else ''}", icon="📋")
             cache_processed_data(toast_cache_key, True)
         
-        st.markdown("### 📋 List Reports Analysis")
-        st.markdown("List Reports display patient data in column-based tables with specific data extraction rules.")
-        
         if not list_reports:
             st.info("📋 No List Reports found in this XML file")
             return
-        
-        # List Reports metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("📋 List Reports", list_count)
+
+        # 📋 List Reports Analysis - Collapsed expandable frame (not fragmented)
+        # 🔧 List Report Logic Browser - Fragmented expandable frame (prevents full reruns)
+        with st.expander("🔧 List Report Logic Browser", expanded=True):
+            @st.fragment
+            def list_report_browser_fragment():
+                from .report_tabs import render_report_type_browser
+                render_report_type_browser(list_reports, analysis, "List Report", "📋")
             
-        with col2:
-            total_columns = sum(len(report.column_groups) if hasattr(report, 'column_groups') and report.column_groups else 0 for report in list_reports)
-            st.metric("📊 Total Column Groups", total_columns)
-        
-        with col3:
-            # For List Reports, criteria are in column groups, not main criteria_groups
-            reports_with_criteria = 0
-            for report in list_reports:
-                has_column_criteria = False
-                if hasattr(report, 'column_groups') and report.column_groups:
-                    has_column_criteria = any(group.get('has_criteria', False) for group in report.column_groups)
-                if report.criteria_groups or has_column_criteria:
-                    reports_with_criteria += 1
-            st.metric("🔍 Reports with Criteria", reports_with_criteria)
-        
-        # List Report browser
-        from .report_tabs import render_report_type_browser
-        render_report_type_browser(list_reports, analysis, "List Report", "📋")
+            list_report_browser_fragment()
+
+        with st.expander("📋 List Reports Analysis", expanded=False):
+            st.markdown("List Reports display patient data in column-based tables with specific data extraction rules.")
+            
+            # List Reports metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("📋 List Reports", list_count)
+                
+            with col2:
+                total_columns = sum(len(report.column_groups) if hasattr(report, 'column_groups') and report.column_groups else 0 for report in list_reports)
+                st.metric("📊 Total Column Groups", total_columns)
+            
+            with col3:
+                # For List Reports, criteria are in column groups, not main criteria_groups
+                reports_with_criteria = 0
+                for report in list_reports:
+                    has_column_criteria = False
+                    if hasattr(report, 'column_groups') and report.column_groups:
+                        has_column_criteria = any(group.get('has_criteria', False) for group in report.column_groups)
+                    if report.criteria_groups or has_column_criteria:
+                        reports_with_criteria += 1
+                st.metric("🔍 Reports with Criteria", reports_with_criteria)
         
         # PERFORMANCE: Skip cleanup for tab-level functions - only needed for large reports
         pass
@@ -252,7 +258,18 @@ def render_list_report_details(report):
                     st.markdown("**🔍 Column Group Criteria:**")
                     
                     criteria_count = criteria_details.get('criteria_count', 0)
-                    st.info(f"This column group has {criteria_count} filtering criterion that determines which records appear in this column section.")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        This column group has {criteria_count} filtering criterion that determines which records appear in this column section.
+                    </div>
+                    """, unsafe_allow_html=True)
                     
                     # Criteria display using standard format
                     criteria_list = criteria_details.get('criteria', [])

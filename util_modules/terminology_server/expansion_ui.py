@@ -253,15 +253,59 @@ def render_terminology_server_status():
             if st.session_state.nhs_connection_status and st.session_state.nhs_connection_status.get('tested'):
                 # Show test result
                 if st.session_state.nhs_connection_status['success']:
-                    st.success("🔑 Authenticated")
+                    st.markdown("""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        🔑 Authenticated
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.error("🔑 Connection failed")
+                    st.markdown("""
+                    <div style="
+                        background-color: #660022;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        🔑 Connection failed
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
                 # Show default status based on token validity
                 if client._is_token_valid():
-                    st.success("🔑 Authenticated")
+                    st.markdown("""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        🔑 Authenticated
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.warning("🔑 Not authenticated")
+                    st.markdown("""
+                    <div style="
+                        background-color: #7A5F0B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        🔑 Not authenticated
+                    </div>
+                    """, unsafe_allow_html=True)
         
         connection_test_fragment()
 
@@ -282,7 +326,18 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
     all_expandable_codes = service.find_codes_with_include_children(clinical_data, filter_zero_descendants=False)
     
     if not all_expandable_codes:
-        st.info("ℹ️ No codes with includechildren=True found in this dataset")
+        st.markdown("""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            ℹ️ No codes with includechildren=True found in this dataset
+        </div>
+        """, unsafe_allow_html=True)
         return None
     
     st.markdown("### ⚕️ SNOMED Code Expansion")
@@ -354,23 +409,89 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
             if zero_descendant_count > 0:
                 remaining_codes = unique_count - zero_descendant_count
                 if dedupe_savings > 0:
-                    st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls) → {remaining_codes} after filtering 0-descendant codes")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls) → {remaining_codes} after filtering 0-descendant codes
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.info(f"Found {unique_count} codes that can be expanded - filtered out {zero_descendant_count} codes with 0 descendants (saves API calls), {remaining_codes} codes will be processed")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        Found {unique_count} codes that can be expanded - filtered out {zero_descendant_count} codes with 0 descendants (saves API calls), {remaining_codes} codes will be processed
+                    </div>
+                    """, unsafe_allow_html=True)
                 # Apply the actual filtering
                 expandable_codes = [code for code in unique_codes.values() 
                                   if str(code.get('Descendants', '')).strip() != '0']
             else:
                 if dedupe_savings > 0:
-                    st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.info(f"Found {unique_count} codes that can be expanded to include child concepts")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        Found {unique_count} codes that can be expanded to include child concepts
+                    </div>
+                    """, unsafe_allow_html=True)
                 expandable_codes = list(unique_codes.values())
         else:
             if dedupe_savings > 0:
-                st.info(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)")
+                st.markdown(f"""
+                <div style="
+                    background-color: #5B2758;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info(f"Found {unique_count} codes that can be expanded to include child concepts")
+                st.markdown(f"""
+                <div style="
+                    background-color: #5B2758;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    Found {unique_count} codes that can be expanded to include child concepts
+                </div>
+                """, unsafe_allow_html=True)
             expandable_codes = list(unique_codes.values())
     
     # Expansion button with protection against double-clicks
@@ -496,7 +617,18 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     if cached_data is None:
         from ..utils.caching.lookup_cache import _get_lookup_table_hash
         expected_hash = _get_lookup_table_hash(lookup_df, version_info)
-        st.warning(f"🔍 Debug: Cache lookup failed. Expected hash: {expected_hash}, Version info available: {version_info is not None}")
+        st.markdown(f"""
+        <div style="
+            background-color: #7A5F0B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            🔍 Debug: Cache lookup failed. Expected hash: {expected_hash}, Version info available: {version_info is not None}
+        </div>
+        """, unsafe_allow_html=True)
     
     if cached_data is not None:
         # Found persistent cache
@@ -507,7 +639,18 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     else:
         # No cache available - cannot proceed with terminology server expansion
         status_text.text("❌ EMIS lookup cache not available")
-        st.error("⚠️ EMIS lookup cache not found. Please process an XML file first to build the cache, then try expanding codes again.")
+        st.markdown("""
+        <div style="
+            background-color: #660022;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            ⚠️ EMIS lookup cache not found. Please process an XML file first to build the cache, then try expanding codes again.
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()  # Stop execution here
     
     # Filter valid codes first
@@ -580,7 +723,18 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
             client_id = st.secrets["NHSTSERVER_ID"]
             client_secret = st.secrets["NHSTSERVER_TOKEN"]
         except KeyError as e:
-            st.error(f"Missing NHS Terminology Server credentials: {e}")
+            st.markdown(f"""
+            <div style="
+                background-color: #660022;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                color: #FAFAFA;
+                text-align: left;
+                margin-bottom: 0.5rem;
+            ">
+                Missing NHS Terminology Server credentials: {e}
+            </div>
+            """, unsafe_allow_html=True)
             return {
                 'success': False,
                 'message': f'Missing credential: {e}',
@@ -636,7 +790,9 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
                 result = result_queue.get(timeout=1.0)  # Increased to 1 second
                 completed_count += 1
                 timeout_counter = 0  # Reset timeout counter on successful result
-                print(f"DEBUG: Got result {completed_count}/{total_codes}, success: {result.get('success')}, error: {result.get('error', 'None')[:50] if result.get('error') else 'None'}")
+                # Debug output only when debug mode is enabled
+                if st.session_state.get('debug_mode', False):
+                    print(f"DEBUG: Got result {completed_count}/{total_codes}, success: {result.get('success')}, error: {result.get('error', 'None')[:50] if result.get('error') else 'None'}")
                 
                 # Process raw result in main thread (Streamlit calls are safe here)
                 if result['success'] and result['raw_result']:
@@ -752,7 +908,18 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     except Exception as e:
         progress_bar.empty()
         status_text.empty()
-        st.error(f"Expansion failed: {str(e)}")
+        st.markdown(f"""
+        <div style="
+            background-color: #660022;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            Expansion failed: {str(e)}
+        </div>
+        """, unsafe_allow_html=True)
         return {}
 
 
@@ -782,11 +949,11 @@ def render_expansion_results(expansion_data: Dict):
             def style_status(row):
                 result_status = row['Result Status']
                 if result_status.startswith('Matched'):
-                    return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for matched
+                    return ['background-color: #1F4E3D; color: #FAFAFA'] * len(row)  # Green for matched
                 elif result_status.startswith('Unmatched'):
-                    return ['background-color: #5a4d2d; color: #f5f3e8'] * len(row)  # Dark yellow for unmatched
+                    return ['background-color: #7A5F0B; color: #FAFAFA'] * len(row)  # Amber for unmatched
                 else:  # Error
-                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red for errors
+                    return ['background-color: #660022; color: #FAFAFA'] * len(row)  # Wine red for errors
             
             styled_summary = summary_df.style.apply(style_status, axis=1)
             st.dataframe(styled_summary, width='stretch', hide_index=True)
@@ -804,16 +971,60 @@ def render_expansion_results(expansion_data: Dict):
             with col1:
                 if success_rate == 1.0:
                     # Green: 100% success
-                    st.success(f"✅ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        ✅ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully
+                    </div>
+                    """, unsafe_allow_html=True)
                 elif success_rate > 0:
                     # Yellow: Partial success
-                    st.warning(f"⚠️ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #7A5F0B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        ⚠️ Expansion complete: {successful_expansions}/{total_codes} codes expanded successfully
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
                     # Red: No success
-                    st.error(f"❌ Expansion failed: {successful_expansions}/{total_codes} codes expanded successfully")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #660022;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 1.0rem;
+                    ">
+                        ❌ Expansion failed: {successful_expansions}/{total_codes} codes expanded successfully
+                    </div>
+                    """, unsafe_allow_html=True)
         
             with col2:
-                st.info(f"📊 Total child codes discovered: {total_child_codes}")
+                st.markdown(f"""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 1.0rem;
+                ">
+                    📊 Total child codes discovered: {total_child_codes}
+                </div>
+                """, unsafe_allow_html=True)
 
 
 def render_child_codes_detail(expansion_data: Dict):
@@ -996,21 +1207,54 @@ def render_child_codes_detail(expansion_data: Dict):
             def style_emis_guid(row):
                 emis_guid = row['EMIS GUID']
                 if 'Not in EMIS lookup table' in str(emis_guid):
-                    return ['background-color: #5a2d2d; color: #f5e8e8'] * len(row)  # Dark red for not found
+                    return ['background-color: #660022; color: #FAFAFA'] * len(row)  # Wine red for not found
                 else:
-                    return ['background-color: #2d5a3d; color: #e8f5e8'] * len(row)  # Dark green for found
+                    return ['background-color: #1F4E3D; color: #FAFAFA'] * len(row)  # Green for found
             
             styled_child_df = child_df.style.apply(style_emis_guid, axis=1)
             st.dataframe(styled_child_df, width='stretch', hide_index=True)
         else:
             if search_term or not show_inactive:
-                st.info("No child codes match the current filters")
+                st.markdown("""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    No child codes match the current filters
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.info("This concept has no child concepts")
+                st.markdown("""
+                <div style="
+                    background-color: #28546B;
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    color: #FAFAFA;
+                    text-align: left;
+                    margin-bottom: 0.5rem;
+                ">
+                    This concept has no child concepts
+                </div>
+                """, unsafe_allow_html=True)
 
     # Only show EMIS coverage if we have child codes
     if all_child_codes:
-        st.info(f"📊 EMIS GUID Coverage: {emis_count}/{total_count} child codes found in EMIS lookup table ({coverage_pct:.1f}%)")
+        st.markdown(f"""
+        <div style="
+            background-color: #28546B;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #FAFAFA;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        ">
+            📊 EMIS GUID Coverage: {emis_count}/{total_count} child codes found in EMIS lookup table ({coverage_pct:.1f}%)
+        </div>
+        """, unsafe_allow_html=True)
 
     
     # Export section with conditional filters (matching clinical code tabs pattern)
@@ -1133,7 +1377,18 @@ def render_child_codes_detail(expansion_data: Dict):
                         key=f"download_child_codes_{export_filter.lower().replace(' ', '_')}"
                     )
                 else:
-                    st.info("No child codes match the current export filter")
+                    st.markdown("""
+                    <div style="
+                        background-color: #28546B;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        No child codes match the current export filter
+                    </div>
+                    """, unsafe_allow_html=True)
         
         # Execute the export fragment
         child_codes_export_fragment()
@@ -1232,7 +1487,18 @@ def render_individual_code_lookup():
                     result = client.expand_concept(snomed_code.strip(), include_inactive)
                 
                 if result and not result.error:
-                    st.success(f"✅ Found concept: **{result.original_display}**")
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1F4E3D;
+                        padding: 0.75rem;
+                        border-radius: 0.5rem;
+                        color: #FAFAFA;
+                        text-align: left;
+                        margin-bottom: 0.5rem;
+                    ">
+                        ✅ Found concept: <strong>{result.original_display}</strong>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
                     if result.child_codes:
                         st.info(f"📊 **{len(result.child_codes)} child concepts** discovered")
