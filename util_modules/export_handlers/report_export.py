@@ -933,7 +933,7 @@ class ReportExportHandler:
                 ['Population Type', audit_report.population_type or ''],
                 ['Search Date', audit_report.search_date],
                 ['Export Generated', datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                ['Export Tool', 'EMIS XML Toolkit']
+                ['Export Tool', 'ClinXML']
             ]
             
             # Add parent information

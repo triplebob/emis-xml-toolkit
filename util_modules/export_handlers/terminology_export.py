@@ -142,7 +142,7 @@ class TerminologyExportHandler:
         json_data = {
             'metadata': {
                 'export_timestamp': datetime.now().isoformat(),
-                'export_tool': 'EMIS XML Converter - Terminology Server',
+                'export_tool': 'ClinXML - Terminology Server',
                 'total_codes': len(expanded_codes),
                 'original_file': original_filename
             },
@@ -184,7 +184,7 @@ class TerminologyExportHandler:
         enhanced_data = combined_data.copy()
         enhanced_data['metadata'] = {
             'export_timestamp': datetime.now().isoformat(),
-            'export_tool': 'EMIS XML Converter - Terminology Server',
+            'export_tool': 'ClinXML - Terminology Server',
             'original_file': original_filename
         }
         

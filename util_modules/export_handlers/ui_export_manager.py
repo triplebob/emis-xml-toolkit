@@ -306,7 +306,7 @@ class UIExportManager:
                 'data': data,
                 'metadata': additional_context or {},
                 'export_timestamp': datetime.now().isoformat(),
-                'export_tool': 'EMIS XML Converter'
+                'export_tool': 'ClinXML'
             }
             
             st.download_button(

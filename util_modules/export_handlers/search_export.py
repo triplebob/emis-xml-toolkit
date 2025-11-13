@@ -245,7 +245,7 @@ class SearchExportHandler:
         
         data.extend([
             ['Export Generated', datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-            ['Export Tool', 'EMIS XML Toolkit']
+            ['Export Tool', 'ClinXML']
         ])
         
         return pd.DataFrame(data, columns=['Property', 'Value'])
