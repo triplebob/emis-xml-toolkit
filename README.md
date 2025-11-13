@@ -3,7 +3,7 @@
 A comprehensive web application for analyzing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
 Transform complex EMIS XML documents into actionable insights for NHS healthcare teams.
 
-## 🚀 **[Live Application](https://emis-xml-toolkit.streamlit.app/)**
+## 🚀 **[Live Application](https://clinxml.streamlit.app/)**
 
 **Ready to use immediately - no installation required.** Click the link above to access the live application.
 
