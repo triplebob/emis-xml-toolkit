@@ -10,8 +10,8 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 from io import StringIO
 
-from util_modules.analysis.performance_optimizer import render_performance_controls, display_performance_metrics
-from util_modules.xml_parsers.xml_utils import parse_xml_for_emis_guids
+from utils.analysis.performance_optimizer import render_performance_controls, display_performance_metrics
+from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
 
 
 class TestPerformanceOptimizations(unittest.TestCase):

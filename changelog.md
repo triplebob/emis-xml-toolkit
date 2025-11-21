@@ -1,6 +1,103 @@
 # Changelog
 
-## v2.2.3 - Professional Theming & Infrastructure Improvements (November 2025)
+## v2.2.4 - Session State & Theme Constants Centralisation (20th November 2025)
+
+### 🔑 **Session State Management Centralisation**
+
+**Canonical Key Definitions:**
+- **Centralised System**: Introduced `utils/core/session_state.py` with `SessionStateKeys` class for all session state operations
+- **Logical Grouping**: Keys organised into core data, processing state, results, lookup data, and user preferences
+- **Dynamic Patterns**: Safe dynamic key generation for computed keys (cached reports, exports, visualisations)
+- **Audit Coverage**: Comprehensive audit identified and refactored 80+ session state operations across the codebase
+
+**Grouped Clearing Functions:**
+- **Processing Reset**: `clear_processing_state()` clears indicators and placeholders
+- **Results Reset**: `clear_results_state()` removes analysis results and cached data
+- **Export Reset**: `clear_export_state()` clears all export cache keys with forced GC
+- **Report Reset**: `clear_report_state()` resets report UI state (specific or all reports)
+- **Analysis Reset**: `clear_analysis_state()` clears visualisation cache
+- **UI Reset**: `clear_ui_state()` clears UI cache while preserving preferences
+- **XML Upload Strategies**: `clear_for_new_xml_selection()` (lightweight) and `clear_for_new_xml()` (comprehensive) cleanup patterns
+- **Major Cleanup**: `clear_all_except_core()` preserves core data while performing garbage collection
+
+**Validation & Debugging Utilities:**
+- **Integrity Checks**: `validate_session_state()` and `validate_state_keys()` provide recommendations for cleanup
+- **Summary Tools**: `get_session_state_summary()` shows key counts by group
+- **Debug UI**: `debug_session_state()` adds development mode component with real-time logging
+- **Dynamic Key Safety**: `get_dynamic_key()` ensures safe generation with error handling
+- **Debug Output**: Enhanced logging for state clearing, cache preservation, and error recovery
+
+**SNOMED Persistent Cache:**
+- **TTL-Based Cache**: 60-minute persistent cache for EMIS GUID → SNOMED mappings
+- **Preservation Strategy**: Cache preserved across all clearing functions (upload, processing, cancel)
+- **Validation & Expiration**: Timestamp-based validation with automatic cleanup
+- **Performance Benefit**: Subsequent XML uploads reuse cached mappings, reducing lookup overhead
+
+**Core File Updates:**
+- **streamlit_app.py**: Migrated all session state operations to `SessionStateKeys`
+- **status_bar.py**: Lookup table and memory monitoring converted to centralised keys
+- **debug_logger.py**: Debug mode and logging state migrated
+- **Export Handlers**: Integrated with `clear_export_state()` for unified cleanup
+- **Consistent Cleanup**: Manual state deletion replaced with grouped clearing functions
+
+---
+
+### 🎨 **Theme Constants Centralisation**
+
+**Unified Theme System:**
+- **Canonical Definitions**: Created `utils/ui/theme.py` with `ThemeColors`, `ComponentThemes`, and `ThemeSpacing`
+- **RAG System**: Implemented Red/Amber/Green status indication across application
+- **Audit Coverage**: Replaced 80+ hardcoded colour instances with canonical definitions
+
+**Reusable Styling Functions:**
+- **Info Boxes**: `create_info_box_style()` for dynamic info box generation
+- **Status Indicators**: `create_rag_status_style()` for automatic colour mapping
+- **Table Highlighting**: `create_table_row_style()` for found/not found/warning states
+- **Convenience Functions**: `info_box()`, `success_box()`, `warning_box()`, `error_box()`, `purple_box()`
+- **Performance Colours**: `get_success_rate_color()` for automatic RAG selection
+- **Completion Messages**: `create_completion_message_style()` with extended margin
+
+**Spacing & Layout:**
+- **ThemeSpacing**: Constants for padding, margins, and border radius
+- **CSS Reduction**: Inline CSS replaced with reusable theme functions
+- **Consistent Layout**: Unified spacing across completion messages, tables, and status indicators
+
+**Core File Integration:**
+- **streamlit_app.py**: Upload prompts and processing status converted to theme functions
+- **status_bar.py**: Lookup table status, memory monitoring, and SCT codes display updated
+- **CSS Cleanup**: 15+ hardcoded CSS blocks replaced with theme calls
+
+---
+
+### ⚡ **Performance Impact**
+
+**Memory optimisation:**
+- Centralised session state cleanup prevents leaks and fragmentation
+- Grouped clearing functions reduce memory overhead
+- Export cache cleanup with forced GC ensures large files don’t persist in memory
+
+**UI Consistency:**
+- Centralised theme constants eliminate drift and ensure coherent styling
+- RAG system provides consistent status indication across components
+- Unified spacing constants improve layout predictability
+
+**Developer Experience:**
+- Debugging utilities streamline development workflows with validation and logging
+- Reusable theme functions reduce boilerplate and errors
+- Session state grouping enables targeted cleanup with preserved preferences
+
+**Maintainability:**
+- Single sources of truth for both session state and theme constants
+- Safer, more scalable architecture for future updates
+- SNOMED cache architecture reduces redundant lookups and improves translation speed
+
+---
+
+*Version 2.2.4 delivers centralised session state management, unified theme constants, and persistent SNOMED cache architecture, improving reliability, maintainability, and developer experience whilst maintaining full backward compatibility.*
+
+---
+
+## v2.2.3 - Professional Theming & Infrastructure Improvements (14th November 2025)
 
 ### 🚀 **Patient Demographics & LSOA Filtering Implementation**
 
@@ -865,6 +962,6 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 
 ---
 
-*Last Updated: November 2025*  
-*Application Version: 2.2.2*  
+*Last Updated: 21st November 2025*  
+*Application Version: 2.2.4*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*

@@ -1,6 +1,6 @@
 ![ClinXML - The Unofficial EMIS XML Toolkit](img/clinxml.svg)
 
-A comprehensive web application for analyzing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
+A comprehensive web application for analysing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
 Transform complex EMIS XML documents into actionable insights for NHS healthcare teams.
 
 ## 🚀 **[Live Application](https://clinxml.streamlit.app/)**
@@ -46,7 +46,7 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 
 ### ⚡ **Cache-First Architecture**
 - **Multi-tier caching**: Local cache → GitHub cache → API fallback
-- **Optimized performance**: Faster startup and reduced external dependencies
+- **Optimised performance**: Faster startup and reduced external dependencies
 - **Session persistence**: Results maintained across download operations
 - **Health monitoring**: Automatic cache validation and regeneration
 
@@ -145,7 +145,7 @@ pip install -r requirements.txt
 #### Configuration (Optional)
 Create `.streamlit/secrets.toml` for NHS terminology server integration:
 ```toml
-NHSTSERVER_ID = "Your_Organization_Consumer_ID"
+NHSTSERVER_ID = "Your_Organisation_Consumer_ID"
 NHSTSERVER_TOKEN = "your_client_secret_token"
 ```
 
@@ -158,110 +158,28 @@ streamlit run streamlit_app.py
 
 ## 📁 Project Structure
 
-```
-⚕️ emis-xml-convertor/
-├── streamlit_app.py                                    # Main application entry point
-├── requirements.txt                                    # Python dependencies
-├── changelog.md                                        # Version history and improvements
-├── util_modules/                                       # 📁 **Modular application architecture**
-│   ├── analysis/                                       # 📁 **Analysis engines and orchestration**
-│   │   ├── analysis_orchestrator.py                    # Central analysis coordination
-│   │   ├── xml_element_classifier.py                   # Element type classification
-│   │   ├── xml_structure_analyzer.py                   # Compatibility interface
-│   │   ├── search_analyzer.py                          # Search logic analysis
-│   │   ├── search_rule_analyzer.py                     # Legacy search analysis
-│   │   ├── report_analyzer.py                          # Report structure analysis
-│   │   ├── common_structures.py                        # Shared data structures
-│   │   ├── performance_optimizer.py                    # Performance monitoring
-│   │   ├── search_rule_visualizer.py                   # Interactive rule displays
-│   │   ├── report_structure_visualizer.py              # Report visualisation
-│   │   ├── shared_render_utils.py                      # Common visualisation utilities
-│   │   └── linked_criteria_handler.py                  # Linked criteria processing
-│   ├── terminology_server/                             # 📁 **NHS Terminology Server integration**
-│   │   ├── nhs_terminology_client.py                   # FHIR R4 API client
-│   │   ├── expansion_service.py                        # Service layer for code expansion
-│   │   └── expansion_ui.py                             # User interface components
-│   ├── xml_parsers/                                    # 📁 **Modular XML parsing system**
-│   │   ├── xml_utils.py                                # Core XML parsing and GUID extraction
-│   │   ├── namespace_handler.py                        # Universal namespace handling
-│   │   ├── base_parser.py                              # Base parsing utilities
-│   │   ├── criterion_parser.py                         # Search criteria parsing
-│   │   ├── report_parser.py                            # Report structure parsing
-│   │   ├── value_set_parser.py                         # Clinical code value sets
-│   │   ├── restriction_parser.py                       # Search restrictions parsing
-│   │   └── linked_criteria_parser.py                   # Linked criteria parsing
-│   ├── core/                                           # 📁 **Business logic and classification**
-│   │   ├── translator.py                               # GUID to SNOMED translation
-│   │   ├── report_classifier.py                        # EMIS report type classification
-│   │   ├── folder_manager.py                           # Folder hierarchy management
-│   │   ├── search_manager.py                           # Search data management
-│   │   ├── background_processor.py                     # Background processing
-│   │   └── optimized_processor.py                      # Processing integration
-│   ├── ui/                                             # 📁 **User interface components**
-│   │   ├── ui_tabs.py                                  # Main results interface
-│   │   ├── status_bar.py                               # Application status display
-│   │   ├── ui_helpers.py                               # Reusable UI components
-│   │   ├── rendering_utils.py                          # Standard UI components
-│   │   ├── layout_utils.py                             # Complex layout management
-│   │   ├── progressive_loader.py                       # Progressive loading components
-│   │   ├── async_components.py                         # Asynchronous UI components
-│   │   └── tabs/                                       # 📁 **Modular tab structure**
-│   │       ├── clinical_tabs.py                        # Clinical data tab rendering
-│   │       ├── analysis_tabs.py                        # Analysis tab rendering
-│   │       ├── analytics_tab.py                        # Analytics display
-│   │       ├── report_tabs.py                          # Core report tab infrastructure
-│   │       ├── list_report_tab.py                      # List report specialised module
-│   │       ├── audit_report_tab.py                     # Audit report specialised module
-│   │       ├── aggregate_report_tab.py                 # Aggregate report specialised module
-│   │       ├── tab_helpers.py                          # Shared tab utilities
-│   │       ├── base_tab.py                             # Tab base classes
-│   │       ├── field_mapping.py                        # Universal field mapping
-│   │       └── common_imports.py                       # Shared imports
-│   ├── export_handlers/                                # 📁 **Comprehensive export system**
-│   │   ├── ui_export_manager.py                        # Export coordination
-│   │   ├── search_export.py                            # Search-specific exports
-│   │   ├── report_export.py                            # Report export handler
-│   │   ├── rule_export.py                              # Individual rule export
-│   │   ├── clinical_code_export.py                     # Clinical code exports
-│   │   ├── terminology_export.py                       # NHS terminology exports
-│   │   ├── json_export_generator.py                    # Search JSON exports
-│   │   └── report_json_export_generator.py             # Report JSON exports
-│   ├── utils/                                          # 📁 **General utilities and caching**
-│   │   ├── lookup.py                                   # Cache-first lookup table management
-│   │   ├── audit.py                                    # Processing statistics
-│   │   ├── text_utils.py                               # Text processing utilities
-│   │   ├── debug_logger.py                             # Development tools
-│   │   ├── github_loader.py                            # External data loading
-│   │   └── caching/                                    # 📁 **Comprehensive caching system**
-│   │       ├── cache_manager.py                        # Centralized cache management with TTL
-│   │       ├── lookup_cache.py                         # Core caching engine
-│   │       └── generate_github_cache.py                # Cache generation utilities
-│   └── common/                                         # 📁 **Shared utilities and infrastructure**
-│       ├── error_handling.py                           # Standardized error management
-│       ├── ui_error_handling.py                        # UI error display
-│       ├── export_utils.py                             # Centralized export utilities
-│       └── dataframe_utils.py                          # DataFrame operations
-├── docs/                                               # 📁 **Technical documentation**
-│   ├── modules.md                                      # Module architecture guide
-│   ├── nhs-terminology-server-integration.md           # NHS terminology server reference
-│   ├── emis-xml-patterns.md                            # EMIS XML pattern reference
-│   ├── namespace-handling.md                           # Namespace handling guide
-│   └── theme-colors.md                                 # Custom theme colour reference guide
-├── img/                                                # 📁 **Application branding assets**
-│   ├── logo.svg                                        # ClinXML medical cross icon
-│   ├── clinxml.svg                                     # Full logo with text and tagline
-│   ├── clinxml_title.svg                               # Text-only logo
-│   └── favicon.ico                                     # Browser favicon
-└── tests/                                              # 📁 **Test suite**
-    └── test_performance.py                             # Performance testing
-```
+ClinXML uses a modular architecture with specialised components for analysis, UI rendering, export functionality, and caching. 
+The codebase is organised into logical directories that separate functions and enable maintainable development.
+
+**📋 [Complete Project Structure Documentation](docs/project-structure.md)**
+
+### **Key Directories**
+- **`utils/analysis/`** - Analysis engines and orchestration
+- **`utils/core/`** - Business logic and session management with 60-minute SNOMED caching
+- **`utils/ui/tabs/`** - Modular tab structure for specialised report types
+- **`utils/export_handlers/`** - Comprehensive export system for multiple formats
+- **`utils/terminology_server/`** - NHS Terminology Server FHIR R4 integration
+- **`utils/xml_parsers/`** - Modular XML parsing with universal namespace handling
+- **`utils/utils/caching/`** - Multi-tier caching architecture
+- **`docs/`** - Technical documentation and architecture guides
 
 ---
 
 ## 🔧 Technical Specifications
 
-### **Performance Optimizations**
+### **Performance Optimisations**
 - **Centralised Cache Management**: Unified caching architecture with optimised TTL settings
+- **Persistent SNOMED Cache**: 60-minute session state cache for EMIS GUID → SNOMED mappings across XML uploads
 - **Report-Specific Caching**: Instant dropdown switching with 10,000-entry SNOMED cache
 - **Memory Management**: Real-time monitoring with automatic garbage collection
 - **Dictionary-based Lookups**: O(1) SNOMED translation (100x faster than DataFrame searches)
@@ -300,21 +218,21 @@ streamlit run streamlit_app.py
 
 ### **Clinical Governance**
 - **QOF Indicator Analysis**: Quality and Outcomes Framework reporting
-- **Clinical Pathway Review**: Analyze complex care pathways and protocols
+- **Clinical Pathway Review**: Analyse complex care pathways and protocols
 - **Code Set Validation**: Verify SNOMED code usage and mapping accuracy with NHS terminology server
 - **Search Logic Auditing**: Review and optimise clinical search criteria
 - **Hierarchy Validation**: Compare EMIS expectations with current NHS terminology data
 
 ### **System Administration**
-- **EMIS Configuration Review**: Analyze search and report configurations
-- **Folder Organization**: Review hierarchical folder structures
+- **EMIS Configuration Review**: Analyse search and report configurations
+- **Folder Organisation**: Review hierarchical folder structures
 - **Dependency Mapping**: Understand search and report relationships
 - **Performance Analysis**: Identify complex searches and optimisation opportunities
 - **Terminology Updates**: Validate code hierarchies against current NHS terminology
 
 ### **Healthcare Analytics**
 - **Population Analysis**: Understand search population logic and criteria
-- **Report Structure Review**: Analyze List/Audit/Aggregate report configurations
+- **Report Structure Review**: Analyse List/Audit/Aggregate report configurations
 - **Clinical Code Translation**: Convert EMIS codes to SNOMED for external systems
 - **Quality Measurement**: Export data for external quality measurement tools
 - **Hierarchical Analysis**: Export parent-child relationships for programmatic integration
@@ -368,9 +286,11 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 ## 📞 Support
 
 ### **Documentation**
+- **Project Structure**: [Complete Directory Structure](docs/project-structure.md)
+- **Architecture Guide**: [Module Architecture](docs/architecture/modules.md)
+- **Session Management**: [Session State Architecture](docs/architecture/session-state-management.md)
 - **NHS Terminology Server**: [Integration Reference](docs/nhs-terminology-server-integration.md)
 - **Technical Patterns**: [EMIS XML Patterns Reference](docs/emis-xml-patterns.md)
-- **Architecture Guide**: [Module Architecture](docs/modules.md)
 - **Namespace Handling**: [Namespace Documentation](docs/namespace-handling.md)
 
 ### **Live Application**
@@ -378,6 +298,6 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 
 ---
 
-*Last Updated: November 2025*  
-*Application Version: 2.2.3*  
+*Last Updated: 21st November 2025*  
+*Application Version: 2.2.4*  
 *Live Application: https://clinxml.streamlit.app/*

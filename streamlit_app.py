@@ -3,14 +3,16 @@ The Unofficial EMIS XML Toolkit - Streamlit Cloud Optimized
 """
 
 import streamlit as st
-from util_modules.ui import render_status_bar, render_results_tabs
-from util_modules.xml_parsers.xml_utils import parse_xml_for_emis_guids
-from util_modules.core import translate_emis_to_snomed
-from util_modules.analysis.search_analyzer import SearchAnalyzer
-from util_modules.analysis.report_analyzer import ReportAnalyzer
-from util_modules.utils import get_debug_logger, render_debug_controls
-from util_modules.analysis import render_performance_controls, display_performance_metrics
-from util_modules.utils import create_processing_stats
+from utils.ui import render_status_bar, render_results_tabs
+from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
+from utils.core import translate_emis_to_snomed
+from utils.core.session_state import SessionStateKeys, clear_processing_state, clear_results_state, clear_export_state, clear_all_except_core, clear_for_new_xml, clear_for_new_xml_selection
+from utils.ui.theme import ThemeColors, create_info_box_style, info_box
+from utils.analysis.search_analyzer import SearchAnalyzer
+from utils.analysis.report_analyzer import ReportAnalyzer
+from utils.utils import get_debug_logger, render_debug_controls
+from utils.analysis import render_performance_controls, display_performance_metrics
+from utils.utils import create_processing_stats
 import time
 import psutil
 import os
@@ -29,7 +31,7 @@ st.set_page_config(
 # Main app
 def main():
     # Load lookup table and render status bar first
-    from util_modules.common import streamlit_safe_execute, show_file_error
+    from utils.common import streamlit_safe_execute, show_file_error
     
     # Use safe execution for status bar rendering
     status_result = streamlit_safe_execute(
@@ -61,10 +63,10 @@ def main():
         perf_settings = {'strategy': 'Memory Optimized', 'max_workers': 1, 'memory_optimize': True, 'show_metrics': False, 'show_progress': True}
     
     # Get lookup table from session state
-    lookup_df = st.session_state.get('lookup_df')
-    emis_guid_column = st.session_state.get('emis_guid_col')
-    snomed_code_column = st.session_state.get('snomed_code_col')
-    version_info = st.session_state.get('lookup_version_info')
+    lookup_df = st.session_state.get(SessionStateKeys.LOOKUP_DF)
+    emis_guid_column = st.session_state.get(SessionStateKeys.EMIS_GUID_COL)
+    snomed_code_column = st.session_state.get(SessionStateKeys.SNOMED_CODE_COL)
+    version_info = st.session_state.get(SessionStateKeys.LOOKUP_VERSION_INFO)
     
     # Header and upload section in columns
     col1, col2 = st.columns([2, 1])
@@ -94,50 +96,33 @@ def main():
         if uploaded_xml is not None:
             # Check if this is a different file than previously processed
             current_file_info = f"{uploaded_xml.name}_{uploaded_xml.size}"
-            if st.session_state.get('last_processed_file') != current_file_info:
-                # New file detected - clear all previous results
-                keys_to_clear = ['results', 'xml_filename', 'audit_stats', 'xml_content', 
-                               'search_analysis', 'search_results', 'report_results', 'is_processing', 'unified_clinical_data_cache']
-                for key in keys_to_clear:
-                    if key in st.session_state:
-                        del st.session_state[key]
+            if st.session_state.get(SessionStateKeys.LAST_PROCESSED_FILE) != current_file_info:
+                # New file selected - lightweight cleanup preserving lookup cache (keeps status bar loaded)
+                clear_for_new_xml_selection()
                 
                 # Store new file info and show notification
-                st.session_state.last_processed_file = current_file_info
+                st.session_state[SessionStateKeys.LAST_PROCESSED_FILE] = current_file_info
                 st.toast(f"New file uploaded: {uploaded_xml.name}", icon="📁")
                 st.rerun()
             
             # Initialize processing state
-            if 'is_processing' not in st.session_state:
-                st.session_state.is_processing = False
+            if SessionStateKeys.IS_PROCESSING not in st.session_state:
+                st.session_state[SessionStateKeys.IS_PROCESSING] = False
             
             # Show process button or cancel button based on state
-            if not st.session_state.is_processing:
+            if not st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
                 if st.button("🔄 Process XML File", type="primary"):
-                    # Clear previous results
-                    if 'results' in st.session_state:
-                        del st.session_state.results
-                    if 'xml_filename' in st.session_state:
-                        del st.session_state.xml_filename
-                    if 'audit_stats' in st.session_state:
-                        del st.session_state.audit_stats
-                    if 'xml_content' in st.session_state:
-                        del st.session_state.xml_content
-                    if 'unified_clinical_data_cache' in st.session_state:
-                        del st.session_state.unified_clinical_data_cache
-                    if 'master_xml_json_export' in st.session_state:
-                        del st.session_state.master_xml_json_export
-                    # Clean up report export caches
-                    keys_to_remove = [key for key in st.session_state.keys() if key.startswith(('report_excel_', 'report_json_'))]
-                    for key in keys_to_remove:
-                        del st.session_state[key]
+                    # Comprehensive cleanup when processing starts (includes export cache + GC)
+                    clear_for_new_xml()
                     
-                    st.session_state.is_processing = True
+                    st.session_state[SessionStateKeys.IS_PROCESSING] = True
                     st.rerun()
             else:
                 if st.button("🛑 Cancel Processing", type="secondary"):
-                    st.session_state.is_processing = False
-                    st.success("Processing cancelled")
+                    # Comprehensive cleanup when cancelling - same as new XML upload
+                    clear_for_new_xml()
+                    st.session_state[SessionStateKeys.IS_PROCESSING] = False
+                    st.success("Processing cancelled - all data cleared")
                     st.rerun()
                 
                 # Show file info as toast notification
@@ -174,14 +159,14 @@ def main():
                             progress_bar.progress(5, text="Parsing XML structure...")
                         
                         # Use cached XML code extraction from cache_manager
-                        from util_modules.utils.caching.cache_manager import cache_manager
+                        from utils.utils.caching.cache_manager import cache_manager
                         import hashlib
                         
                         xml_content_hash = hashlib.md5(xml_content.encode()).hexdigest()
                         emis_guids = cache_manager.cache_xml_code_extraction(xml_content_hash, xml_content)
                         
                         # Store emis_guids in session state for potential reprocessing
-                        st.session_state.emis_guids = emis_guids
+                        st.session_state[SessionStateKeys.EMIS_GUIDS] = emis_guids
                         
                         # Log parsing results
                         if debug_logger:
@@ -206,18 +191,7 @@ def main():
                                     # Valid XML with searches/reports but no clinical codes
                                     if debug_logger:
                                         debug_logger.log_user_action("xml_structure_validation", {"pattern": "patient_demographics_filtering", "clinical_codes": False})
-                                    st.markdown("""
-                                    <div style="
-                                        background-color: #28546B;
-                                        padding: 0.75rem;
-                                        border-radius: 0.5rem;
-                                        color: #FAFAFA;
-                                        text-align: left;
-                                        margin-bottom: 0.5rem;
-                                    ">
-                                        📍 This XML contains patient demographic searches, but no detected clinical codes. Analysis will proceed with structure-only processing.
-                                    </div>
-                                    """, unsafe_allow_html=True)
+                                    st.markdown(info_box("📍 This XML contains patient demographic searches, but no detected clinical codes. Analysis will proceed with structure-only processing."), unsafe_allow_html=True)
                                     # Set empty clinical codes but continue processing
                                     translated_codes = {}
                                 else:
@@ -240,7 +214,7 @@ def main():
                         # Only do clinical code processing if we have EMIS GUIDs
                         if emis_guids:
                             # Check if EMIS lookup cache needs building for terminology server integration
-                            from util_modules.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
+                            from utils.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
                             
                             # Skip cache building if we already loaded from cache
                             load_source = version_info.get('load_source', 'unknown')
@@ -277,7 +251,7 @@ def main():
                                 progress_bar.progress(30, text="Processing clinical codes...")
                             
                             # Get deduplication mode from session state, default to unique_codes
-                            deduplication_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+                            deduplication_mode = st.session_state.get(SessionStateKeys.CURRENT_DEDUPLICATION_MODE, 'unique_codes')
                             
                             translated_codes = translate_emis_to_snomed(
                                 emis_guids, 
@@ -327,13 +301,13 @@ def main():
                             progress_bar.progress(95, text="Finalizing results...")
                         
                         # Store results in session state
-                        st.session_state.results = translated_codes
-                        st.session_state.xml_filename = uploaded_xml.name
-                        st.session_state.audit_stats = audit_stats
-                        st.session_state.xml_content = xml_content  # Store for search rule analysis
+                        st.session_state[SessionStateKeys.RESULTS] = translated_codes
+                        st.session_state[SessionStateKeys.XML_FILENAME] = uploaded_xml.name
+                        st.session_state[SessionStateKeys.AUDIT_STATS] = audit_stats
+                        st.session_state[SessionStateKeys.XML_CONTENT] = xml_content  # Store for search rule analysis
                         
                         # Clear processing state as soon as we have results
-                        st.session_state.is_processing = False
+                        st.session_state[SessionStateKeys.IS_PROCESSING] = False
                         
                         # Generate analysis for report structure tabs (SEPARATE from clinical codes)
                         if progress_bar:
@@ -342,27 +316,27 @@ def main():
                         # CRITICAL SEPARATION: Keep report analysis completely isolated from clinical codes
                         try:
                             # Use single analysis call for report structure tabs only
-                            from util_modules.analysis.xml_structure_analyzer import analyze_search_rules
+                            from utils.analysis.xml_structure_analyzer import analyze_search_rules
                             
                             # Run full XML structure analysis - this is ONLY for report tabs, not clinical codes
                             analysis = analyze_search_rules(xml_content)
                             
                             # Store analysis results in separate, isolated session keys
-                            st.session_state.xml_structure_analysis = analysis  # Full analysis for report tabs
-                            st.session_state.search_analysis = analysis  # Legacy compatibility
+                            st.session_state[SessionStateKeys.XML_STRUCTURE_ANALYSIS] = analysis  # Full analysis for report tabs
+                            st.session_state[SessionStateKeys.SEARCH_ANALYSIS] = analysis  # Legacy compatibility
                             
                             # Extract specialized results for report structure display
-                            st.session_state.search_results = getattr(analysis, 'search_results', None)
-                            st.session_state.report_results = getattr(analysis, 'report_results', None)
+                            st.session_state[SessionStateKeys.SEARCH_RESULTS] = getattr(analysis, 'search_results', None)
+                            st.session_state[SessionStateKeys.REPORT_RESULTS] = getattr(analysis, 'report_results', None)
                             
                         except Exception as e:
                             if debug_logger:
                                 debug_logger.log_error(e, "XML structure analysis")
                             # Don't fail the whole process if analysis fails, but preserve clinical codes functionality
-                            st.session_state.xml_structure_analysis = None
-                            st.session_state.search_analysis = None
-                            st.session_state.search_results = None
-                            st.session_state.report_results = None
+                            st.session_state[SessionStateKeys.XML_STRUCTURE_ANALYSIS] = None
+                            st.session_state[SessionStateKeys.SEARCH_ANALYSIS] = None
+                            st.session_state[SessionStateKeys.SEARCH_RESULTS] = None
+                            st.session_state[SessionStateKeys.REPORT_RESULTS] = None
                         
                         # Calculate success rate for logging - handle empty translated_codes for patient demographics XMLs
                         total_found = sum(1 for item in translated_codes.get('clinical', []) if item.get('Mapping Found') == 'Found')
@@ -411,7 +385,7 @@ def main():
                         # Quick structure analysis for toast
                         try:
                             # Use already computed analysis from session state
-                            analysis = st.session_state.get('xml_structure_analysis')
+                            analysis = st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
                             if analysis:
                                 folder_count = len(analysis.folders) if analysis.folders else 0
                                 total_reports = len(analysis.reports) if analysis.reports else 0
@@ -443,10 +417,9 @@ def main():
                             rendering_placeholder.empty()
                         
                         # Reset processing state on completion - ensure clean state
-                        st.session_state.is_processing = False
+                        st.session_state[SessionStateKeys.IS_PROCESSING] = False
                         # Also clear any progress indicators to ensure clean UI
-                        if 'progress_placeholder' in st.session_state:
-                            del st.session_state.progress_placeholder
+                        clear_processing_state()
                         st.rerun()
                 
                 except Exception as e:
@@ -471,46 +444,23 @@ def main():
                     if 'rendering_placeholder' in locals():
                         rendering_placeholder.empty()
                     # Reset processing state on error - ensure clean state
-                    st.session_state.is_processing = False
+                    st.session_state[SessionStateKeys.IS_PROCESSING] = False
                     # Also clear any progress indicators to ensure clean UI
-                    if 'progress_placeholder' in st.session_state:
-                        del st.session_state.progress_placeholder
+                    clear_processing_state()
                     st.rerun()
         
         else:
-            st.markdown("""
-            <div style="
-                background-color: #28546B;
-                padding: 0.75rem;
-                border-radius: 0.5rem;
-                color: #FAFAFA;
-                text-align: left;
-                margin-bottom: 0.5rem;
-            ">
-                📤 Upload an XML file to begin processing
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(info_box("📤 Upload an XML file to begin processing"), unsafe_allow_html=True)
     
     # Full-width results section - only show when not processing
-    if not st.session_state.get('is_processing', False):
+    if not st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
         
         st.subheader("📊 Results")
-        render_results_tabs(st.session_state.get('results'))
-    elif st.session_state.get('is_processing', False):
+        render_results_tabs(st.session_state.get(SessionStateKeys.RESULTS))
+    elif st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
         # Show processing indicator
         st.subheader("⏳ Processing...")
-        st.markdown("""
-        <div style="
-            background-color: #28546B;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            color: #FAFAFA;
-            text-align: left;
-            margin-bottom: 0.5rem;
-        ">
-            Processing your XML file. This may take a few moments for large files.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(info_box("Processing your XML file. This may take a few moments for large files."), unsafe_allow_html=True)
 
     # Footer
     st.markdown("---")
