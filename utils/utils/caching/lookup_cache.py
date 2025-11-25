@@ -1,3 +1,4 @@
+from ...ui.theme import info_box, success_box, warning_box, error_box
 """
 EMIS Lookup Table Cache Management
 
@@ -352,7 +353,7 @@ def build_emis_lookup_cache(lookup_df: pd.DataFrame, snomed_code_col: str, emis_
         
     except Exception as e:
         # If cache building fails, log but don't crash
-        st.warning(f"Could not build EMIS lookup cache: {str(e)}")
+        st.markdown(warning_box(f"Could not build EMIS lookup cache: {str(e)}"), unsafe_allow_html=True)
         return False
 
 

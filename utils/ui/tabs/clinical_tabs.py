@@ -1,3 +1,4 @@
+from ...ui.theme import info_box, success_box, warning_box, error_box
 """
 Clinical data tab rendering functions.
 
@@ -32,24 +33,31 @@ try:
 except ImportError as e:
     # If imports fail, show the actual error instead of placeholder
     def render_list_reports_tab(xml_content, xml_filename):
-        st.error(f"❌ Import Error for List Reports: {e}")
+        st.markdown(error_box(f"❌ Import Error for List Reports: {e}"), unsafe_allow_html=True)
     
     def render_audit_reports_tab(xml_content, xml_filename):
-        st.error(f"❌ Import Error for Audit Reports: {e}")
+        st.markdown(error_box(f"❌ Import Error for Audit Reports: {e}"), unsafe_allow_html=True)
     
     def render_aggregate_reports_tab(xml_content, xml_filename):
-        st.error(f"❌ Import Error for Aggregate Reports: {e}")
+        st.markdown(error_box(f"❌ Import Error for Aggregate Reports: {e}"), unsafe_allow_html=True)
 
 # Import functions from the new modular tabs structure
 from .analytics_tab import render_analytics_tab
 from .analysis_tabs import render_search_analysis_tab
 
-# NHS Terminology Server integration
-try:
-    from ...terminology_server.expansion_ui import render_expansion_tab_content
-    NHS_TERMINOLOGY_AVAILABLE = True
-except ImportError:
-    NHS_TERMINOLOGY_AVAILABLE = False
+# NHS Terminology Server integration - use lazy loading
+NHS_TERMINOLOGY_AVAILABLE = True  # Assume available, check on first use
+
+def _get_expansion_ui():
+    """Lazy load expansion UI module"""
+    try:
+        from ...terminology_server.expansion_ui import render_expansion_tab_content
+        return render_expansion_tab_content
+    except ImportError as e:
+        global NHS_TERMINOLOGY_AVAILABLE
+        NHS_TERMINOLOGY_AVAILABLE = False
+        st.markdown(error_box(f"NHS Terminology Server integration failed to load: {e}"), unsafe_allow_html=True)
+        return None
 
 
 def render_summary_tab(results):
@@ -292,7 +300,7 @@ def render_clinical_codes_tab(results=None):
         """, unsafe_allow_html=True)
     else:
         # Show success when no pseudo-refset members exist
-        st.success("✅ **All clinical codes are properly mapped!** This means all codes in your XML are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
+        st.markdown(success_box("✓&nbsp;&nbsp;**All clinical codes are properly mapped!** This means all codes in your XML are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable)."), unsafe_allow_html=True)
 
 
 def render_medications_tab(results):
@@ -531,7 +539,7 @@ def render_pseudo_refsets_tab(results):
         
         # Show appropriate dynamic message based on pseudo-refsets and mode
         if not display_pseudo_refsets:
-            st.success("✅ No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS).")
+            st.markdown(success_box("✓&nbsp;&nbsp;No pseudo-refsets found - all ValueSets are standard refsets or standalone codes (directly usable in EMIS)."), unsafe_allow_html=True)
         
         # Use efficient render_section_with_data pattern for pseudo-refsets
         if display_pseudo_refsets:
@@ -611,7 +619,7 @@ def render_pseudo_refset_members_tab(results):
         
         # Show appropriate dynamic message based on pseudo-members and mode
         if not pseudo_members_data:
-            st.success("✅ No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable).")
+            st.markdown(success_box("✓&nbsp;&nbsp;No pseudo-refset member codes found - all codes are either standard refsets (directly usable in EMIS) or standalone codes (also directly usable)."), unsafe_allow_html=True)
             return
         
         # Use efficient render_section_with_data pattern for pseudo-members
@@ -723,7 +731,7 @@ def render_clinical_codes_main_tab(results):
 def render_nhs_terminology_tab(results):
     """Render NHS Terminology Server integration tab"""
     if not NHS_TERMINOLOGY_AVAILABLE:
-        st.error("❌ NHS Terminology Server integration not available")
+        st.markdown(error_box("❌ NHS Terminology Server integration not available"), unsafe_allow_html=True)
         st.markdown("""
         <div style="
             background-color: #28546B;
@@ -743,7 +751,7 @@ def render_nhs_terminology_tab(results):
     
     unified_results = get_unified_clinical_data()
     if not unified_results:
-        st.warning("❌ No clinical analysis data found - please run XML analysis first")
+        st.markdown(warning_box("❌ No clinical analysis data found - please run XML analysis first"), unsafe_allow_html=True)
         return
     
     # Combine all clinical codes for expansion analysis
@@ -777,7 +785,9 @@ def render_nhs_terminology_tab(results):
         return
     
     # Render the expansion interface
-    render_expansion_tab_content(all_clinical_codes)
+    expansion_ui = _get_expansion_ui()
+    if expansion_ui:
+        expansion_ui(all_clinical_codes)
 
 
 def render_results_tabs(results):

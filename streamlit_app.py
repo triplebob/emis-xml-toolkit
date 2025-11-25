@@ -1,7 +1,3 @@
-"""
-The Unofficial EMIS XML Toolkit - Streamlit Cloud Optimized
-"""
-
 import streamlit as st
 from utils.ui import render_status_bar, render_results_tabs
 from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
@@ -13,11 +9,11 @@ from utils.analysis.report_analyzer import ReportAnalyzer
 from utils.utils import get_debug_logger, render_debug_controls
 from utils.analysis import render_performance_controls, display_performance_metrics
 from utils.utils import create_processing_stats
+from utils.ui.theme import info_box, success_box, warning_box, error_box
 import time
 import psutil
 import os
 import xml.etree.ElementTree as ET
-
 
 
 # Page configuration
@@ -122,7 +118,8 @@ def main():
                     # Comprehensive cleanup when cancelling - same as new XML upload
                     clear_for_new_xml()
                     st.session_state[SessionStateKeys.IS_PROCESSING] = False
-                    st.success("Processing cancelled - all data cleared")
+                    from utils.ui.theme import success_box
+                    st.markdown(success_box("Processing cancelled - all data cleared"), unsafe_allow_html=True)
                     st.rerun()
                 
                 # Show file info as toast notification
@@ -198,13 +195,15 @@ def main():
                                     # No reports found - truly invalid XML
                                     if debug_logger:
                                         debug_logger.log_error(Exception("No EMIS GUIDs or valid reports found"), "XML parsing")
-                                    st.error("No EMIS GUIDs or valid search reports found in the XML file")
+                                    from utils.ui.theme import error_box
+                                    st.markdown(error_box("No EMIS GUIDs or valid search reports found in the XML file"), unsafe_allow_html=True)
                                     return
                                     
                             except Exception as parse_error:
                                 if debug_logger:
                                     debug_logger.log_error(parse_error, "XML structure validation")
-                                st.error(f"Error validating XML structure: {str(parse_error)}")
+                                from utils.ui.theme import error_box
+                                st.markdown(error_box(f"Error validating XML structure: {str(parse_error)}"), unsafe_allow_html=True)
                                 return
                         else:
                             # Normal processing path with clinical codes
@@ -438,7 +437,8 @@ def main():
                     
                     if debug_logger:
                         debug_logger.log_error(e, "XML processing")
-                    st.error(f"Error processing XML: {str(e)}")
+                    from utils.ui.theme import error_box
+                    st.markdown(error_box(f"Error processing XML: {str(e)}"), unsafe_allow_html=True)
                     
                     # Clear the rendering message if it exists
                     if 'rendering_placeholder' in locals():

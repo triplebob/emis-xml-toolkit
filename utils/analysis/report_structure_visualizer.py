@@ -1,3 +1,4 @@
+from ..ui.theme import info_box, success_box, warning_box, error_box
 """
 Report Structure Visualizer - Folder and Dependency Functions
 Contains functions for visualizing folder hierarchies and dependency relationships
@@ -31,7 +32,7 @@ def _natural_sort_key(text):
 def render_folder_structure(folder_tree, folders, reports):
     """Render hierarchical folder structure with reports"""
     if not folders:
-        st.info("No folder structure found in this XML")
+        st.markdown(info_box("No folder structure found in this XML"), unsafe_allow_html=True)
         return
     
     st.markdown("**📁 Directory structure with search reports:**")
@@ -536,7 +537,7 @@ def render_folder_list_view(folder_tree, folder_map, report_map):
 def render_dependency_tree(dependency_tree, reports):
     """Render report dependency relationships with caching and lazy exports"""
     if not dependency_tree or not dependency_tree['roots']:
-        st.info("No dependency relationships found")
+        st.markdown(info_box("No dependency relationships found"), unsafe_allow_html=True)
         return
     
     # Header with options
@@ -843,7 +844,7 @@ def render_dependency_list_view(dependency_tree, report_map, show_circular):
     
     summary = ", ".join(summary_parts) if summary_parts else "0 root items"
     
-    st.info(f"🔗 {summary}, spanning {composition['folder_count']} folders, max dependency depth: {composition['max_depth']}")
+    st.markdown(info_box(f"🔗 {summary}, spanning {composition['folder_count']} folders, max dependency depth: {composition['max_depth']}"), unsafe_allow_html=True)
     
     # Additional composition details
     if composition['total_items'] > len(dependency_tree['roots']):

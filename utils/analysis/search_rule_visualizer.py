@@ -15,6 +15,7 @@ from ..xml_parsers.criterion_parser import SearchCriterion, check_criterion_para
 from ..core import FolderManager, SearchManager
 from ..core.session_state import SessionStateKeys
 from ..utils.text_utils import pluralize_unit, format_operator_text
+from ..ui.theme import info_box, success_box, warning_box, error_box
 # Export functionality moved to centralized UIExportManager
 from .linked_criteria_handler import (
     render_linked_criteria, 
@@ -81,7 +82,7 @@ def render_detailed_rules(reports, analysis=None):
     apply_custom_styling()
     
     if not reports:
-        st.info("No detailed rules found")
+        st.markdown(info_box("No detailed rules found"), unsafe_allow_html=True)
         return
     
     # Use provided analysis or get from session state
@@ -89,7 +90,7 @@ def render_detailed_rules(reports, analysis=None):
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS)
     
     if not analysis:
-        st.warning("⚠️ Analysis data missing - please refresh the page")
+        st.markdown(warning_box("⚠️ Analysis data missing - please refresh the page"), unsafe_allow_html=True)
         return
     
     # Ensure folders exist (orchestrated analysis should have this)
@@ -105,7 +106,7 @@ def render_detailed_rules(reports, analysis=None):
     st.markdown("**📋 Navigate to Search for Detailed Rule Analysis:**")
     
     # Three-column layout: folder selector, search selector, export buttons
-    col1, col2, col3 = st.columns([3, 4, 1.4])
+    col1, col2, col3 = st.columns([3, 3, 1.5])
     
     
     with col1:
@@ -231,7 +232,7 @@ def render_detailed_rules(reports, analysis=None):
         selected_search = folder_searches[selected_search_index]
         render_individual_search_details(selected_search, reports, show_dependencies=False)
     else:
-        st.info("👆 Select a search from the dropdown above to see detailed rule analysis")
+        st.markdown(info_box("👆 Select a search from the dropdown above to see detailed rule analysis"), unsafe_allow_html=True)
     
 
 
@@ -272,9 +273,9 @@ def _render_single_detailed_rule(selected_search, reports):
         parent_report = next((r for r in reports if r.id == selected_search.parent_guid), None)
         if parent_report:
             parent_clean_name = SearchManager.clean_search_name(parent_report.name)
-            st.info(f"🔵 **Child Search!** Parent Search: {parent_clean_name}")
+            st.markdown(info_box(f"🔵 **Child Search!** Parent Search: {parent_clean_name}"), unsafe_allow_html=True)
         else:
-            st.warning(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)")
+            st.markdown(warning_box(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)"), unsafe_allow_html=True)
     else:
         if selected_search.parent_type == 'ACTIVE':
             st.markdown("""
@@ -381,9 +382,9 @@ def render_individual_search_details(selected_search, reports, show_dependencies
         parent_report = next((r for r in reports if r.id == selected_search.parent_guid), None)
         if parent_report:
             parent_clean_name = SearchManager.clean_search_name(parent_report.name)
-            st.info(f"🔵 **Child Search!** Parent Search: {parent_clean_name}")
+            st.markdown(info_box(f"🔵 **Child Search!** Parent Search: {parent_clean_name}"), unsafe_allow_html=True)
         else:
-            st.warning(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)")
+            st.markdown(warning_box(f"🔵 **Child Search!** Parent search not found (ID: {selected_search.parent_guid[:8]}...)"), unsafe_allow_html=True)
     else:
         if selected_search.parent_type == 'ACTIVE':
             st.markdown("""
@@ -479,7 +480,7 @@ def render_criteria_group(group: CriteriaGroup, rule_name: str):
         # This prevents linked criteria from being displayed as separate "Criterion 2" etc.
         displayed_criteria = filter_top_level_criteria(group)
     except Exception as e:
-        st.error(f"Error filtering criteria for rule '{rule_name}': {str(e)}")
+        st.markdown(error_box(f"Error filtering criteria for rule '{rule_name}': {str(e)}"), unsafe_allow_html=True)
         displayed_criteria = group.criteria if hasattr(group, 'criteria') else []
     
     # Build rule header with optional help icon for single-criterion AND logic
@@ -530,7 +531,7 @@ def render_criteria_group(group: CriteriaGroup, rule_name: str):
                 if ref_report:
                     from ..core import SearchManager
                     ref_clean_name = SearchManager.clean_search_name(ref_report.name)
-                    st.info(f"🔍 **{ref_clean_name}**")
+                    st.markdown(info_box(f"🔍 **{ref_clean_name}**"), unsafe_allow_html=True)
                 else:
                     # Try to find in all reports (including member searches)
                     all_reports = []
@@ -546,7 +547,7 @@ def render_criteria_group(group: CriteriaGroup, rule_name: str):
                     if ref_report:
                         from ..core import SearchManager
                         ref_clean_name = SearchManager.clean_search_name(ref_report.name)
-                        st.info(f"🔍 **{ref_clean_name}**")
+                        st.markdown(info_box(f"🔍 **{ref_clean_name}**"), unsafe_allow_html=True)
                     else:
                         st.caption(f"• Search ID: {pop_crit.report_guid[:8]}...")
             else:
@@ -558,31 +559,31 @@ def render_criteria_group(group: CriteriaGroup, rule_name: str):
         if len(group.criteria) > 0:
             # All criteria were filtered as linked duplicates - this rule's criteria are shown elsewhere
             if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                st.warning(f"⚠️ **Debug:** Rule has {len(group.criteria)} criteria but all filtered as linked duplicates")
+                st.markdown(warning_box(f"⚠️ **Debug:** Rule has {len(group.criteria)} criteria but all filtered as linked duplicates"), unsafe_allow_html=True)
                 for i, crit in enumerate(group.criteria):
                     st.caption(f"Debug: Criterion {i+1}: {crit.display_name} (Table: {crit.table}) - filtered as duplicate")
             else:
-                st.info("ℹ️ **This rule's criteria are displayed under linked criteria in other rules.** The criteria for this rule are shown as part of complex linked relationships in previous rules.")
+                st.markdown(info_box("ℹ️ **This rule's criteria are displayed under linked criteria in other rules.** The criteria for this rule are shown as part of complex linked relationships in previous rules."), unsafe_allow_html=True)
         elif group.population_criteria:
             # This case is already handled above with the "Using Another Search" section
             pass
         else:
             # This should not happen with proper filtering - all searches in EMIS must have criteria
             if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                st.error(f"⚠️ **Debug:** Unexpected empty rule found after filtering. This suggests a filtering issue.")
+                st.markdown(error_box(f"⚠️ **Debug:** Unexpected empty rule found after filtering. This suggests a filtering issue."), unsafe_allow_html=True)
                 st.write(f"Debug: Original criteria count: {len(group.criteria)}")
                 st.write(f"Debug: Displayed criteria count: {len(displayed_criteria)}")
                 st.write(f"Debug: Population criteria: {group.population_criteria}")
                 for i, crit in enumerate(group.criteria):
                     st.write(f"Debug: Criterion {i+1}: {crit.display_name}, Table: {crit.table}, ValueSets: {len(crit.value_sets) if hasattr(crit, 'value_sets') else 'N/A'}")
             else:
-                st.warning("⚠️ **Unexpected empty rule.** This should not occur with proper search filtering.")
+                st.markdown(warning_box("⚠️ **Unexpected empty rule.** This should not occur with proper search filtering."), unsafe_allow_html=True)
     else:
         for k, criterion in enumerate(displayed_criteria):
             try:
                 render_search_criterion(criterion, f"Criterion {k+1}")
             except Exception as e:
-                st.error(f"Error rendering criterion {k+1}: {str(e)}")
+                st.markdown(error_box(f"Error rendering criterion {k+1}: {str(e)}"), unsafe_allow_html=True)
                 st.write(f"Criterion details: {getattr(criterion, 'display_name', 'No display name')}")
         
     st.markdown("---")
@@ -724,7 +725,7 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                     warning_text = f"⚠️ **Parameter Warning:** This search uses Local parameter(s): '{param_names}'"
                 else:
                     warning_text = f"⚠️ **Parameter Warning:** This search uses parameter(s): '{param_names}'"
-                st.warning(warning_text)
+                st.markdown(warning_box(warning_text), unsafe_allow_html=True)
         
             # Value sets (codes being searched for) - exclude linked criteria value sets
             main_value_sets = filter_linked_value_sets_from_main(criterion)
@@ -991,7 +992,7 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
         
     except Exception as e:
         import traceback
-        st.error(f"Error rendering criterion: {str(e)}")
+        st.markdown(error_box(f"Error rendering criterion: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(traceback.format_exc())
         raise  # Re-raise to see the original error
@@ -1743,7 +1744,7 @@ def render_restriction_value_set_element(vs_elem):
                         }
                     )
                 else:
-                    st.info("No codes found for this value set")
+                    st.markdown(info_box("No codes found for this value set"), unsafe_allow_html=True)
         
     except Exception as e:
         st.caption(f"⚠️ Error displaying restriction codes: {str(e)}")
@@ -1862,7 +1863,7 @@ def render_restriction_value_set(vs_description):
                     }
                 )
             else:
-                st.info("No codes found for this value set")
+                st.markdown(info_box("No codes found for this value set"), unsafe_allow_html=True)
         
     except Exception as e:
         st.caption(f"⚠️ Error displaying restriction codes: {str(e)}")
@@ -1873,7 +1874,7 @@ def export_rule_analysis(analysis, xml_filename: str):
     # This function is kept for backward compatibility but should not be used
     # Now works with both SearchRuleAnalysis and CompleteAnalysisResult
     report_text, filename = generate_rule_analysis_report(analysis, xml_filename)
-    st.success("✅ Analysis report ready for download!")
+    st.markdown(success_box("✅ Analysis report ready for download!"), unsafe_allow_html=True)
     return report_text, filename
 
 

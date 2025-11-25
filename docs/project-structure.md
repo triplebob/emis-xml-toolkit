@@ -26,9 +26,13 @@ The codebase is organised into logical directories that separate concerns and en
 │   │   ├── shared_render_utils.py                      # Common visualisation utilities
 │   │   └── linked_criteria_handler.py                  # Linked criteria processing
 │   ├── terminology_server/                             # 📁 **NHS Terminology Server integration**
-│   │   ├── nhs_terminology_client.py                   # FHIR R4 API client
-│   │   ├── expansion_service.py                        # Service layer for code expansion
-│   │   └── expansion_ui.py                             # User interface components
+│   │   ├── nhs_terminology_client.py                   # Thread-safe FHIR R4 API client
+│   │   ├── expansion_service.py                        # UI-independent service layer
+│   │   ├── expansion_ui.py                             # Streamlit interface components
+│   │   ├── rate_limiter.py                             # Adaptive rate limiting with exponential backoff
+│   │   ├── progress_tracker.py                         # Advanced progress tracking with time estimation
+│   │   ├── batch_processor.py                          # Batch processing coordination
+│   │   └── debug_utilities.py                          # Development and debugging utilities
 │   ├── xml_parsers/                                    # 📁 **Modular XML parsing system**
 │   │   ├── xml_utils.py                                # Core XML parsing and GUID extraction
 │   │   ├── namespace_handler.py                        # Universal namespace handling
@@ -96,10 +100,13 @@ The codebase is organised into logical directories that separate concerns and en
 │       └── dataframe_utils.py                          # DataFrame operations
 ├── docs/                                               # 📁 **Technical documentation**
 │   ├── architecture/                                   # 📁 **Architecture documentation**
+│   │   ├── error-handling.md                           # Guide to catching and logging errors
 │   │   ├── modules.md                                  # Module architecture guide
 │   │   ├── session-state-management.md                 # Session state architecture
 │   │   └── project-structure.md                        # This document
-│   ├── nhs-terminology-server-integration.md           # NHS terminology server reference
+│   ├── terminology-server/                             # 📁 **NHS Terminology Server documentation**
+│   │   ├── term-server-overview.md                     # User-focused integration guide
+│   │   └── term-server-technical-guide.md              # Developer implementation reference
 │   ├── emis-xml-patterns.md                            # EMIS XML pattern reference
 │   ├── namespace-handling.md                           # Namespace handling guide
 │   └── theme-colors.md                                 # Custom theme colour reference guide
@@ -158,7 +165,7 @@ Raw Data → Type-Specific Processing → Format Generation → User Download
 - **UI modules** → core, common, utils, terminology_server
 - **Analysis modules** → xml_parsers, core, ui
 - **Export handlers** → core, common, utils
-- **Terminology server** → utils (caching), integrates with ui
+- **Terminology server** → common (error handling), utils (caching), ui (theme), integrates across modules
 
 ### **Shared Modules**
 - **common/**: Error handling, utilities (used by all modules)
@@ -206,14 +213,15 @@ Raw Data → Type-Specific Processing → Format Generation → User Download
 
 - **[Module Architecture Guide](architecture/modules.md)** - Detailed module descriptions
 - **[Session State Management](architecture/session-state-management.md)** - Session state architecture
-- **[NHS Terminology Server Integration](nhs-terminology-server-integration.md)** - API integration details
+- **[NHS Terminology Server Overview](terminology-server/term-server-overview.md)** - User guide for terminology expansion
+- **[NHS Terminology Server Technical Guide](terminology-server/term-server-technical-guide.md)** - Developer implementation reference
 - **[EMIS XML Patterns](emis-xml-patterns.md)** - XML parsing patterns
 
 ---
 
 *This document reflects the current architecture as of:
 
-*Last Updated: 21st November 2025*  
-*Application Version: 2.2.4*  
+*Last Updated: 25th November 2025*  
+*Application Version: 2.2.5*  
 
 For specific module details, see the [Module Architecture Guide](architecture/modules.md).*

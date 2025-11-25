@@ -20,16 +20,17 @@ def render_info_box(message: str, box_type: str = "info", icon: str = None) -> N
     if icon:
         message = f"{icon} {message}"
     
+    from .theme import info_box, success_box, warning_box, error_box
     if box_type == "info":
-        st.info(message)
+        st.markdown(info_box(message), unsafe_allow_html=True)
     elif box_type == "success":
-        st.success(message)
+        st.markdown(success_box(message), unsafe_allow_html=True)
     elif box_type == "warning":
-        st.warning(message)
+        st.markdown(warning_box(message), unsafe_allow_html=True)
     elif box_type == "error":
-        st.error(message)
+        st.markdown(error_box(message), unsafe_allow_html=True)
     else:
-        st.info(message)
+        st.markdown(info_box(message), unsafe_allow_html=True)
 
 
 def render_metric_card(title: str, value: Union[str, int, float], 

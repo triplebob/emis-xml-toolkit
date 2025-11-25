@@ -1,3 +1,4 @@
+from ...ui.theme import info_box, success_box, warning_box, error_box
 """
 Shared utility functions for tab rendering.
 
@@ -76,7 +77,7 @@ def _monitor_memory_usage(location: str, report_size: str = "medium"):
         threshold = 1500 if report_size == "large" else 2000
         
         if memory_mb > threshold:
-            st.warning(f"High memory usage detected at {location}: {memory_mb:.1f} MB")
+            st.markdown(warning_box(f"High memory usage detected at {location}: {memory_mb:.1f} MB"), unsafe_allow_html=True)
             
             # Trigger cleanup based on report size
             from ...utils.caching.cache_manager import cache_manager
@@ -92,7 +93,7 @@ def _monitor_memory_usage(location: str, report_size: str = "medium"):
             reduction = memory_mb - memory_mb_after
             
             if reduction > 50:  # Significant reduction
-                st.success(f"Memory cleanup successful: freed {reduction:.1f} MB, now at {memory_mb_after:.1f} MB")
+                        st.markdown(success_box(f"Memory cleanup successful: freed {reduction:.1f} MB, now at {memory_mb_after:.1f} MB"), unsafe_allow_html=True)
         
         return memory_mb
     except Exception:

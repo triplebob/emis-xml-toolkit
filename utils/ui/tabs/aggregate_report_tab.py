@@ -10,7 +10,7 @@ Extracted from report_tabs.py to improve modularity and maintainability.
 
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
-from ...ui.theme import ComponentThemes, info_box, purple_box, success_box
+from ...ui.theme import ComponentThemes, info_box, purple_box, success_box, warning_box, error_box
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -57,15 +57,15 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
     """
     
     if not xml_content:
-        st.info("📈 Upload and process an XML file to see Aggregate Reports")
+        st.markdown(info_box("📈 Upload and process an XML file to see Aggregate Reports"), unsafe_allow_html=True)
         return
     
     try:
 
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
-            st.info("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.")
+            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
         from ...core.report_classifier import ReportClassifier
@@ -78,7 +78,7 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
             aggregate_reports = report_results.report_breakdown['aggregate']
         else:
             # No pre-processed data available - skip expensive processing
-            st.info("📈 No Aggregate Reports found in this XML file.")
+            st.markdown(info_box("📈 No Aggregate Reports found in this XML file."), unsafe_allow_html=True)
             st.caption("This XML contains only searches or other report types.")
             return
         aggregate_count = len(aggregate_reports)
@@ -91,7 +91,7 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
             cache_processed_data(toast_cache_key, True)
         
         if not aggregate_reports:
-            st.info("📈 No Aggregate Reports found in this XML file")
+            st.markdown(info_box("📈 No Aggregate Reports found in this XML file"), unsafe_allow_html=True)
             return
 
         # 🔧 Aggregate Report Logic Browser - Fragmented expandable frame (prevents full reruns)
@@ -123,7 +123,7 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.error(f"Error analyzing Aggregate Reports: {str(e)}")
+        st.markdown(error_box(f"Error analyzing Aggregate Reports: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -148,7 +148,7 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     from ...core.report_classifier import ReportClassifier
     
     if not reports:
-        st.info(f"{icon} No {report_type_name}s found in this XML file")
+        st.markdown(info_box(f"{icon} No {report_type_name}s found in this XML file"), unsafe_allow_html=True)
         return
     
     # Initialize session state for tracking rendering completion
@@ -260,7 +260,7 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     
     with status_col1:
         if selected_folder:
-            st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
+            st.markdown(info_box(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**"), unsafe_allow_html=True)
         elif analysis.folders:
             st.markdown(f"""
             <div style="
@@ -275,14 +275,14 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
+            st.markdown(info_box(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)"), unsafe_allow_html=True)
     
     with status_col2:
         # Rendering status indicator - will be populated after export buttons render
         status_placeholder = st.empty()
     
     if not folder_reports:
-        st.warning(f"No {report_type_name}s found in the selected scope.")
+        st.markdown(warning_box(f"No {report_type_name}s found in the selected scope."), unsafe_allow_html=True)
         return
     
     if selected_report_text:
@@ -416,7 +416,7 @@ def render_report_visualization(report, analysis):
         # Only do expensive memory checks for large reports
         memory_stats = cache_manager.get_memory_usage_stats()
         if memory_stats.get('cleanup_recommended', False):
-            st.warning("Memory pressure detected - performing cleanup")
+            st.markdown(warning_box("Memory pressure detected - performing cleanup"), unsafe_allow_html=True)
             cache_manager.manage_session_state_memory(max_cache_items=10)
             gc.collect()
     elif report_size == "medium":
@@ -557,10 +557,10 @@ def render_report_visualization(report, analysis):
             elif report.report_type == 'aggregate':
                 render_aggregate_report_details(report)
             else:
-                st.error(f"Unknown report type: {report.report_type}")
+                st.markdown(error_box(f"Unknown report type: {report.report_type}"), unsafe_allow_html=True)
         else:
             # This is a SearchReport object from search_analyzer - shouldn't be in report visualization
-            st.error("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue")
+            st.markdown(error_box("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue"), unsafe_allow_html=True)
             st.write("Object type:", type(report).__name__)
             if hasattr(report, 'name'):
                 st.write("Name:", report.name)
@@ -583,7 +583,7 @@ def render_report_visualization(report, analysis):
             
             # If memory increased significantly, show warning
             if hasattr(locals(), 'initial_memory') and final_memory > initial_memory + 200:
-                st.warning(f"Memory increased by {final_memory - initial_memory:.1f} MB during report rendering")
+                st.markdown(warning_box(f"Memory increased by {final_memory - initial_memory:.1f} MB during report rendering"), unsafe_allow_html=True)
                 # Force additional cleanup for large reports only
                 cache_manager.manage_session_state_memory(max_cache_items=5)
                 gc.collect()
@@ -625,7 +625,7 @@ def render_search_report_details(report):
                         if criterion.description:
                             st.markdown(f"     _{criterion.description}_")
     else:
-        st.info("No search criteria found")
+        st.markdown(info_box("No search criteria found"), unsafe_allow_html=True)
     
     # SIZE-ADAPTIVE: Final cleanup based on report size
     if report_size == "large":
@@ -723,7 +723,7 @@ def render_aggregate_report_details(report):
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.warning("**Rows:** Not configured")
+                    st.markdown(warning_box("**Rows:** Not configured"), unsafe_allow_html=True)
             
             with col2:
                 if cols_group:
@@ -741,7 +741,7 @@ def render_aggregate_report_details(report):
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.warning("**Columns:** Not configured")
+                    st.markdown(warning_box("**Columns:** Not configured"), unsafe_allow_html=True)
             
             with col3:
                 if result_group:
@@ -790,7 +790,7 @@ def render_aggregate_report_details(report):
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.error("**Result:** Not configured")
+                    st.markdown(error_box("**Result:** Not configured"), unsafe_allow_html=True)
     
     # Aggregate groups in collapsed expander (moved below Statistical Setup)
     if report.aggregate_groups:
@@ -858,11 +858,11 @@ def render_aggregate_report_details(report):
     # Include legacy criteria if present  
     elif report.criteria_groups:
         st.markdown("### 🔍 Own Criteria")
-        st.info("This aggregate report defines its own search criteria (independent of other searches)")
+        st.markdown(info_box("This aggregate report defines its own search criteria (independent of other searches)"), unsafe_allow_html=True)
         render_search_report_details(report)
     
     if not report.aggregate_groups and not report.statistical_groups:
-        st.info("No statistical configuration found")
+        st.markdown(info_box("No statistical configuration found"), unsafe_allow_html=True)
     
     # SIZE-ADAPTIVE: Final cleanup based on report size
     if report_size == "large":

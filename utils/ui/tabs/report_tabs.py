@@ -15,7 +15,7 @@ Specialized report types are handled by dedicated modules:
 
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
-from ...ui.theme import ComponentThemes, info_box, purple_box, success_box
+from ...ui.theme import ComponentThemes, info_box, purple_box, success_box, warning_box, error_box
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -181,18 +181,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     
     with status_col1:
         if selected_folder:
-            st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
+            st.markdown(info_box(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**"), unsafe_allow_html=True)
         elif analysis.folders:
             st.markdown(info_box(f"{icon} Showing all {len(folder_reports)} {report_type_name}s from all folders"), unsafe_allow_html=True)
         else:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
+            st.markdown(info_box(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)"), unsafe_allow_html=True)
     
     with status_col2:
         # Rendering status indicator - will be populated after export buttons render
         status_placeholder = st.empty()
     
     if not folder_reports:
-        st.warning(f"No {report_type_name}s found in the selected scope.")
+        st.markdown(warning_box(f"No {report_type_name}s found in the selected scope."), unsafe_allow_html=True)
         return
     
     if selected_report_text:
@@ -374,16 +374,16 @@ def render_reports_tab(analysis):
     if selected_folder:
         # Get reports in the selected folder
         folder_reports = [r for r in analysis.reports if r.folder_id == selected_folder.id]
-        st.info(f"📂 Showing {len(folder_reports)} reports from folder: **{selected_folder.name}**")
+        st.markdown(info_box(f"📂 Showing {len(folder_reports)} reports from folder: **{selected_folder.name}**"), unsafe_allow_html=True)
     else:
         folder_reports = analysis.reports
         if analysis.folders:
-            st.info(f"📊 Showing all {len(folder_reports)} reports from all folders")
+            st.markdown(info_box(f"📊 Showing all {len(folder_reports)} reports from all folders"), unsafe_allow_html=True)
         else:
-            st.info(f"📊 Showing all {len(folder_reports)} reports")
+            st.markdown(info_box(f"📊 Showing all {len(folder_reports)} reports"), unsafe_allow_html=True)
     
     if not folder_reports:
-        st.warning("No reports found in the selected scope.")
+        st.markdown(warning_box("No reports found in the selected scope."), unsafe_allow_html=True)
         return
     
     # Report type filter
@@ -413,7 +413,7 @@ def render_reports_tab(analysis):
             elif selected_type == "[Aggregate Report]" and (hasattr(report, 'aggregate_report') or 'aggregateReport' in str(type(report))):
                 filtered_reports.append(report)
     
-    st.info(f"🎯 Found {len(filtered_reports)} reports matching your criteria")
+    st.markdown(info_box(f"🎯 Found {len(filtered_reports)} reports matching your criteria"), unsafe_allow_html=True)
     
     # Report selection and visualization with progressive loading
     if filtered_reports:
@@ -522,7 +522,7 @@ def render_report_visualization(report, analysis):
         # Only do expensive memory checks for large reports
         memory_stats = cache_manager.get_memory_usage_stats()
         if memory_stats.get('cleanup_recommended', False):
-            st.warning("Memory pressure detected - performing cleanup")
+            st.markdown(warning_box("Memory pressure detected - performing cleanup"), unsafe_allow_html=True)
             cache_manager.manage_session_state_memory(max_cache_items=10)
             gc.collect()
     elif report_size == "medium":
@@ -663,10 +663,10 @@ def render_report_visualization(report, analysis):
             elif report.report_type == 'aggregate':
                 render_aggregate_report_details(report)
             else:
-                st.error(f"Unknown report type: {report.report_type}")
+                st.markdown(error_box(f"Unknown report type: {report.report_type}"), unsafe_allow_html=True)
         else:
             # This is a SearchReport object from search_analyzer - shouldn't be in report visualization
-            st.error("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue")
+            st.markdown(error_box("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue"), unsafe_allow_html=True)
             st.write("Object type:", type(report).__name__)
             if hasattr(report, 'name'):
                 st.write("Name:", report.name)
@@ -689,7 +689,7 @@ def render_report_visualization(report, analysis):
             
             # If memory increased significantly, show warning
             if hasattr(locals(), 'initial_memory') and final_memory > initial_memory + 200:
-                st.warning(f"Memory increased by {final_memory - initial_memory:.1f} MB during report rendering")
+                st.markdown(warning_box(f"Memory increased by {final_memory - initial_memory:.1f} MB during report rendering"), unsafe_allow_html=True)
                 # Force additional cleanup for large reports only
                 cache_manager.manage_session_state_memory(max_cache_items=5)
                 gc.collect()
@@ -731,7 +731,7 @@ def render_search_report_details(report):
                         if criterion.description:
                             st.markdown(f"     _{criterion.description}_")
     else:
-        st.info("No search criteria found")
+        st.markdown(info_box("No search criteria found"), unsafe_allow_html=True)
     
     # SIZE-ADAPTIVE: Final cleanup based on report size
     if report_size == "large":

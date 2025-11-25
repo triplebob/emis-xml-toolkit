@@ -14,6 +14,7 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 from ..core.session_state import SessionStateKeys
 from ..core.version import __version__
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 
 class EMISDebugLogger:
@@ -240,7 +241,7 @@ def render_debug_controls() -> None:
             st.session_state[SessionStateKeys.DEBUG_MODE] = debug_mode
             
             if debug_mode:
-                st.info("Debug logging is enabled. Check console output for detailed logs.")
+                st.markdown(info_box("Debug logging is enabled. Check console output for detailed logs."), unsafe_allow_html=True)
                 
                 # Option to download debug logs
                 if st.button("📁 Export Debug Session"):
@@ -289,12 +290,12 @@ def render_debug_controls() -> None:
                                     success_message += f"- {file}\n"
                                 if formatted_date:
                                     success_message += f"\n**Last updated:** {formatted_date}"
-                                st.success(success_message)
+                                st.markdown(success_box(success_message), unsafe_allow_html=True)
                             else:
-                                st.warning("⚠️ No files were updated")
+                                st.markdown(warning_box("⚠️ No files were updated"), unsafe_allow_html=True)
                     
                     except Exception as e:
-                        st.error(f"❌ Version update failed: {str(e)}")
+                        st.markdown(error_box(f"❌ Version update failed: {str(e)}"), unsafe_allow_html=True)
                         import traceback
                         with st.expander("🔍 Error Details", expanded=True):
                             st.code(traceback.format_exc())
@@ -311,7 +312,7 @@ def render_debug_controls() -> None:
             @st.fragment
             def cache_generation_fragment():
                 if st.button("🔨 Generate Cache", key="generate_cache_btn"):
-                    st.info("🔐 Cache will be encrypted using GZIP_TOKEN from secrets")
+                    st.markdown(info_box("🔐 Cache will be encrypted using GZIP_TOKEN from secrets"), unsafe_allow_html=True)
                     try:
                         # Import required modules
                         from .caching.lookup_cache import generate_cache_for_github
@@ -334,7 +335,7 @@ def render_debug_controls() -> None:
                             print("DEBUG - No version info found in session state")
                         
                         if lookup_df is None or lookup_df.empty:
-                            st.error("❌ No lookup table loaded. Please check that the app has loaded the lookup table.")
+                            st.markdown(error_box("❌ No lookup table loaded. Please check that the app has loaded the lookup table."), unsafe_allow_html=True)
                         else:
                             with st.spinner("Generating EMIS lookup cache for GitHub..."):
                                 # Create .cache directory if it doesn't exist
@@ -352,12 +353,12 @@ def render_debug_controls() -> None:
                                 
                                 if success:
                                     st.toast("✅ Encrypted GitHub cache generated successfully!", icon="🎉")
-                                    st.info("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users.")
+                                    st.markdown(info_box("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users."), unsafe_allow_html=True)
                                 else:
-                                    st.error("❌ Failed to generate GitHub cache")
+                                    st.markdown(error_box("❌ Failed to generate GitHub cache"), unsafe_allow_html=True)
                     
                     except Exception as e:
-                        st.error(f"❌ Cache generation failed: {str(e)}")
+                        st.markdown(error_box(f"❌ Cache generation failed: {str(e)}"), unsafe_allow_html=True)
             
             cache_generation_fragment()
             
@@ -377,7 +378,7 @@ def render_debug_controls() -> None:
                     if success:
                         st.toast("✅ Performance tests passed!", icon="🚀")
                     else:
-                        st.error("❌ Performance tests failed!")
+                        st.markdown(error_box("❌ Performance tests failed!"), unsafe_allow_html=True)
                     
                     with st.expander("📄 Performance Test Output", expanded=not success):
                         st.code(output)

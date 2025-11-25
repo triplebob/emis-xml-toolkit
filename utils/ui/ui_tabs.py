@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 from ..core.session_state import SessionStateKeys
 from .ui_helpers import (
+from .theme import info_box, success_box, warning_box, error_box
     render_section_with_data, 
     render_metrics_row, 
     render_success_rate_metric,
@@ -39,11 +40,26 @@ def render_results_tabs(results):
     """Render all result tabs with new 5-tab structure."""
     # Check if we have results OR if we have XML content (for patient demographics filtering XMLs)
     # For patient demographics XMLs, results might be empty dict {} but that's still valid
-    has_clinical_results = 'results' in st.session_state and st.session_state.results is not None
+    # Also ensure results are from current file, not stale from previous file
+    current_file_info = st.session_state.get(SessionStateKeys.LAST_PROCESSED_FILE, None)
+    has_processed_current_file = current_file_info is not None and not st.session_state.get(SessionStateKeys.IS_PROCESSING, False)
+    
+    has_clinical_results = ('results' in st.session_state and 
+                          st.session_state.results is not None and 
+                          has_processed_current_file)
     has_xml_content = 'xml_content' in st.session_state and st.session_state.xml_content
     
-    # Show tabs if we have either clinical results or XML content (including empty results from patient demographics XMLs)
-    if has_clinical_results or has_xml_content:
+    # Debug logging
+    if st.session_state.get('debug_mode', False):
+        print(f"[UI_TABS] results in session_state: {'results' in st.session_state}")
+        print(f"[UI_TABS] results value: {type(st.session_state.get('results', None))}")
+        print(f"[UI_TABS] has_processed_current_file: {has_processed_current_file}")
+        print(f"[UI_TABS] has_clinical_results: {has_clinical_results}")
+        print(f"[UI_TABS] current_file_info: {current_file_info}")
+    
+    # Only show tabs if we have processed results from the current file
+    # Don't show tabs just because we have XML content - wait until processing is complete
+    if has_clinical_results:
         results = st.session_state.results if has_clinical_results else {}
         
         # Create new 5-tab main structure
@@ -107,7 +123,8 @@ def render_clinical_codes_main_tab(results):
     
     if not has_clinical_data:
         # Handle XMLs with no clinical codes (patient demographics filtering, demographic filters, etc.)
-        st.info("📍 **Non-Clinical XML Detected**")
+        from .theme import info_box
+        st.markdown(info_box("📍 **Non-Clinical XML Detected**"), unsafe_allow_html=True)
         st.markdown("""
         This XML file contains searches or reports without clinical codes. This commonly occurs with:
         - **Patient demographics filtering** (LSOA codes, postcodes, practice areas)
@@ -160,7 +177,8 @@ def render_clinical_codes_main_tab(results):
 def render_xml_structure_tabs(xml_content: str, xml_filename: str):
     """Render XML structure analysis with sub-tabs"""
     if not xml_content:
-        st.info("📋 Upload and process an XML file to see XML structure analysis")
+        from .theme import info_box
+        st.markdown(info_box("📋 Upload and process an XML file to see XML structure analysis"), unsafe_allow_html=True)
         return
     
     try:
@@ -168,8 +186,10 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
-            st.info("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.")
+            from .theme import error_box
+            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            from .theme import info_box
+            st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
         if analysis:
@@ -180,7 +200,8 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
             
             # PERFORMANCE FIX: Simple notification without expensive type classification
             st.toast(f"XML Structure analyzed! {total_items} items across {folder_count} folder{'s' if folder_count != 1 else ''}", icon="🔍")
-            st.info("📊 Individual report type counts available in each dedicated tab to avoid performance issues.")
+            from .theme import info_box
+            st.markdown(info_box("📊 Individual report type counts available in each dedicated tab to avoid performance issues."), unsafe_allow_html=True)
         
         # Calculate report type counts for metrics
         search_count = 0
@@ -307,6 +328,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         print(f"Error: {str(e)}")
         print(f"Full traceback:\n{error_details}")
         
-        st.error(f"Error analyzing XML structure: {str(e)}")
+        from .theme import error_box
+        st.markdown(error_box(f"Error analyzing XML structure: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)

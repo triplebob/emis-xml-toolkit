@@ -1,5 +1,81 @@
 # Changelog
 
+## v2.2.5 - NHS Terminology Server Reliability & XML Parsing Resilience (25th November 2025)
+
+### 🌐 **NHS Terminology Server Reliability Enhancement Plan**
+
+**Structured Error Handling and User-Friendly Messages:**
+- **TerminologyServerError Exception**: Created dedicated exception class for NHS-specific errors with clear error categorisation
+- **Error Message Mapping**: Implemented user-friendly messages for common scenarios (401 auth, 404 not found, 422 invalid, 500+ server issues)
+- **Recovery Guidance**: Added specific user guidance for different error types with actionable next steps
+- **Error Context Enhancement**: API response details and recovery suggestions for improved troubleshooting
+
+**Adaptive Rate Limiting and Exponential Backoff:**
+- **AdaptiveRateLimiter**: Comprehensive rate limiter with dynamic adjustment based on server responses
+- **Exponential Backoff**: Intelligent backoff strategies for 429/500+ errors with jitter prevention
+- **Rate Configuration**: Tunable parameters for different deployment environments and server load patterns
+- **Performance Optimisation**: Prevents thundering herd issues whilst maintaining optimal throughput
+
+**Thread Safety and UI Independence:**
+- **ThreadSafeTokenManager**: Concurrent token management for multi-threaded expansion operations
+- **ExpansionServiceV2**: Clean service layer architecture separating business logic from UI components
+- **CredentialManager**: Secure credential handling without UI coupling for better testability
+- **UI Decoupling**: Removed Streamlit dependencies from core terminology client logic
+
+**Advanced Progress Tracking with Time Estimation:**
+- **ProgressTracker**: Sophisticated progress tracking with adaptive time estimation algorithms
+- **AdaptiveTimeEstimator**: Weighted recent performance samples for accurate completion predictions
+- **Real-Time Progress**: Live progress UI with completion percentage, time estimates, and worker status
+- **Performance Statistics**: Items per second metrics and average processing times for transparency
+
+### 🔍 **XML Parsing Resilience and Error Handling Enhancement**
+
+**Structured Error Reporting System:**
+- **Comprehensive Error Context**: XMLParsingContext and ParseResult objects for detailed failure analysis
+- **Structured Error Information**: Replaced silent None returns with actionable error reporting
+- **Diagnostic Logging**: Context-aware logging for parsing issues with troubleshooting information
+- **Batch Error Aggregation**: BatchParsingReport and BatchErrorAggregator for enterprise-scale processing
+
+**Defensive Programming Enhancements:**
+- **Null Checking Validation**: Comprehensive defensive checks throughout parsing pipeline
+- **Robust Range Parsing**: Enhanced boundary parsing with comprehensive error handling
+- **Demographic Detection Resilience**: Multiple fallback patterns for reliable demographic classification
+- **XML Structure Validation**: Assumption checking and requirement validation for malformed documents
+
+**Enhanced Parsing Logic:**
+- **Semantic Value Set Deduplication**: Content-based comparison preventing duplicate clinical codes
+- **Column Filter Normalisation**: Consistent downstream data handling across different XML patterns
+- **Extended Parameter Support**: Enhanced attribute parsing for complex EMIS configurations
+- **Linked Criteria Hierarchy**: Improved nested structure management for complex clinical relationships
+
+### ⚡ **Technical Enhancements & Benefits**
+
+**NHS Integration Improvements:**
+- **Individual Code Lookup**: Fixed credential handling using v2 service architecture
+- **Theme Manager System**: Centralised colour management replacing hardcoded hex values
+- **UI Theme Consistency**: Completed systematic replacement of all unthemed Streamlit components with themed equivalents across 12 modules
+- **Progress Completion Display**: Fixed progress bars to show 100% completion accurately
+- **Time Estimation Accuracy**: 100ms baseline vs previous 1-second overestimates
+
+**XML Parsing Robustness:**
+- **Safe Parsing Methods**: Enhanced base_parser.py with defensive XML handling utilities
+- **Comprehensive Validation**: XML structure validation with schema checking capabilities
+- **Semantic Deduplication**: Prevents duplicate clinical codes whilst preserving legitimate variations
+- **Error Transparency**: No more silent failures - all parsing errors captured and reported
+
+**Enterprise Benefits:**
+- **Reliable NHS Integration**: Robust error handling suitable for healthcare environments
+- **Accurate Time Estimates**: Professional progress feedback replacing overestimated completion times
+- **Thread-Safe Operations**: Concurrent expansion with proper credential management
+- **Enhanced Data Integrity**: Comprehensive validation preventing clinical data corruption
+- **Production Readiness**: Enterprise-grade XML parsing with defensive error handling
+
+---
+
+*Version 2.2.5 delivers comprehensive NHS terminology server reliability improvements and enterprise-grade XML parsing resilience, ensuring robust healthcare data processing with transparent error handling and accurate progress tracking.*
+
+---
+
 ## v2.2.4 - Session State & Theme Constants Centralisation (20th November 2025)
 
 ### 🔑 **Session State Management Centralisation**
@@ -962,6 +1038,6 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 
 ---
 
-*Last Updated: 21st November 2025*  
-*Application Version: 2.2.4*  
+*Last Updated: 25th November 2025*  
+*Application Version: 2.2.5*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*

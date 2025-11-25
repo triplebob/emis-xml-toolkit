@@ -7,6 +7,7 @@ import time
 from functools import lru_cache
 import hashlib
 from ..core.session_state import SessionStateKeys
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 @st.cache_resource(ttl=7200, max_entries=1)  # Cache lookup dictionaries for 2 hours
 def get_cached_lookup_dictionaries():
@@ -56,10 +57,10 @@ def load_lookup_table():
                 return lookup_df, emis_guid_col, snomed_code_col, version_info
             else:
                 # No cache available, will load from GitHub
-                st.info("📥 No local cache found, loading from GitHub...")
+                st.markdown(info_box("📥 No local cache found, loading from GitHub..."), unsafe_allow_html=True)
         except Exception as e:
             # Cache loading failed, continue to GitHub fallback
-            st.warning(f"🔍 Cache loading failed: {str(e)}, falling back to GitHub...")
+            st.markdown(warning_box(f"🔍 Cache loading failed: {str(e)}, falling back to GitHub..."), unsafe_allow_html=True)
             pass
         
         # Load from GitHub API
@@ -74,9 +75,9 @@ def load_lookup_table():
         # Check token health and show warnings if needed
         is_healthy, status = loader.get_token_health_status()
         if not is_healthy:
-            st.warning(f"⚠️ Token Issue: {status}")
+            st.markdown(warning_box(f"⚠️ Token Issue: {status}"), unsafe_allow_html=True)
         elif "expires soon" in status.lower():
-            st.info(f"📅 Token Status: {status}")
+            st.markdown(info_box(f"📅 Token Status: {status}"), unsafe_allow_html=True)
         
         # Load the lookup table with version info from GitHub
         lookup_df, emis_guid_col, snomed_code_col, version_info = loader.load_lookup_table()
@@ -96,15 +97,15 @@ def load_lookup_table():
         if lookup_df is not None and version_info:
             try:
                 from .caching.lookup_cache import build_emis_lookup_cache
-                st.info("🔐 Building local cache for faster future loads...")
+                st.markdown(info_box("🔐 Building local cache for faster future loads..."), unsafe_allow_html=True)
                 cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
                 if cache_built:
-                    st.success("✅ Local cache built successfully")
+                    st.markdown(success_box("✅ Local cache built successfully"), unsafe_allow_html=True)
                 else:
-                    st.warning("⚠️ Cache building failed but data loaded")
+                    st.markdown(warning_box("⚠️ Cache building failed but data loaded"), unsafe_allow_html=True)
             except Exception as e:
                 # Cache building failed, but we still have the data
-                st.warning(f"⚠️ Cache building error: {str(e)}")
+                st.markdown(warning_box(f"⚠️ Cache building error: {str(e)}"), unsafe_allow_html=True)
                 pass
         
         return lookup_df, emis_guid_col, snomed_code_col, version_info
@@ -453,7 +454,7 @@ def display_lookup_performance_metrics():
     with col1:
         if st.button("🗑️ Clear Lookup Cache"):
             cache.clear_cache()
-            st.success("Lookup cache cleared")
+            st.markdown(success_box("Lookup cache cleared"), unsafe_allow_html=True)
             st.rerun()
     
     with col2:
@@ -464,7 +465,7 @@ def display_lookup_performance_metrics():
                 snomed_col = st.session_state.get(SessionStateKeys.SNOMED_CODE_COL)
                 if emis_col and snomed_col:
                     cache.load_from_dataframe(lookup_df, emis_col, snomed_col, force_reload=True)
-                    st.success("Lookup cache refreshed")
+                    st.markdown(success_box("Lookup cache refreshed"), unsafe_allow_html=True)
                     st.rerun()
 
 @st.cache_data(ttl=7200, show_spinner=False)  # Cache for 2 hours, no spinner

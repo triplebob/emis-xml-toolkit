@@ -1,3 +1,4 @@
+from ..ui.theme import info_box, success_box, warning_box, error_box
 """
 Terminology Server Export Handler
 
@@ -263,7 +264,7 @@ class TerminologyExportHandler:
             *args, **kwargs: Arguments to pass to export_func
         """
         if data.empty:
-            st.info("No data available for export")
+            st.markdown(info_box("No data available for export"), unsafe_allow_html=True)
             return
         
         cache_key = f'terminology_export_{export_key}'
@@ -299,7 +300,7 @@ class TerminologyExportHandler:
             *args, **kwargs: Arguments to pass to export_func
         """
         if not data:
-            st.info("No data available for export")
+            st.markdown(info_box("No data available for export"), unsafe_allow_html=True)
             return
         
         cache_key = f'terminology_export_{export_key}'

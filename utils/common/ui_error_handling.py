@@ -10,6 +10,7 @@ from .error_handling import (
     EMISConverterError, ErrorSeverity, ErrorCategory,
     ErrorHandler, safe_execute, create_error_context
 )
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 
 def display_error_to_user(error: EMISConverterError, 
@@ -25,13 +26,13 @@ def display_error_to_user(error: EMISConverterError,
     
     # Choose appropriate Streamlit display method based on severity
     if error.severity == ErrorSeverity.CRITICAL:
-        st.error(f"🚨 **Critical Error:** {user_message}")
+        st.markdown(error_box(f"🚨 **Critical Error:** {user_message}"), unsafe_allow_html=True)
     elif error.severity == ErrorSeverity.HIGH:
-        st.error(f"❌ **Error:** {user_message}")
+        st.markdown(error_box(f"❌ **Error:** {user_message}"), unsafe_allow_html=True)
     elif error.severity == ErrorSeverity.MEDIUM:
-        st.warning(f"⚠️ **Warning:** {user_message}")
+        st.markdown(warning_box(f"⚠️ **Warning:** {user_message}"), unsafe_allow_html=True)
     else:
-        st.info(f"ℹ️ **Notice:** {user_message}")
+        st.markdown(info_box(f"ℹ️ **Notice:** {user_message}"), unsafe_allow_html=True)
     
     # Show technical details if requested
     if show_technical_details and st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
@@ -54,13 +55,13 @@ def display_generic_error(message: str,
     full_message = f"{icon} {message}"
     
     if error_type == "error":
-        st.error(full_message)
+        st.markdown(error_box(full_message), unsafe_allow_html=True)
     elif error_type == "warning":
-        st.warning(full_message)
+        st.markdown(warning_box(full_message), unsafe_allow_html=True)
     elif error_type == "info":
-        st.info(full_message)
+        st.markdown(info_box(full_message), unsafe_allow_html=True)
     else:
-        st.error(full_message)
+        st.markdown(error_box(full_message), unsafe_allow_html=True)
 
 
 def streamlit_safe_execute(operation_name: str,
@@ -228,7 +229,7 @@ def create_error_feedback_form(error: EMISConverterError) -> None:
         if st.button("Submit Error Report"):
             # Here you would implement actual error reporting
             # For now, just show a success message
-            st.success("Thank you for your feedback! We'll investigate this issue.")
+            st.markdown(success_box("Thank you for your feedback! We'll investigate this issue."), unsafe_allow_html=True)
 
 
 def with_error_boundary(operation_name: str,

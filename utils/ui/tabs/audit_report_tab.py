@@ -13,7 +13,7 @@ with existing tab structure and preserve performance optimizations.
 
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
-from ...ui.theme import ComponentThemes, info_box, purple_box, success_box
+from ...ui.theme import ComponentThemes, info_box, purple_box, success_box, warning_box, error_box
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -70,7 +70,7 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
+            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
             st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
@@ -84,7 +84,7 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
             audit_reports = report_results.report_breakdown['audit']
         else:
             # No pre-processed data available - skip expensive processing
-            st.info("📊 No Audit Reports found in this XML file.")
+            st.markdown(info_box("📊 No Audit Reports found in this XML file."), unsafe_allow_html=True)
             st.caption("This XML contains only searches or other report types.")
             return
         
@@ -97,7 +97,7 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
             cache_processed_data(toast_cache_key, True)
         
         if not audit_reports:
-            st.info("📊 No Audit Reports found in this XML file")
+            st.markdown(info_box("📊 No Audit Reports found in this XML file"), unsafe_allow_html=True)
             return
 
         # 🔧 Audit Report Logic Browser - Fragmented expandable frame (prevents full reruns)
@@ -144,7 +144,7 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.error(f"Error analyzing Audit Reports: {str(e)}")
+        st.markdown(error_box(f"Error analyzing Audit Reports: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -301,7 +301,7 @@ def render_audit_report_details(report):
             st.markdown(f"### 📋 {grouping_type}")
             st.markdown(purple_box(f"Results grouped by: {', '.join(group_columns)}"), unsafe_allow_html=True)
     else:
-        st.info("No aggregation configuration found")
+        st.markdown(info_box("No aggregation configuration found"), unsafe_allow_html=True)
     
     # Member Searches Section (NEW - key feature for Audit Reports)
     if analysis:
@@ -319,7 +319,7 @@ def render_audit_report_details(report):
     # Additional Criteria Section (for non-PATIENTS table reports)
     if hasattr(report, 'criteria_groups') and report.criteria_groups:
         st.markdown("### 🔍 Additional Report Criteria")
-        st.info(f"This Audit Report applies {len(report.criteria_groups)} additional filtering rule(s) across all member searches.")
+        st.markdown(info_box(f"This Audit Report applies {len(report.criteria_groups)} additional filtering rule(s) across all member searches."), unsafe_allow_html=True)
         
         # Use the same detailed criteria rendering as List Reports
         for i, group in enumerate(report.criteria_groups, 1):
@@ -494,7 +494,7 @@ def render_audit_report_details(report):
             st.markdown(purple_box("This Audit Report performs pure organizational aggregation without additional clinical criteria."), unsafe_allow_html=True)
         else:
             st.markdown("### ℹ️ No Additional Criteria")
-            st.info(f"This Audit Report uses the {logical_table} table but does not apply additional filtering criteria.")
+            st.markdown(info_box(f"This Audit Report uses the {logical_table} table but does not apply additional filtering criteria."), unsafe_allow_html=True)
     
     # SIZE-ADAPTIVE: Final cleanup based on report size
     if report_size == "large":
@@ -522,7 +522,7 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     from ...core.report_classifier import ReportClassifier
     
     if not reports:
-        st.info(f"{icon} No {report_type_name}s found in this XML file")
+        st.markdown(info_box(f"{icon} No {report_type_name}s found in this XML file"), unsafe_allow_html=True)
         return
     
     # Initialize session state for tracking rendering completion
@@ -634,18 +634,18 @@ def render_report_type_browser(reports, analysis, report_type_name, icon):
     
     with status_col1:
         if selected_folder:
-            st.info(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**")
+            st.markdown(info_box(f"📂 Showing {len(folder_reports)} {report_type_name}s from folder: **{selected_folder.name}**"), unsafe_allow_html=True)
         elif analysis.folders:
             st.markdown(info_box(f"{icon} Showing all {len(folder_reports)} {report_type_name}s from all folders"), unsafe_allow_html=True)
         else:
-            st.info(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)")
+            st.markdown(info_box(f"{icon} Showing all {len(folder_reports)} {report_type_name}s (no folder organization)"), unsafe_allow_html=True)
     
     with status_col2:
         # Rendering status indicator - will be populated after export buttons render
         status_placeholder = st.empty()
     
     if not folder_reports:
-        st.warning(f"No {report_type_name}s found in the selected scope.")
+        st.markdown(warning_box(f"No {report_type_name}s found in the selected scope."), unsafe_allow_html=True)
         return
     
     if selected_report_text:

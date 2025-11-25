@@ -5,6 +5,7 @@ Contains utility functions used by both search rule and report structure visuali
 
 import streamlit as st
 from ..core import SearchManager, ReportClassifier
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 
 def _render_rule_step(step, reports, show_sequence_number=False):
@@ -35,10 +36,10 @@ def _render_rule_step_content(report, step):
     
     with col1:
         if step and step.get('is_parent', False):
-            st.info("**Type:** Base Population")
+            st.markdown(info_box("**Type:** Base Population"), unsafe_allow_html=True)
             st.caption("🔵 Base population that children filter from")
         else:
-            st.warning("**Type:** Clinical Search")
+            st.markdown(warning_box("**Type:** Clinical Search"), unsafe_allow_html=True)
             st.caption("⚡ Applies specific clinical criteria")
             
             # Show parent relationship
@@ -118,7 +119,7 @@ def _render_report_type_specific_info(selected_search, report_type):
                     with col1:
                         st.markdown(f"**Logical Table:** {column_group.get('logical_table', 'Not specified')}")
                         if column_group.get('has_criteria'):
-                            st.info("🔍 Has filtering criteria")
+                            st.markdown(info_box("🔍 Has filtering criteria"), unsafe_allow_html=True)
                     with col2:
                         if column_group.get('columns'):
                             st.markdown("**Columns to display:**")
@@ -162,22 +163,22 @@ def _render_report_type_specific_info(selected_search, report_type):
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 if rows_group:
-                    st.info(f"**Rows:** {rows_group.get('group_name', 'Not specified')}")
+                    st.markdown(info_box(f"**Rows:** {rows_group.get('group_name', 'Not specified')}"), unsafe_allow_html=True)
                 else:
-                    st.warning("**Rows:** Not configured")
+                    st.markdown(warning_box("**Rows:** Not configured"), unsafe_allow_html=True)
             
             with col2:
                 if cols_group:
-                    st.info(f"**Columns:** {cols_group.get('group_name', 'Not specified')}")
+                    st.markdown(info_box(f"**Columns:** {cols_group.get('group_name', 'Not specified')}"), unsafe_allow_html=True)
                 else:
-                    st.warning("**Columns:** Not configured")
+                    st.markdown(warning_box("**Columns:** Not configured"), unsafe_allow_html=True)
             
             with col3:
                 if result_group:
                     calc_type = result_group.get('calculation_type', 'count')
-                    st.success(f"**Result:** {calc_type.title()}")
+                    st.markdown(success_box(f"**Result:** {calc_type.title()}"), unsafe_allow_html=True)
                 else:
-                    st.error("**Result:** Not configured")
+                    st.markdown(error_box("**Result:** Not configured"), unsafe_allow_html=True)
             
             # Display aggregate groups (the actual grouping definitions)
             if hasattr(selected_search, 'aggregate_groups') and selected_search.aggregate_groups:
@@ -190,7 +191,7 @@ def _render_report_type_specific_info(selected_search, report_type):
             # Display built-in criteria if present
             if hasattr(selected_search, 'aggregate_criteria') and selected_search.aggregate_criteria:
                 st.markdown("### 🔍 Built-in Report Filters")
-                st.info("This aggregate report has its own built-in criteria that filters the data before aggregation.")
+                st.markdown(info_box("This aggregate report has its own built-in criteria that filters the data before aggregation."), unsafe_allow_html=True)
                 
                 criteria_data = selected_search.aggregate_criteria
                 for i, criteria_group in enumerate(criteria_data.get('criteria_groups', [])):

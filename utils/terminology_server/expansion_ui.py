@@ -1,3 +1,4 @@
+from ..ui.theme import info_box, success_box, warning_box, error_box
 """
 UI Components for SNOMED Code Expansion
 
@@ -25,6 +26,13 @@ from .expansion_service import get_expansion_service
 from .nhs_terminology_client import get_terminology_client
 from ..utils.caching.lookup_cache import get_cached_emis_lookup
 
+# Import theme manager for consistent styling
+from ..ui.theme import (
+    ThemeColors, ComponentThemes,
+    create_info_box_style, create_rag_status_style,
+    success_box, error_box, warning_box, info_box, purple_box
+)
+
 
 def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_id, client_id, client_secret, debug_mode=False):
     """Pure worker function - API calls only, no EMIS processing or caching"""
@@ -47,16 +55,13 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
             return
         
         # Create terminology client with explicit credentials (no Streamlit dependencies)
-        from .nhs_terminology_client import NHSTerminologyClient
-        client = NHSTerminologyClient()
-        # Override credentials directly
-        client.client_id = client_id
-        client.client_secret = client_secret
+        from .nhs_terminology_client import create_terminology_client
+        client = create_terminology_client(client_id, client_secret)
         
         # Perform expansion (pure API call) - no caching, no processing
         if debug_mode:
             print(f"DEBUG Worker {worker_id}: Calling API...")
-        expansion_result = client._expand_concept_uncached(snomed_code, include_inactive)
+        expansion_result = client.expand_concept(snomed_code, include_inactive)
         if debug_mode:
             print(f"DEBUG Worker {worker_id}: API call done, result: {expansion_result is not None}")
         
@@ -65,6 +70,8 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
         error_msg = expansion_result.error if expansion_result else 'No expansion result returned'
         if debug_mode:
             print(f"DEBUG Worker {worker_id}: Success: {success}, Error: {error_msg[:50] if error_msg else 'None'}")
+        
+        # Progress tracking moved to main thread to avoid Streamlit context issues
         
         # Put raw result in queue for main thread processing
         result_queue.put({
@@ -81,10 +88,15 @@ def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_
     except Exception as e:
         if debug_mode:
             print(f"DEBUG Worker {worker_id}: Exception: {str(e)}")
+        
+        snomed_code = code_entry.get('SNOMED Code', 'unknown')
+        
+        # Progress tracking moved to main thread to avoid Streamlit context issues
+        
         # Put error in queue
         result_queue.put({
             'worker_id': worker_id,
-            'snomed_code': code_entry.get('SNOMED Code', 'unknown'),
+            'snomed_code': snomed_code,
             'code_entry': code_entry,
             'success': False,
             'error': str(e),
@@ -254,59 +266,15 @@ def render_terminology_server_status():
             if st.session_state[SessionStateKeys.NHS_CONNECTION_STATUS] and st.session_state[SessionStateKeys.NHS_CONNECTION_STATUS].get('tested'):
                 # Show test result
                 if st.session_state[SessionStateKeys.NHS_CONNECTION_STATUS]['success']:
-                    st.markdown("""
-                    <div style="
-                        background-color: #1F4E3D;
-                        padding: 0.75rem;
-                        border-radius: 0.5rem;
-                        color: #FAFAFA;
-                        text-align: left;
-                        margin-bottom: 1.0rem;
-                    ">
-                        🔑 Authenticated
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(success_box("🔑 Authenticated", "1.0rem"), unsafe_allow_html=True)
                 else:
-                    st.markdown("""
-                    <div style="
-                        background-color: #660022;
-                        padding: 0.75rem;
-                        border-radius: 0.5rem;
-                        color: #FAFAFA;
-                        text-align: left;
-                        margin-bottom: 1.0rem;
-                    ">
-                        🔑 Connection failed
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(error_box("🔑 Connection failed", "1.0rem"), unsafe_allow_html=True)
             else:
                 # Show default status based on token validity
-                if client._is_token_valid():
-                    st.markdown("""
-                    <div style="
-                        background-color: #1F4E3D;
-                        padding: 0.75rem;
-                        border-radius: 0.5rem;
-                        color: #FAFAFA;
-                        text-align: left;
-                        margin-bottom: 1.0rem;
-                    ">
-                        🔑 Authenticated
-                    </div>
-                    """, unsafe_allow_html=True)
+                if hasattr(client, 'token_manager') and client.token_manager._is_token_valid():
+                    st.markdown(success_box("🔑 Authenticated", "1.0rem"), unsafe_allow_html=True)
                 else:
-                    st.markdown("""
-                    <div style="
-                        background-color: #7A5F0B;
-                        padding: 0.75rem;
-                        border-radius: 0.5rem;
-                        color: #FAFAFA;
-                        text-align: left;
-                        margin-bottom: 1.0rem;
-                    ">
-                        🔑 Not authenticated
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(warning_box("🔑 Not authenticated", "1.0rem"), unsafe_allow_html=True)
         
         connection_test_fragment()
 
@@ -324,7 +292,7 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
     service = get_expansion_service()
     
     # Find codes that can be expanded (initially without filtering)
-    all_expandable_codes = service.find_codes_with_include_children(clinical_data, filter_zero_descendants=False)
+    all_expandable_codes = service.find_expandable_codes(clinical_data)
     
     if not all_expandable_codes:
         st.markdown("""
@@ -468,31 +436,9 @@ def render_expansion_controls(clinical_data: List[Dict]) -> Optional[Dict]:
                 expandable_codes = list(unique_codes.values())
         else:
             if dedupe_savings > 0:
-                st.markdown(f"""
-                <div style="
-                    background-color: #5B2758;
-                    padding: 0.75rem;
-                    border-radius: 0.5rem;
-                    color: #FAFAFA;
-                    text-align: left;
-                    margin-bottom: 0.5rem;
-                ">
-                    Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(purple_box(f"Found {original_count} expandable codes → {unique_count} unique codes (saved {dedupe_savings} duplicate API calls)"), unsafe_allow_html=True)
             else:
-                st.markdown(f"""
-                <div style="
-                    background-color: #5B2758;
-                    padding: 0.75rem;
-                    border-radius: 0.5rem;
-                    color: #FAFAFA;
-                    text-align: left;
-                    margin-bottom: 0.5rem;
-                ">
-                    Found {unique_count} codes that can be expanded to include child concepts
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(purple_box(f"Found {unique_count} codes that can be expanded to include child concepts"), unsafe_allow_html=True)
             expandable_codes = list(unique_codes.values())
     
     # Expansion button with protection against double-clicks
@@ -589,12 +535,12 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     """
     service = get_expansion_service()
     
-    # Create progress tracking
+    # Create basic progress tracking (advanced tracking will be added after worker setup)
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     # Show immediate feedback
-    status_text.text("Starting expansion process...")
+    status_text.text("Preparing expansion...")
     
     # Clear any previous expansion status
     if SessionStateKeys.EXPANSION_STATUS in st.session_state:
@@ -640,18 +586,7 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
     else:
         # No cache available - cannot proceed with terminology server expansion
         status_text.text("❌ EMIS lookup cache not available")
-        st.markdown("""
-        <div style="
-            background-color: #660022;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            color: #FAFAFA;
-            text-align: left;
-            margin-bottom: 0.5rem;
-        ">
-            ⚠️ EMIS lookup cache not found. Please process an XML file first to build the cache, then try expanding codes again.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(error_box("⚠️ EMIS lookup cache not found. Please process an XML file first to build the cache, then try expanding codes again."), unsafe_allow_html=True)
         st.stop()  # Stop execution here
     
     # Filter valid codes first
@@ -750,6 +685,10 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
             # All results were cached!
             threads = []
             max_workers = 0
+            # Create a dummy progress tracker for the cached-only case
+            from .progress_tracker import ProgressTracker
+            progress_tracker = ProgressTracker(total_items=1, operation_name="NHS Terminology Expansion (cached)")
+            progress_tracker.complete_item("cached", True)  # Mark as complete immediately
         else:
             # Adaptive worker scaling based on uncached workload size
             uncached_count = len(uncached_codes)
@@ -767,7 +706,44 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
         
             # Simple threading approach that works within memory limits
             threads = []
+        
+        # Initialize progress tracker with total codes (cached + uncached)
+        from .progress_tracker import ProgressTracker
+        total_codes_to_process = len(valid_codes)
+        progress_tracker = ProgressTracker(
+            total_items=total_codes_to_process,
+            operation_name=f"NHS Terminology Expansion ({max_workers} workers)"
+        )
+        
+        # If we have cached results, mark them as already completed for progress tracking
+        for _ in range(cache_hits):
+            progress_tracker.complete_item(f"cached_{_}", True)
+        
+        # Add progress callback to update UI
+        def update_progress_ui(metrics):
+            # Update progress bar - show overall progress including cached results
+            overall_completed = cache_hits + completed_count
+            completion_pct = overall_completed / total_codes_to_process if total_codes_to_process > 0 else 0
+            progress_bar.progress(completion_pct)
+            
+            # Update status text with detailed information
+            if metrics.estimated_remaining_time and len(uncached_codes) > 0:
+                from .progress_tracker import format_time_duration
+                remaining_str = format_time_duration(metrics.estimated_remaining_time)
+                status_text.text(f"Expanding codes... {overall_completed}/{total_codes_to_process} ({completion_pct:.1%}) - Est. remaining: {remaining_str} - {max_workers} workers")
+            else:
+                status_text.text(f"Expanding codes... {overall_completed}/{total_codes_to_process} ({completion_pct:.1%}) - {max_workers} workers")
+        
+        progress_tracker.add_progress_callback(update_progress_ui)
+        progress_tracker.set_update_interval(0.1)  # Update every 100ms for more responsive progress
+        
+        # Start worker threads for uncached codes
+        if uncached_codes:
             for i, code_entry in enumerate(uncached_codes[:max_workers]):  # Start first batch
+                # Track start of processing for this item
+                snomed_code = code_entry.get('SNOMED Code', '').strip()
+                progress_tracker.start_item(snomed_code, f"Expanding {snomed_code}")
+                
                 thread = threading.Thread(
                     target=_pure_worker_expand_code,
                     args=(code_entry, include_inactive, result_queue, i, client_id, client_secret, debug_mode),
@@ -791,6 +767,13 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
                 result = result_queue.get(timeout=1.0)  # Increased to 1 second
                 completed_count += 1
                 timeout_counter = 0  # Reset timeout counter on successful result
+                
+                # Update progress tracker in main thread (safe for Streamlit)
+                progress_tracker.complete_item(result['snomed_code'], result.get('success', False))
+                
+                # Force progress update to ensure responsive UI
+                progress_tracker._update_progress()
+                
                 # Debug output only when debug mode is enabled
                 if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
                     print(f"DEBUG: Got result {completed_count}/{total_codes}, success: {result.get('success')}, error: {result.get('error', 'None')[:50] if result.get('error') else 'None'}")
@@ -847,6 +830,10 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
                 # Start next thread if there are remaining codes
                 if remaining_codes:
                     next_code = remaining_codes.pop(0)
+                    # Track start of processing for this new item
+                    next_snomed_code = next_code.get('SNOMED Code', '').strip()
+                    progress_tracker.start_item(next_snomed_code, f"Expanding {next_snomed_code}")
+                    
                     thread = threading.Thread(
                         target=_pure_worker_expand_code,
                         args=(next_code, include_inactive, result_queue, next_thread_id, client_id, client_secret, debug_mode),
@@ -855,11 +842,6 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
                     thread.start()
                     threads.append(thread)
                     next_thread_id += 1
-                
-                # Update progress (safe in main thread)
-                progress = completed_count / total_codes
-                progress_bar.progress(progress)
-                status_text.text(f"Completed {completed_count}/{total_codes} expansions... (using {max_workers} concurrent workers)")
                 
                 # Periodic garbage collection to manage memory
                 if completed_count % 50 == 0:
@@ -881,7 +863,26 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
         for thread in threads:
             thread.join(timeout=1)  # Don't wait forever
         
-        # Show results summary with dynamic status indicators
+        # Ensure progress bar shows 100% completion
+        progress_bar.progress(1.0)
+        
+        # Get final progress summary
+        if uncached_codes:  # Only show if we actually did work
+            completion_summary = progress_tracker.get_completion_summary()
+            from .progress_tracker import format_time_duration
+            
+            # Show completion message with performance stats
+            total_time_str = format_time_duration(completion_summary['total_time'])
+            avg_time_str = format_time_duration(completion_summary['average_time_per_item'])
+            
+            status_text.text(f"✅ Expansion complete in {total_time_str} - Avg: {avg_time_str}/code - Rate: {completion_summary['items_per_second']:.1f} items/sec")
+            time.sleep(2)  # Show completion message briefly
+        else:
+            # All results were cached
+            status_text.text("✅ Expansion complete - All results were cached")
+            time.sleep(1)
+        
+        # Clear progress indicators
         progress_bar.empty()
         status_text.empty()
         
@@ -1446,6 +1447,16 @@ def render_expansion_tab_content(clinical_data: List[Dict]):
         # Execute bottom-level fragment
         child_codes_detail_fragment()
 
+    # FINAL FRAGMENT: Individual code lookup (always available)
+    st.markdown("---")
+    
+    @st.fragment
+    def individual_lookup_fragment():
+        render_individual_code_lookup()
+    
+    # Execute individual lookup fragment
+    individual_lookup_fragment()
+
 
 def render_individual_code_lookup():
     """
@@ -1463,10 +1474,13 @@ def render_individual_code_lookup():
         snomed_code = st.text_input(
             "SNOMED CT Code",
             placeholder="e.g., 73211009",
+            icon="⚕️",
             help="Enter a SNOMED CT concept code for expansion testing"
         )
     
     with col2:
+        st.markdown("")
+        st.markdown("")
         include_inactive = st.checkbox(
             "Include inactive",
             value=False,
@@ -1474,20 +1488,77 @@ def render_individual_code_lookup():
         )
     
     with col3:
+        st.markdown("")
+        st.markdown("")
         use_cache = st.checkbox(
             "Use cached results",
             value=True,
             help="Use previously cached results if available"
         )
     
-    if st.button("🔍 Lookup Code", type="primary"):
+    # Check if there's a previous result to display (for persistence across refreshes)
+    show_previous_result = False
+    if snomed_code.strip() and 'individual_lookup_results' in st.session_state:
+        previous_result_data = st.session_state.individual_lookup_results.get(snomed_code.strip())
+        if previous_result_data and previous_result_data.get('include_inactive') == include_inactive:
+            show_previous_result = True
+            # Display the cached result
+            result = previous_result_data['result']
+            lookup_time = previous_result_data['lookup_time']
+            was_cached = previous_result_data.get('cached', True)
+            
+            st.markdown(info_box(f"ℹ️ Showing cached result from {lookup_time.strftime('%H:%M:%S')}"), unsafe_allow_html=True)
+    
+    button_clicked = st.button("🔍 Lookup Child Codes", type="primary")
+    
+    if (button_clicked and snomed_code.strip()) or show_previous_result:
         if snomed_code.strip():
-            try:
-                with st.spinner(f"Looking up {snomed_code}..."):
-                    client = get_terminology_client()
-                    result = client.expand_concept(snomed_code.strip(), include_inactive)
-                
-                if result and not result.error:
+            # Only perform lookup if button was clicked, not for showing previous results
+            if button_clicked and not show_previous_result:
+                try:
+                    # Get credentials from Streamlit secrets
+                    try:
+                        client_id = st.secrets["NHSTSERVER_ID"]
+                        client_secret = st.secrets["NHSTSERVER_TOKEN"]
+                    except KeyError as e:
+                        st.markdown(error_box(f"❌ Lookup failed: NHS Terminology Server credentials not configured"), unsafe_allow_html=True)
+                        st.stop()
+                    
+                    with st.spinner(f"Looking up {snomed_code}..."):
+                        # Use the expansion service with proper credentials
+                        from .expansion_service import get_expansion_service, ExpansionConfig
+                        
+                        service = get_expansion_service()
+                        
+                        # Set credentials on the service
+                        service.credential_manager.set_credentials(client_id, client_secret)
+                        
+                        # Create expansion config
+                        config = ExpansionConfig(
+                            include_inactive=include_inactive,
+                            use_cache=use_cache
+                        )
+                        
+                        # Perform the expansion
+                        result = service.expand_single_code(snomed_code.strip(), config)
+                        
+                        # Store in session state to persist across refreshes
+                        if 'individual_lookup_results' not in st.session_state:
+                            st.session_state.individual_lookup_results = {}
+                        
+                        # Cache the result with timestamp
+                        st.session_state.individual_lookup_results[snomed_code.strip()] = {
+                            'result': result,
+                            'include_inactive': include_inactive,
+                            'lookup_time': datetime.now(),
+                            'cached': use_cache
+                        }
+                except Exception as e:
+                    st.markdown(error_box(f"❌ Lookup failed: {str(e)}"), unsafe_allow_html=True)
+                    result = None
+            
+            # Display result (either fresh or cached)
+            if 'result' in locals() and result and not result.error:
                     st.markdown(f"""
                     <div style="
                         background-color: #1F4E3D;
@@ -1497,33 +1568,31 @@ def render_individual_code_lookup():
                         text-align: left;
                         margin-bottom: 0.5rem;
                     ">
-                        ✅ Found concept: <strong>{result.original_display}</strong>
+                        ✅ Found concept: <strong>{result.source_display}</strong>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    if result.child_codes:
-                        st.info(f"📊 **{len(result.child_codes)} child concepts** discovered")
+                    if result.children:
+                        st.markdown(info_box(f"📊 **{len(result.children)} child concepts** discovered"), unsafe_allow_html=True)
                         
                         # Create simple DataFrame for display
                         child_data = []
-                        for child in result.child_codes:
+                        for child in result.children:
                             child_data.append({
-                                'Code': child['code'],
-                                'Display': child['display'],
-                                'Active': 'Yes' if not child.get('inactive', False) else 'No'
+                                'Code': child.code,
+                                'Display': child.display,
+                                'Active': 'Yes' if not child.inactive else 'No'
                             })
                         
                         df = pd.DataFrame(child_data)
                         st.dataframe(df, use_container_width=True)
                     else:
-                        st.info("ℹ️ This concept has no child concepts")
+                                        st.markdown(info_box("ℹ️ This concept has no child concepts"), unsafe_allow_html=True)
                 
-                elif result and result.error:
-                    st.error(f"❌ Error: {result.error}")
-                else:
-                    st.error("❌ No result returned from terminology server")
-            
-            except Exception as e:
-                st.error(f"❌ Lookup failed: {str(e)}")
+            elif 'result' in locals() and result and result.error:
+                        st.markdown(error_box(f"❌ Error: {result.error}"), unsafe_allow_html=True)
+            elif 'result' in locals() and not result:
+                        st.markdown(error_box("❌ No result returned from terminology server"), unsafe_allow_html=True)
         else:
-            st.warning("⚠️ Please enter a SNOMED CT code")
+            if button_clicked:
+                        st.markdown(warning_box("⚠️ Please enter a SNOMED CT code"), unsafe_allow_html=True)

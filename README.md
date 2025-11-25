@@ -298,6 +298,6 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 
 ---
 
-*Last Updated: 21st November 2025*  
-*Application Version: 2.2.4*  
+*Last Updated: 25th November 2025*  
+*Application Version: 2.2.5*  
 *Live Application: https://clinxml.streamlit.app/*

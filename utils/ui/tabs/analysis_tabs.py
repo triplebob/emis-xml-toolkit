@@ -18,6 +18,7 @@ All functions preserve:
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
 from .base_tab import BaseTab, TabRenderer
+from ...ui.theme import info_box, success_box, warning_box, error_box
 from .tab_helpers import (
     _reprocess_with_new_mode,
     _lookup_snomed_for_ui,
@@ -42,7 +43,7 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
         xml_filename (str): Name of the XML file for exports
     """
     if not xml_content:
-        st.info("📋 Upload and process an XML file to see search analysis")
+        st.markdown(info_box("📋 Upload and process an XML file to see search analysis"), unsafe_allow_html=True)
         return
     
     try:
@@ -50,8 +51,8 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
-            st.info("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.")
+            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
         # Use the same complexity data source as the detailed complexity breakdown for consistency
@@ -142,7 +143,7 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.error(f"Error analyzing search structure: {str(e)}")
+        st.markdown(error_box(f"Error analyzing search structure: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -163,7 +164,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         xml_filename (str): Name of the XML file for exports
     """
     if not xml_content:
-        st.info("📋 Upload and process an XML file to see XML structure analysis")
+        st.markdown(info_box("📋 Upload and process an XML file to see XML structure analysis"), unsafe_allow_html=True)
         return
     
     try:
@@ -171,8 +172,8 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.")
-            st.info("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab.")
+            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
         if analysis:
@@ -183,7 +184,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
             
             # PERFORMANCE FIX: Simple notification without expensive type classification
             st.toast(f"XML Structure analyzed! {total_items} items across {folder_count} folder{'s' if folder_count != 1 else ''}", icon="🔍")
-            st.info("📊 Individual report type counts available in each dedicated tab to avoid performance issues.")
+            st.markdown(info_box("📊 Individual report type counts available in each dedicated tab to avoid performance issues."), unsafe_allow_html=True)
         
         # Calculate report type counts efficiently using pre-processed data
         report_results = st.session_state.get(SessionStateKeys.REPORT_RESULTS)
@@ -306,7 +307,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         print(f"Error: {str(e)}")
         print(f"Full traceback:\n{error_details}")
         
-        st.error(f"Error analyzing XML structure: {str(e)}")
+        st.markdown(error_box(f"Error analyzing XML structure: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -428,9 +429,9 @@ def render_detailed_rules_tab(analysis, xml_filename):
                         del report_text
                         import gc
                         gc.collect()
-                        st.success("✅ Rule analysis report generated successfully")
+                        st.markdown(success_box("✅ Rule analysis report generated successfully"), unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Rule analysis export failed: {e}")
+                    st.markdown(error_box(f"Rule analysis export failed: {e}"), unsafe_allow_html=True)
         
         # Execute the fragment
         rule_analysis_export_fragment()

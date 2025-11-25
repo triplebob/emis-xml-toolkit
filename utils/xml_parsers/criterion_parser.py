@@ -10,7 +10,11 @@ from .base_parser import XMLParserBase, get_namespaces
 from .value_set_parser import parse_value_set
 from .restriction_parser import parse_restriction
 from .linked_criteria_parser import parse_linked_criterion
-from ..common.error_handling import handle_xml_parsing_error, safe_execute, create_error_context
+from ..common.error_handling import (
+    handle_xml_parsing_error, safe_execute, create_error_context,
+    ParseResult, XMLParsingContext, create_xml_parsing_context,
+    safe_xml_parse, get_error_handler
+)
 
 
 @dataclass
@@ -55,6 +59,326 @@ class CriterionParser(XMLParserBase):
         # e.g., 'MSOA_', 'WARD_', 'POSTCODE_AREA_' etc.
         
         return False
+    
+    @staticmethod
+    def safe_detect_demographics_column(column_name: str, context: str = "") -> Dict[str, Any]:
+        """
+        Defensively detect patient demographics columns with multiple fallback patterns
+        
+        Returns detailed information about the detection process including:
+        - Whether it's a demographics column
+        - What type of demographics 
+        - Confidence level
+        - Matched patterns
+        - Potential issues
+        """
+        result = {
+            'is_demographics': False,
+            'demographics_type': None,
+            'confidence': 'none',
+            'matched_patterns': [],
+            'warnings': [],
+            'context': context
+        }
+        
+        # Handle None or empty input
+        if not column_name:
+            result['warnings'].append("Column name is None or empty")
+            return result
+        
+        if not isinstance(column_name, str):
+            result['warnings'].append(f"Column name is not a string: {type(column_name)}")
+            try:
+                column_name = str(column_name)
+            except Exception as e:
+                result['warnings'].append(f"Failed to convert column name to string: {str(e)}")
+                return result
+        
+        column_upper = column_name.upper().strip()
+        
+        if not column_upper:
+            result['warnings'].append("Column name is empty after processing")
+            return result
+        
+        # Primary LSOA patterns (high confidence)
+        lsoa_patterns = [
+            # Standard year patterns
+            r'.*LOWER_AREA.*20\d{2}.*',  # Any year 2000-2099
+            r'.*LONDON_LOWER_AREA.*',    # London specific
+            r'.*LSOA.*20\d{2}.*',        # Direct LSOA reference
+            r'.*LOWER_SUPER_OUTPUT_AREA.*'  # Full form
+        ]
+        
+        for pattern in lsoa_patterns:
+            import re
+            if re.match(pattern, column_upper):
+                result['is_demographics'] = True
+                result['demographics_type'] = 'LSOA'
+                result['confidence'] = 'high'
+                result['matched_patterns'].append(pattern)
+        
+        # Secondary geographical patterns (medium confidence)
+        geo_patterns = [
+            r'.*MSOA.*',           # Middle Layer Super Output Area
+            r'.*WARD.*',           # Electoral wards
+            r'.*POSTCODE.*AREA.*', # Postcode areas
+            r'.*CCG.*',            # Clinical Commissioning Group
+            r'.*STP.*',            # Sustainability and Transformation Partnership
+            r'.*ICS.*',            # Integrated Care System
+            r'.*PRACTICE.*AREA.*'  # Practice area codes
+        ]
+        
+        if not result['is_demographics']:  # Only check if not already found
+            for pattern in geo_patterns:
+                import re
+                if re.match(pattern, column_upper):
+                    result['is_demographics'] = True
+                    result['demographics_type'] = 'geographical'
+                    result['confidence'] = 'medium'
+                    result['matched_patterns'].append(pattern)
+                    break
+        
+        # Tertiary patient demographic patterns (low confidence)
+        patient_patterns = [
+            r'.*PATIENT.*AGE.*',
+            r'.*PATIENT.*GENDER.*',
+            r'.*PATIENT.*SEX.*',
+            r'.*AGE_GROUP.*',
+            r'.*ETHNICITY.*',
+            r'.*DEMOGRAPHIC.*'
+        ]
+        
+        if not result['is_demographics']:  # Only check if not already found
+            for pattern in patient_patterns:
+                import re
+                if re.match(pattern, column_upper):
+                    result['is_demographics'] = True
+                    result['demographics_type'] = 'patient_attributes'
+                    result['confidence'] = 'low'
+                    result['matched_patterns'].append(pattern)
+                    result['warnings'].append("Low confidence match - manual verification recommended")
+                    break
+        
+        # Fallback: keyword-based detection (very low confidence)
+        if not result['is_demographics']:
+            demographic_keywords = [
+                'DEPRIVATION', 'INCOME', 'RURAL', 'URBAN', 'POPULATION',
+                'CENSUS', 'AREA_CODE', 'BOUNDARY', 'REGION'
+            ]
+            
+            matched_keywords = [kw for kw in demographic_keywords if kw in column_upper]
+            if matched_keywords:
+                result['is_demographics'] = True
+                result['demographics_type'] = 'potential_geographic'
+                result['confidence'] = 'very_low'
+                result['matched_patterns'] = matched_keywords
+                result['warnings'].append("Very low confidence keyword match - manual review required")
+        
+        # Additional validation warnings
+        if result['is_demographics']:
+            # Check for unusual characters that might indicate parsing issues
+            if any(char in column_name for char in ['<', '>', '&', '"', "'"]):
+                result['warnings'].append("Column name contains XML/HTML characters")
+            
+            # Check for very long names that might be concatenated
+            if len(column_name) > 50:
+                result['warnings'].append("Column name is unusually long - possible concatenation")
+            
+            # Check for multiple underscores that might indicate compound fields
+            if column_name.count('_') > 3:
+                result['warnings'].append("Column name has many underscores - might be compound field")
+        
+        return result
+    
+    @staticmethod
+    def get_demographics_classification_summary(columns: List[str]) -> Dict[str, Any]:
+        """
+        Analyse multiple columns to provide a summary of demographics classification
+        
+        Useful for validating bulk column processing and identifying patterns
+        """
+        if not columns:
+            return {
+                'total_columns': 0,
+                'demographics_columns': 0,
+                'classification_summary': {},
+                'warnings': ['No columns provided for analysis']
+            }
+        
+        summary = {
+            'total_columns': len(columns),
+            'demographics_columns': 0,
+            'by_type': {},
+            'by_confidence': {'high': 0, 'medium': 0, 'low': 0, 'very_low': 0, 'none': 0},
+            'warnings': [],
+            'detailed_results': []
+        }
+        
+        for column in columns:
+            if column is None:
+                summary['warnings'].append("Encountered None column in list")
+                continue
+            
+            result = CriterionParser.safe_detect_demographics_column(column)
+            summary['detailed_results'].append({
+                'column': column,
+                'result': result
+            })
+            
+            if result['is_demographics']:
+                summary['demographics_columns'] += 1
+                
+                # Count by type
+                demo_type = result.get('demographics_type', 'unknown')
+                summary['by_type'][demo_type] = summary['by_type'].get(demo_type, 0) + 1
+                
+                # Count by confidence
+                confidence = result.get('confidence', 'none')
+                summary['by_confidence'][confidence] += 1
+            else:
+                summary['by_confidence']['none'] += 1
+            
+            # Collect warnings
+            if result.get('warnings'):
+                summary['warnings'].extend(result['warnings'])
+        
+        # Calculate percentages
+        if summary['total_columns'] > 0:
+            summary['demographics_percentage'] = (summary['demographics_columns'] / summary['total_columns']) * 100
+        else:
+            summary['demographics_percentage'] = 0
+        
+        return summary
+    
+    def safe_parse_criterion(self, criterion_elem: ET.Element) -> ParseResult:
+        """Safely parse individual search criterion with comprehensive error handling"""
+        xml_context = create_xml_parsing_context(
+            element_name="criterion",
+            element_path="searchCriterion",
+            parsing_stage="criterion_parsing"
+        )
+        
+        if criterion_elem is None:
+            return ParseResult.failure_result(
+                ["Criterion element is None"], 
+                xml_context
+            )
+        
+        # Track parsing errors and warnings for this criterion
+        errors = []
+        warnings = []
+        
+        try:
+            # Safely extract basic properties with null checking
+            criterion_id_result = self.safe_get_text(
+                self.find_element_both(criterion_elem, 'id'),
+                element_name="id",
+                expected_format="string"
+            )
+            
+            if not criterion_id_result.success:
+                criterion_id = "Unknown"
+                warnings.extend(criterion_id_result.warnings or [])
+            else:
+                criterion_id = criterion_id_result.data or "Unknown"
+            
+            table_result = self.safe_get_text(
+                self.find_element_both(criterion_elem, 'table'),
+                element_name="table",
+                expected_format="string"
+            )
+            
+            if not table_result.success:
+                table = "Unknown"
+                warnings.extend(table_result.warnings or [])
+            else:
+                table = table_result.data or "Unknown"
+            
+            display_name_result = self.safe_get_text(
+                self.find_element_both(criterion_elem, 'displayName'),
+                element_name="displayName",
+                expected_format="string"
+            )
+            
+            if not display_name_result.success:
+                display_name = "Unknown"
+                warnings.extend(display_name_result.warnings or [])
+            else:
+                display_name = display_name_result.data or "Unknown"
+            
+            # Parse optional fields safely
+            description_elem = self.find_element_both(criterion_elem, 'description')
+            description = self.get_text(description_elem) if description_elem is not None else None
+            
+            exception_code_elem = self.find_element_both(criterion_elem, 'exceptionCode')
+            exception_code = self.get_text(exception_code_elem) if exception_code_elem is not None else None
+            
+            # Parse negation with validation
+            negation_elem = self.find_element_both(criterion_elem, 'negation')
+            if negation_elem is not None:
+                negation_text = self.get_text(negation_elem).lower()
+                if negation_text not in ('true', 'false', '1', '0', 'yes', 'no', ''):
+                    warnings.append(f"Invalid negation value: '{negation_text}', defaulting to false")
+                    negation = False
+                else:
+                    negation = negation_text in ('true', '1', 'yes')
+            else:
+                negation = False
+            
+            # Parse components with error collection
+            value_sets = []
+            column_filters = []
+            restrictions = []
+            linked_criteria = []
+            
+            # Parse value sets with validation
+            try:
+                value_sets = self._safe_parse_value_sets(criterion_elem, errors, warnings)
+            except Exception as e:
+                errors.append(f"Failed to parse value sets: {str(e)}")
+            
+            # Parse column filters with validation
+            try:
+                column_filters = self._safe_parse_column_filters(criterion_elem, errors, warnings)
+            except Exception as e:
+                errors.append(f"Failed to parse column filters: {str(e)}")
+            
+            # Parse restrictions with validation
+            try:
+                restrictions = self._safe_parse_restrictions(criterion_elem, errors, warnings)
+            except Exception as e:
+                errors.append(f"Failed to parse restrictions: {str(e)}")
+            
+            # Parse linked criteria with validation
+            try:
+                linked_criteria = self._safe_parse_linked_criteria(criterion_elem, errors, warnings)
+            except Exception as e:
+                errors.append(f"Failed to parse linked criteria: {str(e)}")
+            
+            # Create criterion object
+            criterion = SearchCriterion(
+                id=criterion_id,
+                table=table,
+                display_name=display_name,
+                description=description,
+                negation=negation,
+                value_sets=value_sets,
+                column_filters=column_filters,
+                restrictions=restrictions,
+                exception_code=exception_code,
+                linked_criteria=linked_criteria
+            )
+            
+            if errors:
+                return ParseResult.failure_result(errors, xml_context)
+            elif warnings:
+                return ParseResult.partial_result(criterion, warnings, xml_context)
+            else:
+                return ParseResult.success_result(criterion)
+                
+        except Exception as e:
+            error_msg = f"Unexpected error parsing criterion: {str(e)}"
+            return ParseResult.failure_result([error_msg], xml_context)
     
     def parse_criterion(self, criterion_elem: ET.Element) -> Optional[SearchCriterion]:
         """Parse individual search criterion"""
@@ -373,6 +697,83 @@ class CriterionParser(XMLParserBase):
             error = handle_xml_parsing_error("parse_column_filter", e, "columnValue")
             return None
     
+    def safe_parse_range_value(self, range_elem: ET.Element) -> ParseResult:
+        """Safely parse range value information with comprehensive error handling"""
+        xml_context = create_xml_parsing_context(
+            element_name="rangeValue",
+            parsing_stage="range_parsing"
+        )
+        
+        if range_elem is None:
+            return ParseResult.failure_result(
+                ["Range element is None"],
+                xml_context
+            )
+        
+        errors = []
+        warnings = []
+        result = {}
+        
+        try:
+            # Parse relative_to attribute with validation
+            relative_to_result = self.safe_get_attribute(
+                range_elem, 'relativeTo', 
+                expected_format=None, 
+                required=False
+            )
+            
+            if relative_to_result.success and relative_to_result.data:
+                result['relative_to'] = relative_to_result.data
+                
+                # Validate relative_to value
+                valid_relative_values = ['baseline', 'encounter', 'current', 'previous']
+                if relative_to_result.data not in valid_relative_values:
+                    warnings.append(f"Unrecognised relativeTo value: '{relative_to_result.data}'")
+            elif relative_to_result.warnings:
+                warnings.extend(relative_to_result.warnings)
+            
+            # Parse range from with validation
+            range_from_result = self.safe_find_element(range_elem, 'rangeFrom', 'rangeFrom')
+            if range_from_result.success and range_from_result.data:
+                boundary_result = self.safe_parse_range_boundary(range_from_result.data)
+                if boundary_result.success:
+                    result['from'] = boundary_result.data
+                    if boundary_result.warnings:
+                        warnings.extend(boundary_result.warnings)
+                else:
+                    errors.extend(boundary_result.errors or [])
+            elif range_from_result.warnings:
+                warnings.extend(range_from_result.warnings)
+            
+            # Parse range to with validation
+            range_to_result = self.safe_find_element(range_elem, 'rangeTo', 'rangeTo')
+            if range_to_result.success and range_to_result.data:
+                boundary_result = self.safe_parse_range_boundary(range_to_result.data)
+                if boundary_result.success:
+                    result['to'] = boundary_result.data
+                    if boundary_result.warnings:
+                        warnings.extend(boundary_result.warnings)
+                else:
+                    errors.extend(boundary_result.errors or [])
+            elif range_to_result.warnings:
+                warnings.extend(range_to_result.warnings)
+            
+            # Validate range logic
+            if 'from' in result and 'to' in result:
+                validation_warnings = self._validate_range_boundaries(result['from'], result['to'])
+                warnings.extend(validation_warnings)
+            
+            if errors:
+                return ParseResult.failure_result(errors, xml_context)
+            elif warnings:
+                return ParseResult.partial_result(result, warnings, xml_context)
+            else:
+                return ParseResult.success_result(result)
+                
+        except Exception as e:
+            error_msg = f"Unexpected error parsing range value: {str(e)}"
+            return ParseResult.failure_result([error_msg], xml_context)
+    
     def _parse_range_value(self, range_elem: ET.Element) -> Dict:
         """Parse range value information"""
         try:
@@ -397,6 +798,205 @@ class CriterionParser(XMLParserBase):
         except Exception as e:
             error = handle_xml_parsing_error("parse_range_value", e, "rangeValue")
             return {}
+    
+    def safe_parse_range_boundary(self, boundary_elem: ET.Element) -> ParseResult:
+        """Safely parse range boundary with comprehensive validation"""
+        xml_context = create_xml_parsing_context(
+            element_name="rangeBoundary",
+            parsing_stage="range_boundary_parsing"
+        )
+        
+        if boundary_elem is None:
+            return ParseResult.failure_result(
+                ["Range boundary element is None"],
+                xml_context
+            )
+        
+        errors = []
+        warnings = []
+        result = {}
+        
+        try:
+            # Parse operator with validation
+            operator_result = self.safe_get_text(
+                self.find_element_both(boundary_elem, 'operator'),
+                element_name="operator",
+                expected_format="string"
+            )
+            
+            if operator_result.success:
+                operator = operator_result.data
+                
+                # Validate operator
+                valid_operators = ['EQ', 'NE', 'LT', 'LE', 'GT', 'GE', 'IN', 'NOT_IN', 'BETWEEN', 'NOT_BETWEEN']
+                if operator and operator not in valid_operators:
+                    warnings.append(f"Unrecognised operator: '{operator}', using as-is")
+                
+                result['operator'] = operator
+            else:
+                errors.extend(operator_result.errors or [])
+                warnings.extend(operator_result.warnings or [])
+            
+            # Parse value with comprehensive handling
+            value_result = self._safe_parse_boundary_value(boundary_elem, warnings)
+            if value_result:
+                result.update(value_result)
+            
+            # Validate numeric values if present
+            if 'value' in result:
+                try:
+                    # Try to validate numeric format for numeric operators
+                    numeric_operators = ['LT', 'LE', 'GT', 'GE', 'EQ', 'NE']
+                    if result.get('operator') in numeric_operators:
+                        try:
+                            float(result['value'])
+                        except (ValueError, TypeError):
+                            # Not numeric - might be valid for text fields
+                            pass
+                except Exception:
+                    pass
+            
+            if errors:
+                return ParseResult.failure_result(errors, xml_context)
+            elif warnings:
+                return ParseResult.partial_result(result, warnings, xml_context)
+            else:
+                return ParseResult.success_result(result)
+                
+        except Exception as e:
+            error_msg = f"Unexpected error parsing range boundary: {str(e)}"
+            return ParseResult.failure_result([error_msg], xml_context)
+    
+    def _safe_parse_boundary_value(self, boundary_elem: ET.Element, warnings: list) -> Optional[Dict]:
+        """Safely parse boundary value with multiple fallback strategies"""
+        if boundary_elem is None:
+            warnings.append("Boundary element is None for value parsing")
+            return None
+        
+        result = {}
+        
+        try:
+            # Strategy 1: Look for value element
+            value_elem_result = self.safe_find_element(boundary_elem, 'value', 'value')
+            if value_elem_result.success and value_elem_result.data is not None:
+                value_elem = value_elem_result.data
+                
+                # Check for nested structure
+                nested_value_result = self.safe_get_text(
+                    self.find_element_both(value_elem, 'value'),
+                    element_name="nested_value"
+                )
+                
+                if nested_value_result.success and nested_value_result.data:
+                    # Nested structure pattern
+                    result['value'] = nested_value_result.data
+                    
+                    unit_elem = self.find_element_both(value_elem, 'unit')
+                    if unit_elem is not None:
+                        result['unit'] = self.get_text(unit_elem)
+                    
+                    relation_elem = self.find_element_both(value_elem, 'relation')
+                    if relation_elem is not None:
+                        result['relation'] = self.get_text(relation_elem)
+                else:
+                    # Direct text content
+                    direct_value = self.get_text(value_elem)
+                    if direct_value:
+                        result['value'] = direct_value
+                    else:
+                        # Look for multiple nested values
+                        nested_values = self._safe_extract_multiple_values(value_elem, warnings)
+                        if nested_values:
+                            result['values'] = nested_values
+            
+            # Strategy 2: Look for singleValue element
+            if not result:
+                single_value_result = self.safe_find_element(boundary_elem, 'singleValue', 'singleValue')
+                if single_value_result.success and single_value_result.data is not None:
+                    single_value = self.get_text(single_value_result.data)
+                    if single_value:
+                        result['value'] = single_value
+            
+            # Strategy 3: Direct text content of boundary element
+            if not result:
+                direct_text = self.get_text(boundary_elem)
+                if direct_text:
+                    result['value'] = direct_text
+                    warnings.append("Used direct text content as boundary value")
+            
+            return result if result else None
+            
+        except Exception as e:
+            warnings.append(f"Error parsing boundary value: {str(e)}")
+            return None
+    
+    def _safe_extract_multiple_values(self, value_elem: ET.Element, warnings: list) -> Optional[List[str]]:
+        """Safely extract multiple values from nested structure"""
+        if value_elem is None:
+            return None
+        
+        try:
+            values = []
+            
+            # Find all nested value elements
+            ns_values_result = self.safe_find_elements(value_elem, 'emis:value')
+            if ns_values_result.success:
+                for val_elem in ns_values_result.data:
+                    text = self.get_text(val_elem)
+                    if text:
+                        values.append(text)
+            
+            non_ns_values_result = self.safe_find_elements(value_elem, 'value')
+            if non_ns_values_result.success:
+                for val_elem in non_ns_values_result.data:
+                    text = self.get_text(val_elem)
+                    if text and text not in values:
+                        values.append(text)
+            
+            return values if values else None
+            
+        except Exception as e:
+            warnings.append(f"Error extracting multiple values: {str(e)}")
+            return None
+    
+    def _validate_range_boundaries(self, from_boundary: Dict, to_boundary: Dict) -> List[str]:
+        """Validate range boundary logic and consistency"""
+        warnings = []
+        
+        try:
+            # Check for conflicting operators
+            from_op = from_boundary.get('operator', '')
+            to_op = to_boundary.get('operator', '')
+            
+            # Validate numeric range consistency
+            from_value = from_boundary.get('value')
+            to_value = to_boundary.get('value')
+            
+            if from_value and to_value:
+                try:
+                    from_num = float(from_value)
+                    to_num = float(to_value)
+                    
+                    # Check logical consistency
+                    if from_op in ['GE', 'GT'] and to_op in ['LE', 'LT']:
+                        if from_num >= to_num:
+                            warnings.append(f"Range logic issue: from value {from_num} >= to value {to_num}")
+                    
+                except (ValueError, TypeError):
+                    # Not numeric values - skip numeric validation
+                    pass
+            
+            # Check unit consistency
+            from_unit = from_boundary.get('unit')
+            to_unit = to_boundary.get('unit')
+            
+            if from_unit and to_unit and from_unit != to_unit:
+                warnings.append(f"Unit mismatch in range: from='{from_unit}', to='{to_unit}'")
+            
+        except Exception as e:
+            warnings.append(f"Error validating range boundaries: {str(e)}")
+        
+        return warnings
     
     def _parse_range_boundary(self, boundary_elem: ET.Element) -> Dict:
         """Parse range boundary (from/to) information"""
@@ -504,6 +1104,233 @@ class CriterionParser(XMLParserBase):
         if child_elem is not None:
             return self.get_text(child_elem).lower() == 'true'
         return False
+    
+    # Helper methods for safe parsing
+    def _safe_parse_value_sets(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List[Dict]:
+        """Safely parse value sets with error collection"""
+        value_sets = []
+        all_valuesets = []
+        
+        if criterion_elem is None:
+            errors.append("Cannot parse value sets from None element")
+            return value_sets
+        
+        try:
+            # Find filterAttribute elements with null checking
+            filter_attrs_result = self.safe_find_elements(criterion_elem, 'filterAttribute')
+            if filter_attrs_result.success:
+                filter_attrs = filter_attrs_result.data
+            else:
+                filter_attrs = []
+                warnings.extend(filter_attrs_result.warnings or [])
+            
+            # Also check namespaced versions
+            ns_filter_attrs_result = self.safe_find_elements(criterion_elem, 'emis:filterAttribute')
+            if ns_filter_attrs_result.success:
+                filter_attrs.extend(ns_filter_attrs_result.data)
+            
+            for filter_attr in filter_attrs:
+                if filter_attr is None:
+                    warnings.append("Encountered None filterAttribute element")
+                    continue
+                    
+                try:
+                    # Find columnValue elements with validation
+                    column_values = self._safe_find_column_values(filter_attr, warnings)
+                    
+                    for col_elem in column_values:
+                        if col_elem is None:
+                            continue
+                            
+                        # Find value sets within columnValue with validation
+                        vs_result = self.safe_find_elements(col_elem, 'valueSet')
+                        if vs_result.success:
+                            for vs in vs_result.data:
+                                if vs not in all_valuesets:
+                                    all_valuesets.append(vs)
+                        
+                        # Check namespaced versions
+                        ns_vs_result = self.safe_find_elements(col_elem, 'emis:valueSet')
+                        if ns_vs_result.success:
+                            for vs in ns_vs_result.data:
+                                if vs not in all_valuesets:
+                                    all_valuesets.append(vs)
+                
+                except Exception as e:
+                    warnings.append(f"Error processing filterAttribute: {str(e)}")
+            
+            # Parse collected value set elements
+            for valueset_elem in all_valuesets:
+                if valueset_elem is None:
+                    warnings.append("Encountered None valueSet element")
+                    continue
+                    
+                try:
+                    value_set = parse_value_set(valueset_elem, self.namespaces)
+                    if value_set:
+                        value_sets.append(value_set)
+                    else:
+                        warnings.append("Failed to parse valueSet - returned None")
+                except Exception as e:
+                    warnings.append(f"Error parsing individual valueSet: {str(e)}")
+            
+        except Exception as e:
+            errors.append(f"Unexpected error in value set parsing: {str(e)}")
+        
+        return value_sets
+    
+    def _safe_parse_column_filters(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List[Dict]:
+        """Safely parse column filters with error collection"""
+        column_filters = []
+        
+        if criterion_elem is None:
+            errors.append("Cannot parse column filters from None element")
+            return column_filters
+        
+        try:
+            # Find all columnValue elements with validation
+            column_values = []
+            
+            # Check both namespaced and non-namespaced paths
+            ns_columns_result = self.safe_find_elements(criterion_elem, './/emis:columnValue')
+            if ns_columns_result.success:
+                column_values.extend(ns_columns_result.data)
+            
+            non_ns_columns_result = self.safe_find_elements(criterion_elem, './/columnValue')
+            if non_ns_columns_result.success:
+                for col in non_ns_columns_result.data:
+                    if col not in column_values:  # Avoid duplicates
+                        column_values.append(col)
+            
+            for column_elem in column_values:
+                if column_elem is None:
+                    warnings.append("Encountered None columnValue element")
+                    continue
+                
+                try:
+                    column_filter = self.parse_column_filter(column_elem)
+                    if column_filter:
+                        column_filters.append(column_filter)
+                    else:
+                        warnings.append("Column filter parsing returned None")
+                except Exception as e:
+                    warnings.append(f"Error parsing individual column filter: {str(e)}")
+            
+        except Exception as e:
+            errors.append(f"Unexpected error in column filter parsing: {str(e)}")
+        
+        return column_filters
+    
+    def _safe_parse_restrictions(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List[Any]:
+        """Safely parse restrictions with error collection"""
+        restrictions = []
+        
+        if criterion_elem is None:
+            errors.append("Cannot parse restrictions from None element")
+            return restrictions
+        
+        try:
+            # Find restrictions in multiple locations with validation
+            all_restrictions = []
+            
+            # Direct restrictions under criterion
+            direct_rest_result = self.safe_find_elements(criterion_elem, 'restriction')
+            if direct_rest_result.success:
+                all_restrictions.extend(direct_rest_result.data)
+            
+            ns_direct_rest_result = self.safe_find_elements(criterion_elem, 'emis:restriction')
+            if ns_direct_rest_result.success:
+                all_restrictions.extend(ns_direct_rest_result.data)
+            
+            # Parse each restriction with error handling
+            for restriction_elem in all_restrictions:
+                if restriction_elem is None:
+                    warnings.append("Encountered None restriction element")
+                    continue
+                
+                try:
+                    restriction = parse_restriction(restriction_elem, self.namespaces)
+                    if restriction:
+                        restrictions.append(restriction)
+                    else:
+                        warnings.append("Restriction parsing returned None")
+                except Exception as e:
+                    warnings.append(f"Error parsing individual restriction: {str(e)}")
+            
+        except Exception as e:
+            errors.append(f"Unexpected error in restriction parsing: {str(e)}")
+        
+        return restrictions
+    
+    def _safe_parse_linked_criteria(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List['SearchCriterion']:
+        """Safely parse linked criteria with error collection"""
+        linked_criteria = []
+        
+        if criterion_elem is None:
+            errors.append("Cannot parse linked criteria from None element")
+            return linked_criteria
+        
+        try:
+            # Find linked criterion elements with validation
+            linked_elements = []
+            
+            ns_linked_result = self.safe_find_elements(criterion_elem, './/emis:linkedCriterion')
+            if ns_linked_result.success:
+                linked_elements.extend(ns_linked_result.data)
+            
+            non_ns_linked_result = self.safe_find_elements(criterion_elem, './/linkedCriterion')
+            if non_ns_linked_result.success:
+                for elem in non_ns_linked_result.data:
+                    if elem not in linked_elements:
+                        linked_elements.append(elem)
+            
+            for linked_elem in linked_elements:
+                if linked_elem is None:
+                    warnings.append("Encountered None linkedCriterion element")
+                    continue
+                
+                try:
+                    linked_criterion = parse_linked_criterion(linked_elem, self.namespaces)
+                    if linked_criterion:
+                        linked_criteria.append(linked_criterion)
+                    else:
+                        warnings.append("Linked criterion parsing returned None")
+                except Exception as e:
+                    warnings.append(f"Error parsing individual linked criterion: {str(e)}")
+            
+        except Exception as e:
+            errors.append(f"Unexpected error in linked criteria parsing: {str(e)}")
+        
+        return linked_criteria
+    
+    def _safe_find_column_values(self, parent_elem: ET.Element, warnings: list) -> List[ET.Element]:
+        """Safely find columnValue elements with comprehensive error handling"""
+        column_values = []
+        
+        if parent_elem is None:
+            warnings.append("Cannot find columnValue in None parent element")
+            return column_values
+        
+        try:
+            # Find both namespaced and non-namespaced columnValue elements
+            ns_result = self.safe_find_elements(parent_elem, 'emis:columnValue')
+            if ns_result.success:
+                column_values.extend(ns_result.data)
+            elif ns_result.warnings:
+                warnings.extend(ns_result.warnings)
+            
+            non_ns_result = self.safe_find_elements(parent_elem, 'columnValue')
+            if non_ns_result.success:
+                for elem in non_ns_result.data:
+                    if elem not in column_values:  # Avoid duplicates
+                        column_values.append(elem)
+            elif non_ns_result.warnings:
+                warnings.extend(non_ns_result.warnings)
+            
+        except Exception as e:
+            warnings.append(f"Error finding columnValue elements: {str(e)}")
+        
+        return column_values
 
 
 # Convenience functions for backward compatibility

@@ -478,7 +478,14 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
         mapping_found = result.get('Mapping Found') == 'Found'
         
         if emis_guid and snomed_code and mapping_found and emis_guid not in cached_mappings:
-            new_mappings[emis_guid] = snomed_code
+            # Store complete mapping info for cache, not just SNOMED code
+            new_mappings[emis_guid] = {
+                'snomed_code': snomed_code,
+                'source_type': result.get('Source Type', 'Unknown'),
+                'has_qualifier': result.get('Has Qualifier', 'Unknown'),
+                'is_parent': result.get('Is Parent', 'Unknown'),
+                'descendants': result.get('Descendants', '0')
+            }
     
     # Update the persistent cache with new mappings (60-minute TTL)
     if new_mappings:

@@ -1,3 +1,4 @@
+from .theme import info_box, success_box, warning_box, error_box
 """
 Progressive Loading System for EMIS XML Converter UI
 Implements lazy evaluation and async loading for heavy report tab rendering.
@@ -264,7 +265,8 @@ def progressive_component(
             # Render based on state
             if component.state == LoadState.LOADING and show_progress:
                 with st.container():
-                    st.info(f"⏳ Loading {component.name}...")
+                    from .theme import info_box
+                    st.markdown(info_box(f"⏳ Loading {component.name}..."), unsafe_allow_html=True)
                     progress_bar = st.progress(0)
                     
                     # Simulate progress for user feedback
@@ -276,7 +278,8 @@ def progressive_component(
                     st.rerun()
             
             elif component.state == LoadState.ERROR:
-                st.error(f"❌ Error loading {component.name}: {component.error}")
+                from .theme import error_box
+                st.markdown(error_box(f"❌ Error loading {component.name}: {component.error}"), unsafe_allow_html=True)
                 if st.button(f"🔄 Retry {component.name}", key=f"retry_{component_id}"):
                     loader.invalidate_component(component_id)
                     st.rerun()
@@ -313,7 +316,8 @@ def render_loading_placeholder(
                 st.caption(f"⏱️ Estimated time: {estimated_time:.1f}s")
             time.sleep(0.5)  # Brief pause for visual feedback
     else:
-        st.info(f"⏳ Loading {name}...")
+        from .theme import info_box
+        st.markdown(info_box(f"⏳ Loading {name}..."), unsafe_allow_html=True)
         if estimated_time:
             st.caption(f"⏱️ Estimated time: {estimated_time:.1f}s")
 
@@ -344,7 +348,8 @@ def create_lazy_dataframe_renderer(
         df = data_func()
         
         if df is None or df.empty:
-            st.info(f"No data available for {title}")
+            from .theme import info_box
+            st.markdown(info_box(f"No data available for {title}"), unsafe_allow_html=True)
             return None
         
         st.subheader(title)
@@ -406,7 +411,8 @@ def create_lazy_metrics_renderer(
         metrics = metrics_func()
         
         if not metrics:
-            st.info(f"No metrics available for {title}")
+            from .theme import info_box
+            st.markdown(info_box(f"No metrics available for {title}"), unsafe_allow_html=True)
             return None
         
         st.subheader(title)
@@ -445,7 +451,8 @@ def monitor_component_performance():
             st.metric("Total Load Time", f"{stats['total_load_time']:.2f}s")
         
         if stats['error_components'] > 0:
-            st.warning(f"⚠️ {stats['error_components']} components have errors")
+            from .theme import warning_box
+            st.markdown(warning_box(f"⚠️ {stats['error_components']} components have errors"), unsafe_allow_html=True)
         
         # Component details
         if st.checkbox("Show Component Details"):
@@ -469,5 +476,6 @@ def clear_progressive_cache():
     """Utility function to clear progressive loading cache."""
     loader = get_progressive_loader()
     loader.clear_cache()
-    st.success("🗑️ Progressive loading cache cleared")
+    from .theme import success_box
+    st.markdown(success_box("🗑️ Progressive loading cache cleared"), unsafe_allow_html=True)
     st.rerun()

@@ -1,3 +1,4 @@
+from ..ui.theme import info_box, success_box, warning_box, error_box
 """
 UI Export Manager
 Centralizes and enhances export functionality across all UI tabs
@@ -121,16 +122,16 @@ class UIExportManager:
                             del clean_data, csv_buffer
                             gc.collect()
                             
+                            # Show success message
+                            st.markdown(success_box("✅ CSV generated! Page will refresh to show download button..."), unsafe_allow_html=True)
+                            
                             # Auto-rerun to show download button immediately
                             st.rerun()
                             
                         except Exception as e:
                             if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
                                 print(f"[ERROR] CSV generation failed: {str(e)}", file=sys.stderr)
-                            st.error(f"Failed to generate CSV: {str(e)}")
-                            
-                    # Show success message
-                    st.success("✅ CSV generated! Page will refresh to show download button...")
+                            st.markdown(error_box(f"Failed to generate CSV: {str(e)}"), unsafe_allow_html=True)
                     
                 # Show preview caption if enabled
                 if show_preview:
@@ -228,7 +229,7 @@ class UIExportManager:
             st.markdown("**Bulk Export Options:**")
             
             # Bulk ZIP export removed due to memory performance issues
-            st.info("🔄 Bulk ZIP export has been removed due to memory performance issues. Individual exports are available above.")
+            st.markdown(info_box("🔄 Bulk ZIP export has been removed due to memory performance issues. Individual exports are available above."), unsafe_allow_html=True)
     
     def _render_export_button(self, data: List[Dict], section_name: str, 
                             export_type: str, additional_context: Dict = None):
@@ -800,7 +801,7 @@ class UIExportManager:
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"Excel export generation failed: {str(e)}")
+                                        st.markdown(error_box(f"Excel export generation failed: {str(e)}"), unsafe_allow_html=True)
         else:
             # Show download button
             filename, content = st.session_state[excel_cache_key]
@@ -855,7 +856,7 @@ class UIExportManager:
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"JSON export generation failed: {str(e)}")
+                                        st.markdown(error_box(f"JSON export generation failed: {str(e)}"), unsafe_allow_html=True)
         else:
             # Show download button
             filename, content = st.session_state[json_cache_key]
@@ -896,7 +897,7 @@ class UIExportManager:
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"Master JSON export generation failed: {str(e)}")
+                                        st.markdown(error_box(f"Master JSON export generation failed: {str(e)}"), unsafe_allow_html=True)
             
             # Show count caption if available
             if reports_list:

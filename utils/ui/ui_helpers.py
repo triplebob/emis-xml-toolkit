@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Callable, Optional
 from ..utils.export_debug import log_export_created, track_export_object, log_memory_after_export
 from ..core.session_state import SessionStateKeys
+from .theme import info_box, success_box, warning_box, error_box
 
 
 def create_styled_dataframe(df: pd.DataFrame, style_function: Callable) -> Any:
@@ -372,7 +373,7 @@ def render_section_with_data(
                 key=f"download_{filename_prefix}_all"
             )
     else:
-        st.info(empty_message)
+        st.markdown(info_box(empty_message), unsafe_allow_html=True)
 
 
 def render_metrics_row(metrics: List[Dict[str, Any]], columns: int = 4) -> None:
@@ -395,13 +396,13 @@ def render_metrics_row(metrics: List[Dict[str, Any]], columns: int = 4) -> None:
             # Apply color coding based on thresholds
             if thresholds:
                 if 'error' in thresholds and value >= thresholds['error']:
-                    st.error(f"**{label}:** {value}")
+                    st.markdown(error_box(f"**{label}:** {value}"), unsafe_allow_html=True)
                 elif 'warning' in thresholds and value >= thresholds['warning']:
-                    st.warning(f"**{label}:** {value}")
+                    st.markdown(warning_box(f"**{label}:** {value}"), unsafe_allow_html=True)
                 elif 'success' in thresholds and value >= thresholds['success']:
-                    st.success(f"**{label}:** {value}")
+                    st.markdown(success_box(f"**{label}:** {value}"), unsafe_allow_html=True)
                 else:
-                    st.info(f"**{label}:** {value}")
+                    st.markdown(info_box(f"**{label}:** {value}"), unsafe_allow_html=True)
             else:
                 st.metric(label, value)
 
@@ -569,11 +570,11 @@ def render_info_section(
         st.subheader(title)
     
     if section_type == "warning":
-        st.warning(content)
+        st.markdown(warning_box(content), unsafe_allow_html=True)
     elif section_type == "success":
-        st.success(content)
+        st.markdown(success_box(content), unsafe_allow_html=True)
     elif section_type == "error":
-        st.error(content)
+        st.markdown(error_box(content), unsafe_allow_html=True)
     else:
-        st.info(content)
+        st.markdown(info_box(content), unsafe_allow_html=True)
 

@@ -14,6 +14,7 @@ import pandas as pd
 from functools import wraps
 import queue
 import uuid
+from .theme import info_box, success_box, warning_box, error_box
 
 from ..core.background_processor import (
     get_background_processor, 
@@ -130,7 +131,7 @@ class AsyncTabRenderer:
                             else:
                                 st.write(task.result)
                         else:
-                            st.error("Task completed but no result available")
+                            st.markdown(error_box("Task completed but no result available"), unsafe_allow_html=True)
                     
                     # Clean up
                     context.progress_placeholder.empty()
@@ -142,7 +143,7 @@ class AsyncTabRenderer:
                 elif task.status == TaskStatus.FAILED:
                     # Task failed - show error
                     with context.content_placeholder.container():
-                        st.error(f"Failed to load {tab_name}: {task.error}")
+                        st.markdown(error_box(f"Failed to load {tab_name}: {task.error}"), unsafe_allow_html=True)
                         if st.button(f"🔄 Retry {tab_name}", key=f"retry_{tab_id}"):
                             # Clear error and retry
                             del self.active_tasks[tab_id]
@@ -175,7 +176,7 @@ class AsyncTabRenderer:
             # Show initial loading state
             if show_progress:
                 with context.progress_placeholder.container():
-                    st.info(f"⏳ Loading {tab_name}...")
+                    st.markdown(info_box(f"⏳ Loading {tab_name}..."), unsafe_allow_html=True)
             
             # Trigger rerun to start monitoring
             st.rerun()
@@ -344,14 +345,14 @@ class AsyncDataFrameRenderer:
                             enable_search, show_stats, df_id
                         )
                     else:
-                        st.error(f"Failed to load data for {title}")
+                        st.markdown(error_box(f"Failed to load data for {title}"), unsafe_allow_html=True)
                     
                     # Clean up
                     del self.loading_tasks[df_id]
                     return
                 
                 elif task.status == TaskStatus.FAILED:
-                    st.error(f"Error loading {title}: {task.error}")
+                    st.markdown(error_box(f"Error loading {title}: {task.error}"), unsafe_allow_html=True)
                     del self.loading_tasks[df_id]
                     return
         
@@ -368,7 +369,7 @@ class AsyncDataFrameRenderer:
         self.loading_tasks[df_id] = task_id
         
         # Show loading indicator
-        st.info(f"⏳ Loading {title}...")
+        st.markdown(info_box(f"⏳ Loading {title}..."), unsafe_allow_html=True)
         st.rerun()
     
     def _render_dataframe_content(
@@ -385,7 +386,7 @@ class AsyncDataFrameRenderer:
         st.subheader(title)
         
         if df is None or df.empty:
-            st.info(f"No data available for {title}")
+            st.markdown(info_box(f"No data available for {title}"), unsafe_allow_html=True)
             return
         
         # Show statistics
@@ -513,12 +514,12 @@ def render_async_metrics(
     
     # Render based on state
     if component.state == LoadState.LOADING:
-        st.info(f"⏳ Loading {title}...")
+        st.markdown(info_box(f"⏳ Loading {title}..."), unsafe_allow_html=True)
         time.sleep(0.5)
         st.rerun()
     
     elif component.state == LoadState.ERROR:
-        st.error(f"❌ Error loading {title}: {component.error}")
+        st.markdown(error_box(f"❌ Error loading {title}: {component.error}"), unsafe_allow_html=True)
         if st.button(f"🔄 Retry {title}", key=f"retry_metrics_{metrics_id}"):
             loader.invalidate_component(component_id)
             st.rerun()
@@ -574,10 +575,10 @@ def create_cancel_button(task_or_component_id: str, label: str = "Cancel") -> bo
         component_invalidated = loader.invalidate_component(task_or_component_id)
         
         if task_cancelled or component_invalidated:
-            st.success(f"✅ {label} successful")
+            st.markdown(success_box(f"✅ {label} successful"), unsafe_allow_html=True)
             return True
         else:
-            st.warning("⚠️ Nothing to cancel")
+            st.markdown(warning_box("⚠️ Nothing to cancel"), unsafe_allow_html=True)
             return False
     
     return False
@@ -657,14 +658,14 @@ def display_async_performance_dashboard():
         if st.button("🗑️ Clear All Caches"):
             loader.clear_cache()
             get_async_dataframe_renderer().clear_cache()
-            st.success("All caches cleared")
+            st.markdown(success_box("All caches cleared"), unsafe_allow_html=True)
             st.rerun()
     
     with col2:
         if st.button("🛑 Cancel All Tasks"):
             renderer = get_async_tab_renderer()
             renderer.clear_all_tabs()
-            st.success("All tasks cancelled")
+            st.markdown(success_box("All tasks cancelled"), unsafe_allow_html=True)
             st.rerun()
     
     with col3:

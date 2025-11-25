@@ -607,26 +607,50 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 **When to modify:** Core parsing logic, namespace changes.
 
-### `base_parser.py` - Base Parsing Utilities
-**Purpose:** Base class providing common parsing methods with namespace support.
+### `base_parser.py` - Enhanced Parsing Utilities with Defensive Programming
+**Purpose:** Base class providing comprehensive parsing methods with namespace support and structured error handling.
 
 **Key Features:**
 - All parsers inheriting from XMLParserBase get automatic NamespaceHandler access
-- Common parsing methods with centralized namespace handling
-- Consistent error handling patterns
+- Enhanced safe parsing methods with defensive programming (`safe_find_element`, `safe_get_text`)
+- Comprehensive XML structure validation with schema checking capabilities
+- Structured error handling with XMLParsingContext and ParseResult objects
+- Defensive null checking and validation throughout parsing pipeline
 
-**When to modify:** Core parsing logic, parser optimization.
+**Resilience Enhancements:**
+- Safe parsing methods that prevent crashes with malformed XML
+- Comprehensive error context objects for detailed failure analysis
+- Structured error reporting replacing silent None returns
+- XML structure validation with assumption checking and requirement validation
+
+**When to modify:** Core parsing logic, parser optimisation, error handling improvements.
 
 ### Specialized Parsers
 
-#### `criterion_parser.py` - Search Criteria Parsing
-**Purpose:** Parses individual search criteria and components.
+#### `criterion_parser.py` - Search Criteria Parsing with Enhanced Resilience
+**Purpose:** Parses individual search criteria and components with defensive programming and comprehensive error handling.
 
-#### `restriction_parser.py` - Search Restriction Parsing
-**Purpose:** Parses search restrictions like 'Latest 1' with conditional logic.
+**Resilience Enhancements:**
+- Defensive demographic detection with multiple fallback patterns for reliable classification
+- Robust range boundary parsing with comprehensive error handling
+- Enhanced null checking and validation to prevent crashes with malformed XML
+- Semantic value set deduplication with content-based comparison preventing duplicate clinical codes
 
-#### `value_set_parser.py` - Value Set Parsing
-**Purpose:** Parses clinical code value sets and code systems.
+#### `restriction_parser.py` - Search Restriction Parsing with Error Handling
+**Purpose:** Parses search restrictions like 'Latest 1' with conditional logic and comprehensive error handling.
+
+**Parsing Improvements:**
+- Enhanced range parsing with multiple validation strategies
+- Robust restriction logic parsing with error context and recovery
+- Improved conditional logic handling for complex restriction patterns
+
+#### `value_set_parser.py` - Value Set Parsing with Semantic Deduplication
+**Purpose:** Parses clinical code value sets and code systems with enhanced validation and deduplication.
+
+**Enhanced Features:**
+- Semantic value set deduplication preventing duplicate clinical codes whilst preserving legitimate variations
+- Enhanced validation for value set completeness and structure consistency
+- Improved error handling for malformed value set scenarios with structured error reporting
 
 #### `linked_criteria_parser.py` - Linked Criteria Parsing
 **Purpose:** Parses complex linked criteria and relationships.
@@ -661,8 +685,24 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 ## Shared Utilities (`utils/common/`)
 
-### `error_handling.py` - Standardized Error Management
-**Purpose:** Centralized error handling with categorization.
+### `error_handling.py` - Enhanced Error Management with Structured Reporting
+**Purpose:** Centralized error handling with comprehensive categorisation and structured reporting systems.
+
+**Enhanced Features:**
+- Comprehensive error context objects for detailed failure analysis (`XMLParsingContext`, `ParseResult`)
+- Structured error reporting systems replacing silent failures with actionable information
+- Batch error aggregation for enterprise-scale processing (`BatchParsingReport`, `BatchErrorAggregator`)
+- Diagnostic logging with context-aware error reporting for troubleshooting
+
+**Error Reporting Architecture:**
+- `XMLParsingContext` - Detailed context for XML parsing failures with diagnostic information
+- `ParseResult` - Structured containers for parsing operations with success/failure tracking
+- `BatchParsingReport` - Aggregated error reporting for large-scale processing operations
+- `BatchErrorAggregator` - Error collection and summarisation for batch operations
+
+**Supporting Documentation:**
+- Detailed error handling patterns documented in `docs/architecture/error-handling.md`
+- Comprehensive error categorisation and recovery strategies
 
 ### `ui_error_handling.py` - UI Error Display
 **Purpose:** User-friendly error display for Streamlit applications.
@@ -773,78 +813,171 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 **When to modify:** Deployment process changes, cache file format updates.
 
 ### `terminology_server/nhs_terminology_client.py` - FHIR R4 API Client
-**Purpose:** Handles NHS England Terminology Server API communication with worker thread compatibility.
+**Purpose:** Handles NHS England Terminology Server API communication with comprehensive error handling and thread safety.
 
 **Responsibilities:**
-- OAuth2 system-to-system authentication with token management
-- FHIR R4 API request handling with proper headers and retry logic
-- Concept lookup and validation operations
+- OAuth2 system-to-system authentication with secure credential management
+- FHIR R4 API request handling with structured error reporting and recovery guidance
+- Concept lookup and validation operations with user-friendly error messages
 - Child concept expansion using Expression Constraint Language (ECL)
-- Worker thread compatibility with uncached method variants
-- Error handling for network, authentication, and threading failures
+- Thread-safe operations with proper credential management across multiple workers
+- Comprehensive error handling distinguishing 401/404/422/500+ response types
+
+**Reliability Enhancements:**
+- `TerminologyServerError` exception class for NHS-specific error categorisation
+- User-friendly error message mapping for common failure scenarios
+- Specific recovery guidance for different error types (auth issues, code not found, server problems)
+- Error context with API response details and actionable next steps
+- Thread-safe token management for concurrent expansion operations
 
 **Threading Compatibility:**
-- Uncached method variants for worker thread execution (`_expand_concept_uncached`, `_lookup_concept_uncached`)
-- Credential passing for worker thread authentication
+- `ThreadSafeTokenManager` for concurrent token management across multiple workers
+- Uncached method variants for worker thread execution without Streamlit conflicts
+- Explicit credential passing for worker thread authentication
 - Thread-safe API request handling with proper session management
-- Eliminated Streamlit caching conflicts that caused worker thread failures
 
 **Key Classes:**
-- `NHSTerminologyClient` - Main API client with authentication and threading support
-- `ExpansionResult` - Result container for expansion operations with error tracking
+- `NHSTerminologyClient` - Main API client with enhanced error handling and threading support
+- `TerminologyServerError` - Structured error handling with user-friendly messages
+- `ThreadSafeTokenManager` - Thread-safe token management for concurrent operations
+- `ExpansionResult` - Result container for expansion operations with comprehensive error tracking
 - `ExpandedConcept` - Individual concept data structure with parent relationships
 
-**When to modify:** API specification changes, authentication updates, new FHIR operations, threading optimization.
+**When to modify:** API specification changes, authentication updates, new FHIR operations, error handling improvements.
+
+### `terminology_server/rate_limiter.py` - Adaptive Rate Limiting
+**Purpose:** Intelligent rate limiting with dynamic adjustment and exponential backoff strategies.
+
+**Responsibilities:**
+- Dynamic rate adjustment based on NHS Terminology Server responses
+- Exponential backoff for 429/500+ error responses with jitter prevention
+- Rate limiting configuration with tunable parameters for different environments
+- Backoff strategy configuration to prevent thundering herd issues
+- Performance optimisation whilst maintaining server-friendly request patterns
+
+**Key Classes:**
+- `AdaptiveRateLimiter` - Main rate limiter with dynamic adjustment capabilities
+- Configurable backoff strategies with exponential growth and random jitter
+- Rate limiting thresholds tuned for NHS Terminology Server capacity
+
+**When to modify:** Rate limiting policies, server response patterns, performance optimisation requirements.
+
+### `terminology_server/progress_tracker.py` - Advanced Progress Tracking
+**Purpose:** Sophisticated progress tracking with adaptive time estimation for terminology expansion operations.
+
+**Responsibilities:**
+- Real-time progress tracking with completion percentage calculation
+- Adaptive time estimation using weighted recent performance samples
+- Performance statistics with items per second and average processing times
+- Progress UI updates with worker status and completion estimates
+- Time estimation accuracy improvements (100ms baseline vs previous 1-second overestimates)
+
+**Key Classes:**
+- `ProgressTracker` - Main progress tracking engine with real-time updates
+- `AdaptiveTimeEstimator` - Weighted performance sampling for accurate completion prediction
+- Progress statistics aggregation and performance monitoring
+
+**When to modify:** Progress tracking accuracy, time estimation algorithms, user feedback improvements.
+
+### `terminology_server/batch_processor.py` - Concurrent Processing Orchestration  
+**Purpose:** Manages concurrent terminology expansion with worker thread orchestration and credential management.
+
+**Responsibilities:**
+- Concurrent terminology expansion with proper thread management
+- Worker thread orchestration with explicit credential passing
+- Batch processing coordination for large terminology hierarchies
+- Thread-safe credential management across multiple workers
+- Memory-aware processing optimised for Streamlit Cloud constraints
+
+**Key Features:**
+- Concurrent worker management with proper credential propagation
+- Batch size optimisation for memory efficiency and performance
+- Worker thread error handling and recovery mechanisms
+- Performance monitoring and worker scaling coordination
+
+**When to modify:** Concurrency patterns, worker management, batch processing optimisation.
+
+### `terminology_server/debug_utilities.py` - Development and Troubleshooting
+**Purpose:** Debug utilities and diagnostic tools for terminology server integration development.
+
+**Responsibilities:**
+- NHS Terminology Server interaction debugging and logging
+- Credential validation and authentication troubleshooting
+- API response analysis and error diagnostic tools
+- Performance monitoring and bottleneck identification
+- Development workflow support and testing utilities
+
+**When to modify:** Development tooling, debugging capabilities, diagnostic requirements.
 
 ### `terminology_server/expansion_service.py` - Service Layer for Code Expansion
-**Purpose:** Business logic layer for SNOMED code expansion operations.
+**Purpose:** Enhanced business logic layer for SNOMED code expansion operations with reliability improvements.
 
 **Responsibilities:**
-- High-level expansion workflow orchestration
+- High-level expansion workflow orchestration with error resilience
 - Integration with EMIS lookup tables for GUID mapping
-- Expansion result processing and validation
-- Summary dataframe creation with comparison metrics
+- Expansion result processing and validation with comprehensive error handling
+- Summary dataframe creation with comparison metrics and success tracking
 - Child code data enhancement with EMIS integration
+- UI-independent service layer architecture for clean separation of concerns
+
+**Service Architecture Enhancements:**
+- Enhanced `ExpansionService` with clean service layer architecture separating business logic from UI components
+- `CredentialManager` - Secure credential handling without UI coupling for better testability
+- Enhanced error handling with structured error reporting and recovery strategies
+- UI decoupling for improved testability and maintainability
 
 **Key Functions:**
-- `expand_codes_batch()` - Batch expansion with progress tracking
-- `create_expansion_summary_dataframe()` - Results table generation
-- `enhance_child_codes_with_emis_data()` - EMIS GUID integration
+- `expand_codes_batch()` - Batch expansion with enhanced progress tracking and error handling
+- `create_expansion_summary_dataframe()` - Results table generation with comprehensive metrics
+- `enhance_child_codes_with_emis_data()` - EMIS GUID integration with error resilience
 
-**When to modify:** Expansion logic changes, EMIS integration updates, result processing requirements.
+**When to modify:** Expansion logic changes, EMIS integration updates, result processing requirements, service architecture improvements.
 
 ### `terminology_server/expansion_ui.py` - User Interface Components
-**Purpose:** Streamlit UI components for terminology server integration with optimized threading and caching.
+**Purpose:** Streamlit UI components for terminology server integration with comprehensive reliability and performance improvements.
 
 **Responsibilities:**
-- Main expansion interface with adaptive worker scaling and progress tracking
+- Main expansion interface with adaptive worker scaling and sophisticated progress tracking
 - Session-based result caching to eliminate repeated API calls
 - Threading orchestrator with pure worker thread pattern for Streamlit compatibility
 - Results display with detailed metrics and EMIS vs terminology server comparison
 - Export functionality for multiple formats (CSV, JSON, XML)
-- Individual code lookup for testing and validation
-- Memory-aware processing for Streamlit Cloud deployment constraints
+- Individual code lookup for testing and validation with enhanced error handling
+- Memory-aware processing optimised for Streamlit Cloud deployment constraints
 
-**Threading Performance:**
-- Adaptive worker scaling: 8-20 concurrent workers based on workload size
+**Threading Performance Enhancements:**
+- Adaptive worker scaling: 8-20 concurrent workers based on workload size with intelligent scaling
 - Batched processing to prevent memory overflow in large expansions
-- Worker thread authentication with explicit credential passing
-- Real-time progress tracking with concurrent worker count display
+- Thread-safe credential management with explicit credential passing across workers
+- Real-time progress tracking with accurate time estimates and worker status display
+- Performance statistics with items per second and completion prediction accuracy
 
-**Caching System:**
-- Session-state expansion result caching with immediate reuse
-- Cache hit/miss statistics display during operations
+**Advanced Progress Tracking:**
+- Sophisticated progress tracking with adaptive time estimation algorithms
+- Real-time worker status with completion percentage and time estimates
+- Performance feedback with responsive progress updates every 250ms
+- Accurate completion predictions replacing previous overestimates (100ms baseline vs 1-second)
+
+**Enhanced Caching System:**
+- Session-state expansion result caching with TTL management and immediate reuse
+- Cache hit/miss statistics display with transparent performance metrics
 - Memory-efficient caching for large terminology hierarchies
-- Persistent results across UI interactions and download operations
+- Persistent results across UI interactions, download operations, and session management
+
+**Reliability Improvements:**
+- Comprehensive error handling with user-friendly messages for common failure scenarios
+- Individual code lookup functionality with persistent caching across UI refreshes
+- Enhanced connection status monitoring and authentication validation
+- Graceful error recovery with specific guidance for different failure types
 
 **Export Formats:**
-- Summary CSV with expansion results and metrics
+- Summary CSV with expansion results, metrics, and success tracking
 - Child codes CSV with SNOMED codes and descriptions
-- EMIS import CSV with GUID mappings
-- Hierarchical JSON with parent-child relationships
+- EMIS import CSV with GUID mappings and integration data
+- Hierarchical JSON with parent-child relationships and metadata
 - XML output for direct EMIS query implementation
 
-**When to modify:** UI requirements changes, performance optimization, new export formats, threading improvements.
+**When to modify:** UI requirements changes, performance optimisation, new export formats, threading improvements, error handling enhancements.
 
 ## Architecture Dependencies
 
@@ -931,10 +1064,15 @@ utils/
 **Memory issues:** Check memory management in `cache_manager.py` or session state cleanup
 **NHS Terminology Server:** `utils/terminology_server/`
 **SNOMED code expansion:** `utils/terminology_server/expansion_service.py`
-**Performance optimization:** Centralized caching in `cache_manager.py`, pagination in `tab_helpers.py`
+**NHS API rate limiting:** `utils/terminology_server/rate_limiter.py`
+**Progress tracking accuracy:** `utils/terminology_server/progress_tracker.py`
+**Concurrent terminology expansion:** `utils/terminology_server/batch_processor.py`
+**NHS integration debugging:** `utils/terminology_server/debug_utilities.py`
+**Performance optimisation:** Centralized caching in `cache_manager.py`, pagination in `tab_helpers.py`
 **Main app workflow:** `streamlit_app.py`
 **Session state management:** `utils/core/session_state.py`
 **Theme and styling:** `utils/ui/theme.py`
-**Error handling:** `utils/common/error_handling.py`
-**XML parsing:** `utils/xml_parsers/`
+**Error handling and resilience:** `utils/common/error_handling.py`, `docs/architecture/error-handling.md`
+**XML parsing resilience:** `utils/xml_parsers/` with enhanced defensive programming
 **Namespace issues:** `utils/xml_parsers/namespace_handler.py`
+**XML parsing errors:** Check structured error reporting in enhanced parsers

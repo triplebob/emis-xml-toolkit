@@ -1,3 +1,4 @@
+from ..ui.theme import info_box, success_box, warning_box, error_box
 """
 Background Processing Module for EMIS XML Converter
 Implements ProcessPoolExecutor-based background processing for heavy XML analysis tasks.
@@ -256,21 +257,21 @@ def render_task_progress(task: BackgroundTask, show_details: bool = False) -> No
             st.caption(f"⏱️ {elapsed:.1f}s")
     
     elif task.status == TaskStatus.COMPLETED:
-        st.success(f"✅ {task.name} completed")
+        st.markdown(success_box(f"✅ {task.name} completed"), unsafe_allow_html=True)
         
         if show_details and task.end_time and task.start_time:
             duration = task.end_time - task.start_time
             st.caption(f"⚡ Completed in {duration:.2f}s")
     
     elif task.status == TaskStatus.FAILED:
-        st.error(f"❌ {task.name} failed")
+        st.markdown(error_box(f"❌ {task.name} failed"), unsafe_allow_html=True)
         
         if show_details and task.error:
             with st.expander("Error Details"):
                 st.code(task.error)
     
     elif task.status == TaskStatus.CANCELLED:
-        st.warning(f"⚠️ {task.name} cancelled")
+        st.markdown(warning_box(f"⚠️ {task.name} cancelled"), unsafe_allow_html=True)
 
 
 def monitor_background_tasks(

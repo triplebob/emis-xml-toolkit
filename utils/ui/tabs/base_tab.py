@@ -1,3 +1,4 @@
+from ...ui.theme import info_box, success_box, warning_box, error_box
 """
 Base classes and common functionality for tab rendering.
 
@@ -51,7 +52,7 @@ class BaseTab(ABC):
             message: Message to display to user
             icon: Icon to show with the message
         """
-        st.info(f"{icon} {message}")
+        st.markdown(info_box(f"{icon} {message}"), unsafe_allow_html=True)
     
     def _handle_error(self, error: Exception, context: str = "processing") -> None:
         """
@@ -61,7 +62,7 @@ class BaseTab(ABC):
             error: The exception that occurred
             context: Description of what was being done when error occurred
         """
-        st.error(f"❌ Error during {context}: {str(error)}")
+        st.markdown(error_box(f"❌ Error during {context}: {str(error)}"), unsafe_allow_html=True)
         
         # Show detailed error in expander for debugging
         with st.expander("🔍 Error Details", expanded=False):
@@ -154,12 +155,12 @@ class TabRenderer:
     @staticmethod
     def handle_missing_data(message: str, icon: str = "📋") -> None:
         """Static version of missing data handler"""
-        st.info(f"{icon} {message}")
+        st.markdown(info_box(f"{icon} {message}"), unsafe_allow_html=True)
     
     @staticmethod
     def handle_error(error: Exception, context: str = "processing") -> None:
         """Static version of error handler"""
-        st.error(f"❌ Error during {context}: {str(error)}")
+        st.markdown(error_box(f"❌ Error during {context}: {str(error)}"), unsafe_allow_html=True)
         
         with st.expander("🔍 Error Details", expanded=False):
             import traceback

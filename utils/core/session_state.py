@@ -17,6 +17,7 @@ Usage:
 import streamlit as st
 from typing import Dict, List, Optional, Set
 import gc
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 
 class SessionStateKeys:
@@ -167,9 +168,18 @@ def clear_processing_state() -> None:
 
 def clear_results_state() -> None:
     """Clear all results and analysis data"""
+    cleared_keys = []
     for key in SessionStateGroups.RESULTS_DATA:
         if key in st.session_state:
             del st.session_state[key]
+            cleared_keys.append(key)
+    
+    # Debug logging
+    if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
+        print(f"[CLEAR_RESULTS] Cleared keys: {cleared_keys}")
+        remaining_results = {k: v for k, v in st.session_state.items() if 'result' in k.lower()}
+        if remaining_results:
+            print(f"[CLEAR_RESULTS] WARNING: Remaining result keys: {list(remaining_results.keys())}")
 
 
 def clear_export_state() -> None:
@@ -282,6 +292,7 @@ def clear_for_new_xml_selection() -> None:
     Clears:
     - Previous XML processing results only
     - UI state from previous file
+    - XML content from previous file
     
     Preserves:
     - SNOMED lookup cache (keeps status bar loaded)
@@ -294,11 +305,15 @@ def clear_for_new_xml_selection() -> None:
     clear_ui_state()         # UI state from previous file
     clear_report_state()     # Report UI state
     
+    # Clear XML content from previous file since it's stale
+    if SessionStateKeys.XML_CONTENT in st.session_state:
+        del st.session_state[SessionStateKeys.XML_CONTENT]
+    
     # Do NOT clear export cache or perform heavy cleanup yet
     # This preserves lookup cache so status bar doesn't reload
     
     if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-        print("[XML SELECTED] Cleared previous results, preserved lookup cache")
+        print("[XML SELECTED] Cleared previous results and XML content, preserved lookup cache")
 
 
 def clear_for_new_xml() -> None:
@@ -611,11 +626,11 @@ def debug_session_state() -> None:
     with st.expander("🔧 Session State Debug", expanded=False):
         st.markdown("**Session State Validation**")
         if validation.get('issues'):
-            st.error("Issues found:")
+            st.markdown(error_box("Issues found:"), unsafe_allow_html=True)
             for issue in validation['issues']:
                 st.write(f"- {issue}")
         else:
-            st.success("No validation issues found")
+            st.markdown(success_box("No validation issues found"), unsafe_allow_html=True)
         
         st.markdown("**State Summary**")
         st.json(summary)

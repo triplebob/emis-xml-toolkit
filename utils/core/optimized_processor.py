@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import threading
 import queue
 from functools import wraps
+from ..ui.theme import info_box, success_box, warning_box, error_box
 
 from .session_state import SessionStateKeys
 from .background_processor import (
@@ -180,7 +181,7 @@ class OptimizedProcessor:
             results = st.session_state.get(SessionStateKeys.RESULTS)
         
         if not results:
-            st.info("📤 Upload and process an XML file to see results")
+            st.markdown(info_box("📤 Upload and process an XML file to see results"), unsafe_allow_html=True)
             return
         
         # Create optimized tab structure
@@ -326,7 +327,7 @@ class OptimizedProcessor:
         if list_reports_df is not None and not list_reports_df.empty:
             st.dataframe(list_reports_df, width='stretch')
         else:
-            st.info("No list reports found in the XML file")
+            st.markdown(info_box("No list reports found in the XML file"), unsafe_allow_html=True)
     
     def _render_audit_reports_tab_optimized(self):
         """Render audit reports tab with progressive loading."""
@@ -352,7 +353,7 @@ class OptimizedProcessor:
         if audit_reports_df is not None and not audit_reports_df.empty:
             st.dataframe(audit_reports_df, width='stretch')
         else:
-            st.info("No audit reports found in the XML file")
+            st.markdown(info_box("No audit reports found in the XML file"), unsafe_allow_html=True)
     
     def _render_aggregate_reports_tab_optimized(self):
         """Render aggregate reports tab with progressive loading."""
@@ -378,7 +379,7 @@ class OptimizedProcessor:
         if aggregate_reports_df is not None and not aggregate_reports_df.empty:
             st.dataframe(aggregate_reports_df, width='stretch')
         else:
-            st.info("No aggregate reports found in the XML file")
+            st.markdown(info_box("No aggregate reports found in the XML file"), unsafe_allow_html=True)
     
     def monitor_processing_tasks(self) -> Dict[str, TaskStatus]:
         """Monitor all active processing tasks."""
@@ -499,13 +500,13 @@ def render_performance_monitoring_sidebar():
         # Management buttons
         if st.button("🛑 Cancel All", key="cancel_all_processing"):
             processor.cancel_all_processing()
-            st.success("All processing cancelled")
+            st.markdown(success_box("All processing cancelled"), unsafe_allow_html=True)
             st.rerun()
         
         if st.button("🗑️ Clear Caches", key="clear_all_caches"):
             processor.progressive_loader.clear_cache()
             processor.lookup_cache.clear_cache()
-            st.success("All caches cleared")
+            st.markdown(success_box("All caches cleared"), unsafe_allow_html=True)
             st.rerun()
 
 
@@ -563,14 +564,14 @@ def optimize_processing(
                 # Monitor task
                 while background_task.status == TaskStatus.RUNNING:
                     if show_progress:
-                        st.info(f"⏳ Processing {func.__name__}...")
+                        st.markdown(info_box(f"⏳ Processing {func.__name__}..."), unsafe_allow_html=True)
                     time.sleep(1.0)
                     background_task = processor.background_processor.get_task_status(task_id)
                 
                 if background_task.status == TaskStatus.COMPLETED:
                     return background_task.result
                 else:
-                    st.error(f"Processing failed: {background_task.error}")
+                    st.markdown(error_box(f"Processing failed: {background_task.error}"), unsafe_allow_html=True)
                     return None
             else:
                 # Use progressive component caching
@@ -589,11 +590,11 @@ def optimize_processing(
                 if component.state == LoadState.LOADED:
                     return component.data
                 elif component.state == LoadState.ERROR:
-                    st.error(f"Error in {func.__name__}: {component.error}")
+                    st.markdown(error_box(f"Error in {func.__name__}: {component.error}"), unsafe_allow_html=True)
                     return None
                 else:
                     if show_progress:
-                        st.info(f"⏳ Loading {func.__name__}...")
+                        st.markdown(info_box(f"⏳ Loading {func.__name__}..."), unsafe_allow_html=True)
                     st.rerun()
         
         return wrapper

@@ -10,7 +10,7 @@ Extracted from report_tabs.py to improve modularity and maintainability.
 
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
-from ...ui.theme import ComponentThemes, info_box
+from ...ui.theme import info_box, success_box, warning_box, error_box
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -58,7 +58,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
 
     
     if not xml_content:
-        st.info("📋 Upload and process an XML file to see List Reports")
+        st.markdown(info_box("📋 Upload and process an XML file to see List Reports"), unsafe_allow_html=True)
         return
     
     try:
@@ -66,8 +66,8 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
         # Use ONLY cached analysis data - never trigger reprocessing
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if not analysis:
-            st.error("⚠️ Analysis data not available. Please ensure XML processing completed successfully.")
-            st.info("💡 Try refreshing the page or uploading your XML file again.")
+            st.markdown(error_box("⚠️ Analysis data not available. Please ensure XML processing completed successfully."), unsafe_allow_html=True)
+            st.markdown(info_box("💡 Try refreshing the page or uploading your XML file again."), unsafe_allow_html=True)
             return
         
         from ...core.report_classifier import ReportClassifier
@@ -80,7 +80,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
         if report_results and hasattr(report_results, 'report_breakdown') and 'list' in report_results.report_breakdown:
             list_reports = report_results.report_breakdown['list']
         else:
-            st.info("📋 No List Reports found in this XML file.")
+            st.markdown(info_box("📋 No List Reports found in this XML file."), unsafe_allow_html=True)
             st.caption("This XML contains only searches or other report types.")
             return
         
@@ -93,7 +93,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
             list_reports = report_results.report_breakdown['list']
         else:
             # No pre-processed data available - skip expensive processing
-            st.info("📋 No List Reports found in this XML file.")
+            st.markdown(info_box("📋 No List Reports found in this XML file."), unsafe_allow_html=True)
             st.caption("This XML contains only searches or other report types.")
             return
         list_count = len(list_reports)
@@ -105,7 +105,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
             cache_processed_data(toast_cache_key, True)
         
         if not list_reports:
-            st.info("📋 No List Reports found in this XML file")
+            st.markdown(info_box("📋 No List Reports found in this XML file"), unsafe_allow_html=True)
             return
 
         # 📋 List Reports Analysis - Collapsed expandable frame (not fragmented)
@@ -148,7 +148,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.error(f"Error analyzing List Reports: {str(e)}")
+        st.markdown(error_box(f"Error analyzing List Reports: {str(e)}"), unsafe_allow_html=True)
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -249,7 +249,7 @@ def render_list_report_details(report):
                             del col_data
                             # No gc.collect() here - too frequent
                 else:
-                    st.info("No columns defined")
+                    st.markdown(info_box("No columns defined"), unsafe_allow_html=True)
                 
                 # Filtering criteria
                 st.markdown(f"**Has Criteria:** {'Yes' if group.get('has_criteria', False) else 'No'}")
@@ -448,7 +448,7 @@ def render_list_report_details(report):
                         if report_size == "large" and j % 50 == 0:  # Every 50 criteria, light cleanup
                             gc.collect()
     else:
-        st.info("No column groups found")
+        st.markdown(info_box("No column groups found"), unsafe_allow_html=True)
     
     # SIZE-ADAPTIVE: Final cleanup based on report size
     if report_size == "large":
