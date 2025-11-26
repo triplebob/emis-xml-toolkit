@@ -7,8 +7,8 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 
 | **Feature** | **Capability** | **Benefit** |
 |-------------|----------------|-------------|
-| **🏥 Clinical Translation** | EMIS GUID → SNOMED via cached lookup tables | Instant code translation without external dependencies |
-| **🌳 NHS API Integration** | Optional FHIR R4 hierarchy expansion | Live validation against current NHS terminology |
+| **🏥 Code Translation** | EMIS GUID → SNOMED via cached lookup tables | Instant code translation without external dependencies |
+| **🌳 NHS API Support** | Optional FHIR R4 hierarchy expansion | Live validation against current NHS terminology |
 | **🔍 Search Analysis** | Multi-tab interface for all EMIS XML types | Complete visibility into search logic and dependencies |
 | **📤 Export System** | Excel, CSV, JSON, XML-ready formats | Ready-to-use outputs for external systems |
 | **⚡ Performance** | Session caching + adaptive threading | Process large XMLs efficiently on any device |
@@ -125,7 +125,7 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 ## 🚀 Quick Start
 
 ### **Option 1: Use Live App (Recommended)**
-**[🌐 Access Live Application](https://clinxml.streamlit.app/)** - No installation required
+**[Access Live Application](https://clinxml.streamlit.app/)** - No installation required
 
 1. Upload your EMIS XML file
 2. View comprehensive analysis across 5 specialised tabs
@@ -179,68 +179,13 @@ pip list | grep -E "(streamlit|pandas|requests)"
 streamlit run streamlit_app.py --logger.level debug
 ```
 
-### **Sample XML Files**
-
-For development and testing purposes, anonymized sample XML files can be placed in `samples/` directory:
-
-```
-samples/
-├── search_example.xml      # Population-based search with criteria groups
-├── list_report_example.xml # Multi-column data extraction
-├── audit_report_example.xml # Quality monitoring report
-└── aggregate_example.xml   # Statistical analysis report
-```
-
-**Sample File Requirements:**
-- All patient identifiers removed/anonymized
-- Generic practice codes (e.g., "PRAC001")
-- SNOMED codes replaced with test codes where appropriate
-- Dates adjusted to generic test dates
-
 ---
 
 ## 🏗️ System Architecture
 
-> **📊 [View Detailed Architecture Diagram](docs/architecture/system-architecture-diagram.md)** - Comprehensive visual overview with component relationships
+> **📊 [View Detailed Architecture Diagram (Mermaid)](docs/architecture/system-architecture-diagram.md)** - Comprehensive visual overview with component relationships
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        ClinXML Architecture                    │
-└─────────────────────────────────────────────────────────────────┘
-
-📤 XML Upload                🔄 Processing Pipeline              📊 Output
-     │                            │                                 │
-     ▼                            ▼                                 ▼
-┌─────────┐    ┌──────────────────────────┐    ┌─────────────────────┐
-│XML File │───▶│     XML Parsers          │───▶│   5-Tab UI          │
-│(EMIS)   │    │  • base_parser.py        │    │ • Clinical Codes    │
-└─────────┘    │  • criterion_parser.py   │    │ • Search Analysis   │
-               │  • report_parser.py      │    │ • List Reports      │
-               │  • value_set_parser.py   │    │ • Audit Reports     │
-               └──────────┬───────────────┘    │ • Aggregate Reports │
-                          │                    └─────────────────────┘
-                          ▼                               │
-               ┌─────────────────────────┐               ▼
-               │    Core Translation     │    ┌─────────────────────┐
-               │  • EMIS GUID → SNOMED   │───▶│   Export System     │
-               │  • translator.py        │    │ • Excel, CSV, JSON  │
-               └──────────┬──────────────┘    │ • Multi-sheet       │
-                          │                   │ • Smart filtering   │
-                          ▼                   └─────────────────────┘
-    ┌────────────────────────────────────────────┐
-    │              Caching Layer                 │
-    │                                            │
-    │  1️⃣ Session Cache ──▶ 2️⃣ GitHub Cache     │
-    │      (60min TTL)         (Bulk EMIS)      │
-    │                                 │          │
-    │                                 ▼          │
-    │                      3️⃣ NHS Terminology    │
-    │                         Server (Optional)  │
-    │                         • OAuth2 Auth      │
-    │                         • FHIR R4 API      │
-    │                         • Rate Limited     │
-    └────────────────────────────────────────────┘
-```
+![Architecture Diagram](img/architecture-diagram.svg)
 
 ---
 
@@ -382,27 +327,21 @@ Error States:
 
 ## 🤝 Contributing
 
-### **Bug Reports**
-Please report issues with detailed XML examples (anonymized) and steps to reproduce.
+**Bug Reports** - Please report issues with detailed XML examples (anonymized) and steps to reproduce.
 
-### **Feature Requests**
-Enhancement suggestions welcome, particularly for new EMIS XML patterns or export formats.
+**Feature Requests** - Enhancement suggestions welcome, particularly for new EMIS XML patterns or export formats.
 
-### **Technical Documentation**
-Contributions to technical documentation and pattern identification appreciated.
+**Technical Documentation** - Contributions to technical documentation and pattern identification appreciated.
 
 ---
 
 ## ⚖️ Legal & Compliance
 
-### **Disclaimer**
-**EMIS and EMIS Web are trademarks of Optum Inc.** This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any of their subsidiaries. All trademarks are the property of their respective owners.
+**Disclaimer** - **EMIS and EMIS Web are trademarks of Optum Inc.** This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any of their subsidiaries. All trademarks are the property of their respective owners.
 
-### **License**
-This project is provided as-is for healthcare and research purposes. Users are responsible for ensuring compliance with local data protection and clinical governance requirements.
+**License** - This project is provided as-is for healthcare and research purposes. Users are responsible for ensuring compliance with local data protection and clinical governance requirements.
 
-### **No Warranty**
-This toolkit is provided without warranty of any kind. Healthcare professionals should validate all clinical code translations against authoritative sources before clinical use.
+**No Warranty** - This toolkit is provided without warranty of any kind. Healthcare professionals should validate all clinical code translations against authoritative sources before clinical use.
 
 ---
 
