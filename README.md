@@ -93,7 +93,6 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 ### **Patient Demographics & LSOA Filtering**
 - Future-proof LSOA detection supporting existing 2011 census data, with dynamic year support for future LSOA releases
 - Demographics-only XML analysis without clinical codes
-- EMIS-style phrasing for patient demographic criteria
 - Individual LSOA code display in exports
 - Grouped criteria analysis for shared IDs with different demographic values
 

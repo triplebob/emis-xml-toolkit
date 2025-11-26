@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="776" height="608" class="svgbob"><style>.svgbob line, .svgbob path, .svgbob circle, .svgbob rect, .svgbob polygon {
+    stroke: black;
+    stroke-width: 2;
+    stroke-opacity: 1;
+    fill-opacity: 1;
+    stroke-linecap: round;
+    stroke-linejoin: miter;
+}
+.svgbob text {
+    white-space: pre;
+    fill: black;
+    font-family: Iosevka Fixed, monospace;
+    font-size: 14px;
+}
+.svgbob rect.backdrop {
+    stroke: none;
+    fill: white;
+}
+.svgbob .broken {
+    stroke-dasharray: 8;
+}
+.svgbob .filled {
+    fill: black;
+}
+.svgbob .bg_filled {
+    fill: white;
+    stroke-width: 1;
+}
+.svgbob .nofill {
+    fill: white;
+}
+.svgbob .end_marked_arrow {
+    marker-end: url(#arrow);
+}
+.svgbob .start_marked_arrow {
+    marker-start: url(#arrow);
+}
+.svgbob .end_marked_diamond {
+    marker-end: url(#diamond);
+}
+.svgbob .start_marked_diamond {
+    marker-start: url(#diamond);
+}
+.svgbob .end_marked_circle {
+    marker-end: url(#circle);
+}
+.svgbob .start_marked_circle {
+    marker-start: url(#circle);
+}
+.svgbob .end_marked_open_circle {
+    marker-end: url(#open_circle);
+}
+.svgbob .start_marked_open_circle {
+    marker-start: url(#open_circle);
+}
+.svgbob .end_marked_big_open_circle {
+    marker-end: url(#big_open_circle);
+}
+.svgbob .start_marked_big_open_circle {
+    marker-start: url(#big_open_circle);
+}<!--separator--></style><defs><marker id="arrow" viewBox="-2 -2 8 8" refX="4" refY="2" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,0 0,4 4,2 0,0"></polygon></marker><marker id="diamond" viewBox="-2 -2 8 8" refX="4" refY="2" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,2 2,0 4,2 2,4 0,2"></polygon></marker><marker id="circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><circle cx="4" cy="4" r="2" class="filled"></circle></marker><marker id="open_circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><circle cx="4" cy="4" r="2" class="bg_filled"></circle></marker><marker id="big_open_circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><circle cx="4" cy="4" r="3" class="bg_filled"></circle></marker></defs><rect class="backdrop" x="0" y="0" width="776" height="608"></rect><rect x="4" y="24" width="760" height="32" class="solid nofill" rx="0"></rect><text x="306" y="44" >ClinXML</text><text x="370" y="44" >Architecture</text><rect x="4" y="136" width="120" height="48" class="solid nofill" rx="0"></rect><text x="26" y="156" >XML</text><text x="58" y="156" >File</text><path d="M 40,160 A 16,16 0,0,0 40,176" class="nofill"></path><text x="42" y="172" >EMIS</text><path d="M 72,160 A 16,16 0,0,1 72,176" class="nofill"></path><rect x="532" y="296" width="232" height="80" class="solid nofill" rx="0"></rect><text x="594" y="316" >Export</text><text x="650" y="316" >System</text><text x="618" y="332" >CSV,</text><text x="658" y="332" >JSON</text><text x="610" y="348" >sheet</text><text x="610" y="364" >filtering</text><rect x="84" y="392" width="680" height="192" class="solid nofill" rx="0"></rect><text x="354" y="412" >Caching</text><text x="418" y="412" >Layer</text><text x="130" y="524" >NHS</text><text x="162" y="524" >Terminology</text><text x="202" y="540" >Auth</text><text x="194" y="556" >API</text><text x="194" y="572" >Limited</text><text x="106" y="444" >💾</text><text x="106" y="460" >🌐</text><text x="130" y="444" >Session</text><text x="194" y="444" >Cache</text><text x="130" y="460" >GitHub</text><text x="186" y="460" >Cache</text><text x="210" y="476" >API</text><text x="194" y="492" >Limited</text><path d="M 248,432 A 16,16 0,0,0 248,448" class="nofill"></path><text x="250" y="444" >60min</text><text x="298" y="444" >TTL</text><path d="M 320,432 A 16,16 0,0,1 320,448" class="nofill"></path><text x="258" y="524" >Server</text><path d="M 320,512 A 16,16 0,0,0 320,528" class="nofill"></path><text x="322" y="524" >Optional</text><path d="M 384,512 A 16,16 0,0,1 384,528" class="nofill"></path><text x="26" y="92" >📤</text><text x="50" y="92" >XML</text><text x="82" y="92" >Upload</text><line x1="76" y1="96" x2="76" y2="116" class="solid"></line><polygon points="72,116 80,116 76,128" class="filled"></polygon><text x="250" y="92" >🔃</text><text x="274" y="92" >Processing</text><line x1="332" y1="96" x2="332" y2="116" class="solid"></line><polygon points="328,116 336,116 332,128" class="filled"></polygon><text x="274" y="156" >XML</text><text x="306" y="156" >Parsers</text><line x1="256" y1="176" x2="264" y2="176" class="solid"></line><text x="266" y="172" >parser.py</text><line x1="288" y1="192" x2="296" y2="192" class="solid"></line><text x="298" y="188" >parser.py</text><line x1="288" y1="208" x2="296" y2="208" class="solid"></line><text x="298" y="204" >parser.py</text><line x1="264" y1="224" x2="272" y2="224" class="solid"></line><text x="274" y="220" >set</text><line x1="296" y1="224" x2="304" y2="224" class="solid"></line><text x="306" y="220" >parser.py</text><polygon points="328,260 336,260 332,272" class="filled"></polygon><text x="266" y="300" >Core</text><text x="306" y="300" >Translation</text><text x="266" y="316" >GUID</text><polygon points="328,372 336,372 332,384" class="filled"></polygon><text x="642" y="92" >Output</text><line x1="652" y1="96" x2="652" y2="116" class="solid"></line><polygon points="648,116 656,116 652,128" class="filled"></polygon><text x="610" y="156" >5</text><text x="626" y="156" >Tab</text><text x="658" y="156" >UI</text><text x="634" y="172" >Codes</text><text x="618" y="188" >Analysis</text><text x="602" y="204" >Results</text><text x="610" y="220" >Reports</text><text x="642" y="236" >Reports</text><polygon points="648,276 656,276 652,288" class="filled"></polygon><text x="362" y="92" >Pipeline</text><text x="618" y="92" >📊</text><line x1="136" y1="152" x2="160" y2="152" class="solid"></line><polygon points="160,148 168,152 160,156" class="filled"></polygon><line x1="472" y1="152" x2="496" y2="152" class="solid"></line><polygon points="496,148 504,152 496,156" class="filled"></polygon><line x1="472" y1="312" x2="496" y2="312" class="solid"></line><polygon points="496,308 504,312 496,316" class="filled"></polygon><g><line x1="196" y1="136" x2="460" y2="136" class="solid"></line><line x1="196" y1="136" x2="196" y2="232" class="solid"></line><line x1="460" y1="136" x2="460" y2="232" class="solid"></line><line x1="196" y1="232" x2="460" y2="232" class="solid"></line><line x1="332" y1="232" x2="332" y2="260" class="solid"></line></g><g><text x="210" y="172">•</text><text x="226" y="172">base</text></g><g><text x="210" y="188">•</text><text x="226" y="188">criteria</text></g><g><text x="210" y="204">•</text><text x="226" y="204">response</text></g><g><text x="210" y="220">•</text><text x="226" y="220">value</text></g><g><line x1="196" y1="280" x2="460" y2="280" class="solid"></line><line x1="196" y1="280" x2="196" y2="344" class="solid"></line><line x1="460" y1="280" x2="460" y2="344" class="solid"></line><line x1="196" y1="344" x2="460" y2="344" class="solid"></line><line x1="332" y1="344" x2="332" y2="372" class="solid"></line></g><g><text x="210" y="316">•</text><text x="226" y="316">EMIS</text></g><g><text x="306" y="316">→</text><text x="322" y="316">SNOMED</text></g><g><text x="210" y="332">•</text><text x="226" y="332">translator.py</text></g><g><line x1="532" y1="136" x2="764" y2="136" class="solid"></line><line x1="532" y1="136" x2="532" y2="248" class="solid"></line><line x1="764" y1="136" x2="764" y2="248" class="solid"></line><line x1="532" y1="248" x2="764" y2="248" class="solid"></line><line x1="652" y1="248" x2="652" y2="276" class="solid"></line></g><g><text x="546" y="172">•</text><text x="562" y="172">Clinical</text></g><g><text x="546" y="188">•</text><text x="562" y="188">Search</text></g><g><text x="546" y="204">•</text><text x="562" y="204">Test</text></g><g><text x="546" y="220">•</text><text x="562" y="220">Audit</text></g><g><text x="546" y="236">•</text><text x="562" y="236">Aggregate</text></g><g><text x="546" y="332">•</text><text x="562" y="332">Excel,</text></g><g><text x="546" y="348">•</text><text x="562" y="348">Multi</text></g><g><text x="546" y="364">•</text><text x="562" y="364">Smart</text></g><g><text x="138" y="540">•</text><text x="154" y="540">OAuth</text></g><g><text x="138" y="556">•</text><text x="154" y="556">Rate</text></g><g><text x="138" y="572">•</text><text x="154" y="572">Rate</text></g><g><text x="138" y="476">•</text><text x="154" y="476">GitHub</text></g><g><text x="138" y="492">•</text><text x="154" y="492">Rate</text></g><g><text x="106" y="524">🖥</text><text x="114" y="524">️</text></g></svg>
