@@ -14,7 +14,7 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 from ..core.session_state import SessionStateKeys
 from ..core.version import __version__
-from ..ui.theme import info_box, success_box, warning_box, error_box
+# Note: theme imports removed to prevent circular imports
 
 
 class EMISDebugLogger:
@@ -241,6 +241,7 @@ def render_debug_controls() -> None:
             st.session_state[SessionStateKeys.DEBUG_MODE] = debug_mode
             
             if debug_mode:
+                from ..ui.theme import info_box
                 st.markdown(info_box("Debug logging is enabled. Check console output for detailed logs."), unsafe_allow_html=True)
                 
                 # Option to download debug logs
@@ -290,11 +291,14 @@ def render_debug_controls() -> None:
                                     success_message += f"- {file}\n"
                                 if formatted_date:
                                     success_message += f"\n**Last updated:** {formatted_date}"
+                                from ..ui.theme import success_box
                                 st.markdown(success_box(success_message), unsafe_allow_html=True)
                             else:
+                                from ..ui.theme import warning_box
                                 st.markdown(warning_box("⚠️ No files were updated"), unsafe_allow_html=True)
                     
                     except Exception as e:
+                        from ..ui.theme import error_box
                         st.markdown(error_box(f"❌ Version update failed: {str(e)}"), unsafe_allow_html=True)
                         import traceback
                         with st.expander("🔍 Error Details", expanded=True):
@@ -312,6 +316,7 @@ def render_debug_controls() -> None:
             @st.fragment
             def cache_generation_fragment():
                 if st.button("🔨 Generate Cache", key="generate_cache_btn"):
+                    from ..ui.theme import info_box
                     st.markdown(info_box("🔐 Cache will be encrypted using GZIP_TOKEN from secrets"), unsafe_allow_html=True)
                     try:
                         # Import required modules
@@ -335,6 +340,7 @@ def render_debug_controls() -> None:
                             print("DEBUG - No version info found in session state")
                         
                         if lookup_df is None or lookup_df.empty:
+                            from ...ui.theme import error_box
                             st.markdown(error_box("❌ No lookup table loaded. Please check that the app has loaded the lookup table."), unsafe_allow_html=True)
                         else:
                             with st.spinner("Generating EMIS lookup cache for GitHub..."):
@@ -353,11 +359,14 @@ def render_debug_controls() -> None:
                                 
                                 if success:
                                     st.toast("✅ Encrypted GitHub cache generated successfully!", icon="🎉")
+                                    from ...ui.theme import info_box
                                     st.markdown(info_box("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users."), unsafe_allow_html=True)
                                 else:
+                                    from ...ui.theme import error_box
                                     st.markdown(error_box("❌ Failed to generate GitHub cache"), unsafe_allow_html=True)
                     
                     except Exception as e:
+                        from ...ui.theme import error_box
                         st.markdown(error_box(f"❌ Cache generation failed: {str(e)}"), unsafe_allow_html=True)
             
             cache_generation_fragment()
@@ -378,6 +387,7 @@ def render_debug_controls() -> None:
                     if success:
                         st.toast("✅ Performance tests passed!", icon="🚀")
                     else:
+                        from ...ui.theme import error_box
                         st.markdown(error_box("❌ Performance tests failed!"), unsafe_allow_html=True)
                     
                     with st.expander("📄 Performance Test Output", expanded=not success):

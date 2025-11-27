@@ -730,14 +730,14 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
             # Value sets (codes being searched for) - exclude linked criteria value sets
             main_value_sets = filter_linked_value_sets_from_main(criterion)
             
-            # Separate EMISINTERNAL codes from clinical codes
+            # Separate EMISINTERNAL codes from clinical codes and filter out restriction codes
             clinical_value_sets = []
             emisinternal_value_sets = []
             
             for vs in main_value_sets:
                 if vs.get('code_system') == 'EMISINTERNAL':
                     emisinternal_value_sets.append(vs)
-                else:
+                elif not vs.get('is_restriction', False):  # Exclude restriction codes from main display
                     clinical_value_sets.append(vs)
             
             # Display clinical codes only (no EMISINTERNAL)
@@ -898,15 +898,60 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                         else:
                             st.caption("• Patient demographics filtering")
                     else:
-                        # Use the existing render_column_filter function for other types
-                        filter_desc = render_column_filter(filters[0])
-                        if filter_desc:
-                            st.caption(f"• {filter_desc}")
+                        # Special handling for IS_PRIVATE to include actual value
+                        is_private_filter = False
+                        for flt in filters:
+                            column = flt.get('column', '')
+                            if isinstance(column, list):
+                                is_private_filter = any('IS_PRIVATE' in str(col).upper() for col in column)
+                            else:
+                                is_private_filter = 'IS_PRIVATE' in str(column).upper()
+                            if is_private_filter:
+                                break
+                        
+                        if is_private_filter:
+                            # Find the IS_PRIVATE value from EMISINTERNAL value sets
+                            private_value = None
+                            for vs in emisinternal_value_sets:
+                                # Check if this value set has boolean values (likely IS_PRIVATE)
+                                for value_item in vs.get('values', []):
+                                    val = value_item.get('value', '').lower()
+                                    if val in ['true', 'false']:
+                                        private_value = val
+                                        break
+                                if private_value:
+                                    break
+                            
+                            if private_value == 'true':
+                                st.caption("• Include privately prescribed: True")
+                            elif private_value == 'false':
+                                st.caption("• Include privately prescribed: False")
+                            else:
+                                st.caption("• Include privately prescribed")
+                        else:
+                            # Use the existing render_column_filter function for other types
+                            filter_desc = render_column_filter(filters[0])
+                            if filter_desc:
+                                st.caption(f"• {filter_desc}")
             
-            # Convert EMISINTERNAL codes to filter descriptions using display names
-            if emisinternal_value_sets:
+            # Convert EMISINTERNAL codes to filter descriptions using display names  
+            # Filter out IS_PRIVATE value sets since they're shown in main filters
+            filtered_emisinternal_sets = []
+            for vs in emisinternal_value_sets:
+                # Skip value sets that contain boolean values (likely IS_PRIVATE)
+                is_boolean_vs = False
+                for value_item in vs.get('values', []):
+                    val = value_item.get('value', '').lower()
+                    if val in ['true', 'false']:
+                        is_boolean_vs = True
+                        break
+                
+                if not is_boolean_vs:
+                    filtered_emisinternal_sets.append(vs)
+            
+            if filtered_emisinternal_sets:
                 st.markdown("**&nbsp;&nbsp;&nbsp;&nbsp;⚙️ Additional Filters:**")
-                for vs in emisinternal_value_sets:
+                for vs in filtered_emisinternal_sets:
                     vs_description = vs.get('description', '')
                     
                     # Use the value set description if available for context
@@ -951,7 +996,13 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                         if display_name and display_name.strip():
                             # Special handling for specific column types
                             if column_name == 'ISSUE_METHOD':
-                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {context}: {display_name}")
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {display_name} issue method")
+                            elif column_name == 'IS_PRIVATE' or 'private' in column_display_name.lower():
+                                # Handle boolean values for IS_PRIVATE/privately prescribed column
+                                if display_name.lower() == 'true':
+                                    st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} privately prescribed")
+                                else:
+                                    st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} NHS prescribed")
                             elif code_value.upper() == 'PROBLEM' and 'consultation' in context:
                                 st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} consultations where the consultation heading is: {display_name}")
                             elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
@@ -962,7 +1013,19 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                                 }
                                 st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {context}: {display_name}')}")
                             else:
-                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {context}: {display_name}")
+                                # Handle boolean-like display names that don't make sense as standalone
+                                if display_name.lower() in ['true', 'false']:
+                                    if column_name:
+                                        # Try to provide meaningful context for boolean values
+                                        if display_name.lower() == 'true':
+                                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} where {column_name.lower().replace('_', ' ')} is enabled")
+                                        else:
+                                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} where {column_name.lower().replace('_', ' ')} is disabled")
+                                    else:
+                                        # Fallback for boolean without column context
+                                        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal filter")
+                                else:
+                                    st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {display_name}")
                         elif code_value:
                             st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal code: {code_value}")
                         else:
@@ -1422,6 +1485,10 @@ def render_column_filter(column_filter):
                 return f"{action} episode types"
             elif 'ISSUE_METHOD' in column_check:
                 return f"{action} specific issue methods"
+            elif any(col.upper() == 'IS_PRIVATE' for col in column_check) or (display_name and 'privately prescribed' in display_name.lower()):
+                # For IS_PRIVATE, we need to find the actual value from EMISINTERNAL value sets
+                # Since they're processed separately, we'll handle this in the main filter processing
+                return f"{action} privately prescribed"
             elif 'DISPLAYTERM' in column_check:
                 return f"{action} specific medication names"
     
@@ -1886,14 +1953,10 @@ def render_patient_demographics_filter(column_filter):
     # Extract year from column name for EMIS-style display
     year_match = None
     column_upper = column_display.upper()
-    if '2011' in column_upper:
-        year_match = '2011'
-    elif '2015' in column_upper:
-        year_match = '2015'
-    elif '2021' in column_upper:
-        year_match = '2021'
-    elif '2031' in column_upper:
-        year_match = '2031'
+    # Extract year using regex pattern (future-proof for all census years)
+    year_search = re.search(r'20(\d{2})', column_upper)
+    if year_search:
+        year_match = f"20{year_search.group(1)}"
     
     year_text = f" ({year_match})" if year_match else ""
     action = "Include" if in_not_in == "IN" else "Exclude"

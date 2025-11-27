@@ -21,6 +21,8 @@ def render_info_box(message: str, box_type: str = "info", icon: str = None) -> N
         message = f"{icon} {message}"
     
     from .theme import info_box, success_box, warning_box, error_box
+    from ..common.ui_error_handling import display_generic_error
+    
     if box_type == "info":
         st.markdown(info_box(message), unsafe_allow_html=True)
     elif box_type == "success":
@@ -28,7 +30,7 @@ def render_info_box(message: str, box_type: str = "info", icon: str = None) -> N
     elif box_type == "warning":
         st.markdown(warning_box(message), unsafe_allow_html=True)
     elif box_type == "error":
-        st.markdown(error_box(message), unsafe_allow_html=True)
+        display_generic_error(message, "error")
     else:
         st.markdown(info_box(message), unsafe_allow_html=True)
 

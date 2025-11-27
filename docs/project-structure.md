@@ -100,15 +100,18 @@ The codebase is organised into logical directories that separate concerns and en
 │       └── dataframe_utils.py                          # DataFrame operations
 ├── docs/                                               # 📁 **Technical documentation**
 │   ├── architecture/                                   # 📁 **Architecture documentation**
-│   │   ├── error-handling.md                           # Guide to catching and logging errors
 │   │   ├── modules.md                                  # Module architecture guide
 │   │   ├── session-state-management.md                 # Session state architecture
-│   │   └── project-structure.md                        # This document
+│   │   └── namespace-handling.md                       # Namespace handling guide
+│   ├── error handling/                                 # 📁 **Error handling documentation**
+│   │   ├── error-overview.md                           # Error handling system overview for clinical users
+│   │   ├── backend-error-handling.md                   # Technical guide for backend error infrastructure
+│   │   └── ui-error-handling.md                        # Technical guide for Streamlit UI error display
 │   ├── terminology-server/                             # 📁 **NHS Terminology Server documentation**
 │   │   ├── term-server-overview.md                     # User-focused integration guide
 │   │   └── term-server-technical-guide.md              # Developer implementation reference
+│   ├── project-structure.md                            # This document  
 │   ├── emis-xml-patterns.md                            # EMIS XML pattern reference
-│   ├── namespace-handling.md                           # Namespace handling guide
 │   └── theme-colors.md                                 # Custom theme colour reference guide
 ├── img/                                                # 📁 **Application branding assets**
 │   ├── logo.svg                                        # ClinXML medical cross icon
@@ -211,17 +214,29 @@ Raw Data → Type-Specific Processing → Format Generation → User Download
 
 ## 📚 Related Documentation
 
+### **Architecture**
 - **[Module Architecture Guide](architecture/modules.md)** - Detailed module descriptions
 - **[Session State Management](architecture/session-state-management.md)** - Session state architecture
-- **[NHS Terminology Server Overview](terminology-server/term-server-overview.md)** - User guide for terminology expansion
-- **[NHS Terminology Server Technical Guide](terminology-server/term-server-technical-guide.md)** - Developer implementation reference
-- **[EMIS XML Patterns](emis-xml-patterns.md)** - XML parsing patterns
+- **[Namespace Handling](architecture/namespace-handling.md)** - Namespace handling guide
+
+### **Error Handling**
+- **[Error Handling Overview](error\ handling/overview.md)** - System overview for clinical users and analysts
+- **[Backend Error Handling](error\ handling/backend-error-handling.md)** - Technical guide for core error infrastructure
+- **[UI Error Handling](error\ handling/ui-error-handling.md)** - Technical guide for Streamlit error display
+
+### **NHS Terminology Server**
+- **[Terminology Server Overview](terminology-server/term-server-overview.md)** - User guide for terminology expansion
+- **[Terminology Server Technical Guide](terminology-server/term-server-technical-guide.md)** - Developer implementation reference
+
+### **Reference**
+- **[EMIS XML Patterns](emis-xml-patterns.md)** - XML parsing patterns and structures
+- **[Theme Colors](theme-colors.md)** - UI theme and styling reference
 
 ---
 
 *This document reflects the current architecture as of:
 
-*Last Updated: 25th November 2025*  
-*Application Version: 2.2.5*  
+*Last Updated: 27th November 2025*  
+*Application Version: 2.2.6*  
 
 For specific module details, see the [Module Architecture Guide](architecture/modules.md).*

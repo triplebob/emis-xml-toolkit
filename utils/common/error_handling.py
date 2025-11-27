@@ -5,6 +5,7 @@ Provides consistent exception classes, logging, and user-friendly error messages
 
 import logging
 import traceback
+from datetime import datetime
 from typing import Optional, Dict, Any, Callable
 from enum import Enum
 from dataclasses import dataclass
@@ -233,7 +234,7 @@ class TerminologyServerError(EMISConverterError):
         self.user_guidance = user_guidance
         super().__init__(
             message=message,
-            category=ErrorCategory.SYSTEM,
+            category=ErrorCategory.TERMINOLOGY_SERVER,
             **kwargs
         )
     
@@ -303,7 +304,7 @@ class ErrorHandler:
         
         # Store error for session summary
         self._session_errors.append({
-            'timestamp': logging.Formatter().formatTime(logging.LogRecord('', 0, '', 0, '', (), None)),
+            'timestamp': datetime.now().isoformat(),
             'error': error,
             'details': technical_details
         })
@@ -324,7 +325,7 @@ class ErrorHandler:
         diagnostic_info = {
             'operation': operation,
             'element_name': element_name,
-            'timestamp': logging.Formatter().formatTime(logging.LogRecord('', 0, '', 0, '', (), None))
+            'timestamp': datetime.now().isoformat()
         }
         
         if context:
@@ -407,20 +408,33 @@ class ErrorHandler:
         return emis_error
     
     def _categorize_exception(self, exception: Exception) -> ErrorCategory:
-        """Categorize a generic exception"""
+        """Categorize a generic exception based on type and module"""
         exception_type = type(exception).__name__
+        exception_module = type(exception).__module__
         
+        # Check for specific exception types and their modules
+        if exception_type == 'ParseError':
+            # Could be xml.etree.ElementTree.ParseError or lxml.etree.XMLSyntaxError
+            if 'xml.etree' in exception_module or 'lxml' in exception_module:
+                return ErrorCategory.XML_PARSING
+        
+        # Map by exception type name
         category_map = {
-            'ET.ParseError': ErrorCategory.XML_PARSING,
-            'ParseError': ErrorCategory.XML_PARSING,
             'XMLSyntaxError': ErrorCategory.XML_PARSING,
             'FileNotFoundError': ErrorCategory.FILE_OPERATION,
             'PermissionError': ErrorCategory.FILE_OPERATION,
+            'IsADirectoryError': ErrorCategory.FILE_OPERATION,
             'IOError': ErrorCategory.FILE_OPERATION,
+            'OSError': ErrorCategory.FILE_OPERATION,
+            'UnicodeDecodeError': ErrorCategory.FILE_OPERATION,
+            'UnicodeEncodeError': ErrorCategory.FILE_OPERATION,
             'ValueError': ErrorCategory.DATA_VALIDATION,
             'TypeError': ErrorCategory.DATA_VALIDATION,
             'KeyError': ErrorCategory.DATA_VALIDATION,
-            'AttributeError': ErrorCategory.SYSTEM
+            'AttributeError': ErrorCategory.SYSTEM,
+            'ImportError': ErrorCategory.SYSTEM,
+            'ModuleNotFoundError': ErrorCategory.SYSTEM,
+            'MemoryError': ErrorCategory.SYSTEM
         }
         
         return category_map.get(exception_type, ErrorCategory.SYSTEM)
@@ -453,8 +467,9 @@ def safe_execute(operation_name: str,
     
     try:
         return func(*args, **kwargs)
-    except EMISConverterError:
-        # Re-raise our custom errors
+    except EMISConverterError as emis_error:
+        # Log our custom errors before re-raising for tracking
+        error_handler.handle_error(emis_error)
         raise
     except Exception as e:
         # Convert generic exceptions

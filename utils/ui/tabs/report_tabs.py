@@ -16,6 +16,7 @@ Specialized report types are handled by dedicated modules:
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
 from ...ui.theme import ComponentThemes, info_box, purple_box, success_box, warning_box, error_box
+from ...common.ui_error_handling import display_generic_error
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -663,10 +664,10 @@ def render_report_visualization(report, analysis):
             elif report.report_type == 'aggregate':
                 render_aggregate_report_details(report)
             else:
-                st.markdown(error_box(f"Unknown report type: {report.report_type}"), unsafe_allow_html=True)
+                display_generic_error(f"Unknown report type: {report.report_type}", "error")
         else:
             # This is a SearchReport object from search_analyzer - shouldn't be in report visualization
-            st.markdown(error_box("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue"), unsafe_allow_html=True)
+            display_generic_error("⚠️ SearchReport object passed to report visualization - this indicates a data flow issue", "error")
             st.write("Object type:", type(report).__name__)
             if hasattr(report, 'name'):
                 st.write("Name:", report.name)

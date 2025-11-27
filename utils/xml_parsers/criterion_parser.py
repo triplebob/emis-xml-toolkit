@@ -4,6 +4,7 @@ Handles parsing of search criteria and column filters
 """
 
 import xml.etree.ElementTree as ET
+import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from .base_parser import XMLParserBase, get_namespaces
@@ -51,8 +52,8 @@ class CriterionParser(XMLParserBase):
         
         column_upper = column_name.upper()
         
-        # LSOA pattern: contains LOWER_AREA followed by a year
-        if 'LOWER_AREA' in column_upper and any(year in column_upper for year in ['2011', '2015', '2021', '2031']):
+        # LSOA pattern: contains LOWER_AREA followed by any year (future-proof for all census years)
+        if 'LOWER_AREA' in column_upper and re.search(r'LOWER_AREA.*20\d{2}', column_upper):
             return True
             
         # Future patient demographics patterns can be added here
@@ -111,7 +112,7 @@ class CriterionParser(XMLParserBase):
         
         for pattern in lsoa_patterns:
             import re
-            if re.match(pattern, column_upper):
+            if re.search(pattern, column_upper):
                 result['is_demographics'] = True
                 result['demographics_type'] = 'LSOA'
                 result['confidence'] = 'high'
@@ -131,7 +132,7 @@ class CriterionParser(XMLParserBase):
         if not result['is_demographics']:  # Only check if not already found
             for pattern in geo_patterns:
                 import re
-                if re.match(pattern, column_upper):
+                if re.search(pattern, column_upper):
                     result['is_demographics'] = True
                     result['demographics_type'] = 'geographical'
                     result['confidence'] = 'medium'
@@ -151,7 +152,7 @@ class CriterionParser(XMLParserBase):
         if not result['is_demographics']:  # Only check if not already found
             for pattern in patient_patterns:
                 import re
-                if re.match(pattern, column_upper):
+                if re.search(pattern, column_upper):
                     result['is_demographics'] = True
                     result['demographics_type'] = 'patient_attributes'
                     result['confidence'] = 'low'
@@ -317,7 +318,10 @@ class CriterionParser(XMLParserBase):
             negation_elem = self.find_element_both(criterion_elem, 'negation')
             if negation_elem is not None:
                 negation_text = self.get_text(negation_elem).lower()
-                if negation_text not in ('true', 'false', '1', '0', 'yes', 'no', ''):
+                if negation_text == '':
+                    warnings.append("Negation element empty, defaulting to false")
+                    negation = False
+                elif negation_text not in ('true', 'false', '1', '0', 'yes', 'no'):
                     warnings.append(f"Invalid negation value: '{negation_text}', defaulting to false")
                     negation = False
                 else:
@@ -333,13 +337,13 @@ class CriterionParser(XMLParserBase):
             
             # Parse value sets with validation
             try:
-                value_sets = self._safe_parse_value_sets(criterion_elem, errors, warnings)
+                value_sets = self._safe_parse_value_sets(criterion_elem, errors, warnings, is_linked_criteria)
             except Exception as e:
                 errors.append(f"Failed to parse value sets: {str(e)}")
             
             # Parse column filters with validation
             try:
-                column_filters = self._safe_parse_column_filters(criterion_elem, errors, warnings)
+                column_filters = self._safe_parse_column_filters(criterion_elem, errors, warnings, is_linked_criteria)
             except Exception as e:
                 errors.append(f"Failed to parse column filters: {str(e)}")
             
@@ -380,7 +384,7 @@ class CriterionParser(XMLParserBase):
             error_msg = f"Unexpected error parsing criterion: {str(e)}"
             return ParseResult.failure_result([error_msg], xml_context)
     
-    def parse_criterion(self, criterion_elem: ET.Element) -> Optional[SearchCriterion]:
+    def parse_criterion(self, criterion_elem: ET.Element, is_linked_criteria: bool = False) -> Optional[SearchCriterion]:
         """Parse individual search criterion"""
         try:
             criterion_id = self.parse_child_text(criterion_elem, 'id', 'Unknown')
@@ -391,7 +395,12 @@ class CriterionParser(XMLParserBase):
             
             # Parse negation - handle both namespaced and non-namespaced
             negation_elem = self.find_element_both(criterion_elem, 'negation')
-            negation = self.get_text(negation_elem).lower() == 'true'
+            negation_text = self.get_text(negation_elem).lower()
+            if negation_text == '':
+                # Note: This is legacy parsing, warnings not collected here
+                negation = False  # Empty string defaults to false
+            else:
+                negation = negation_text == 'true'
             
             # Parse value sets - only from main filterAttribute, not from restrictions
             value_sets = []
@@ -420,7 +429,7 @@ class CriterionParser(XMLParserBase):
                             all_valuesets.append(vs)
             
             for valueset_elem in all_valuesets:
-                value_set = parse_value_set(valueset_elem, self.namespaces)
+                value_set = parse_value_set(valueset_elem, self.namespaces, is_linked_criteria)
                 if value_set:
                     value_sets.append(value_set)
             
@@ -458,7 +467,7 @@ class CriterionParser(XMLParserBase):
                                     for nested_vs in nested_valuesets:
                                         if nested_vs not in all_valuesets:  # Avoid duplicates
                                             all_valuesets.append(nested_vs)  # Track the element
-                                            nested_value_set = parse_value_set(nested_vs, self.namespaces)
+                                            nested_value_set = parse_value_set(nested_vs, self.namespaces, is_linked_criteria)
                                             if nested_value_set:
                                                 value_sets.append(nested_value_set)
             
@@ -490,7 +499,7 @@ class CriterionParser(XMLParserBase):
                             for vs in col_valuesets:
                                 if vs not in all_valuesets:  # Avoid duplicates
                                     all_valuesets.append(vs)
-                                    test_attr_value_set = parse_value_set(vs, self.namespaces)
+                                    test_attr_value_set = parse_value_set(vs, self.namespaces, is_linked_criteria, is_restriction=True)
                                     if test_attr_value_set:
                                         value_sets.append(test_attr_value_set)
             # Parse library items (internal EMIS libraries) - handle both namespaced and non-namespaced
@@ -510,7 +519,7 @@ class CriterionParser(XMLParserBase):
             all_columns = non_namespaced_columns + [c for c in namespaced_columns if c not in non_namespaced_columns]
             
             for column_elem in all_columns:
-                column_filter = self.parse_column_filter(column_elem)
+                column_filter = self.parse_column_filter(column_elem, is_linked_criteria)
                 if column_filter:
                     column_filters.append(column_filter)
             
@@ -581,22 +590,22 @@ class CriterionParser(XMLParserBase):
             # Log error but don't raise to maintain backward compatibility
             return None
     
-    def parse_column_filter(self, column_elem: ET.Element) -> Optional[Dict]:
+    def parse_column_filter(self, column_elem: ET.Element, is_linked_criteria: bool = False) -> Optional[Dict]:
         """Parse column filter information"""
         try:
             # Parse multiple columns if present (EMISINTERNAL pattern: AUTHOR + CURRENTLY_CONTRACTED)
-            # Handle both namespaced and non-namespaced column elements
-            namespaced_col_elements = self.find_elements(column_elem, 'emis:column')
-            non_namespaced_col_elements = column_elem.findall('column')
-            column_elements = non_namespaced_col_elements + [c for c in namespaced_col_elements if c not in non_namespaced_col_elements]
+            # Handle both namespaced and non-namespaced column elements using NamespaceHandler
+            column_elements = self.find_elements_both(column_elem, 'column')
             
+            # Always return list for consistency (fixes dual type issue)
             if len(column_elements) > 1:
                 # Multiple columns - create list
                 columns = [self.get_text(col_elem) for col_elem in column_elements if self.get_text(col_elem)]
                 column_value = columns
             else:
-                # Single column - use string for backward compatibility
-                column_value = self.parse_child_text(column_elem, 'column')
+                # Single column - wrap in list for consistency
+                single_column = self.parse_child_text(column_elem, 'column')
+                column_value = [single_column] if single_column else []
             
             result = {
                 'id': self.parse_child_text(column_elem, 'id'),
@@ -670,19 +679,16 @@ class CriterionParser(XMLParserBase):
             
             # Parse value sets within column filters - handle both namespaced and non-namespaced
             value_sets = []
-            namespaced_vs = self.find_elements(column_elem, './/emis:valueSet')
-            non_namespaced_vs = column_elem.findall('.//valueSet')
-            all_vs = non_namespaced_vs + [v for v in namespaced_vs if v not in non_namespaced_vs]
+            # Use NamespaceHandler for consistent element finding
+            all_vs = self.find_elements_both(column_elem, './/valueSet')
             
             for valueset_elem in all_vs:
-                value_set = parse_value_set(valueset_elem, self.namespaces)
+                value_set = parse_value_set(valueset_elem, self.namespaces, is_linked_criteria)
                 if value_set:
                     value_sets.append(value_set)
             
-            # Parse library items within column filters - handle both namespaced and non-namespaced
-            namespaced_lib = self.find_elements(column_elem, './/emis:libraryItem')
-            non_namespaced_lib = column_elem.findall('.//libraryItem')
-            all_lib = non_namespaced_lib + [l for l in namespaced_lib if l not in non_namespaced_lib]
+            # Parse library items within column filters using NamespaceHandler
+            all_lib = self.find_elements_both(column_elem, './/libraryItem')
             
             for library_elem in all_lib:
                 library_item = self._parse_library_item(library_elem)
@@ -1106,7 +1112,7 @@ class CriterionParser(XMLParserBase):
         return False
     
     # Helper methods for safe parsing
-    def _safe_parse_value_sets(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List[Dict]:
+    def _safe_parse_value_sets(self, criterion_elem: ET.Element, errors: list, warnings: list, is_linked_criteria: bool = False) -> List[Dict]:
         """Safely parse value sets with error collection"""
         value_sets = []
         all_valuesets = []
@@ -1166,7 +1172,7 @@ class CriterionParser(XMLParserBase):
                     continue
                     
                 try:
-                    value_set = parse_value_set(valueset_elem, self.namespaces)
+                    value_set = parse_value_set(valueset_elem, self.namespaces, is_linked_criteria)
                     if value_set:
                         value_sets.append(value_set)
                     else:
@@ -1179,7 +1185,7 @@ class CriterionParser(XMLParserBase):
         
         return value_sets
     
-    def _safe_parse_column_filters(self, criterion_elem: ET.Element, errors: list, warnings: list) -> List[Dict]:
+    def _safe_parse_column_filters(self, criterion_elem: ET.Element, errors: list, warnings: list, is_linked_criteria: bool = False) -> List[Dict]:
         """Safely parse column filters with error collection"""
         column_filters = []
         
@@ -1208,7 +1214,7 @@ class CriterionParser(XMLParserBase):
                     continue
                 
                 try:
-                    column_filter = self.parse_column_filter(column_elem)
+                    column_filter = self.parse_column_filter(column_elem, is_linked_criteria)
                     if column_filter:
                         column_filters.append(column_filter)
                     else:
@@ -1334,10 +1340,10 @@ class CriterionParser(XMLParserBase):
 
 
 # Convenience functions for backward compatibility
-def parse_criterion(criterion_elem: ET.Element, namespaces: Optional[Dict[str, str]] = None) -> Optional[SearchCriterion]:
+def parse_criterion(criterion_elem: ET.Element, namespaces: Optional[Dict[str, str]] = None, is_linked_criteria: bool = False) -> Optional[SearchCriterion]:
     """Parse individual search criterion"""
     parser = CriterionParser(namespaces)
-    return parser.parse_criterion(criterion_elem)
+    return parser.parse_criterion(criterion_elem, is_linked_criteria)
 
 
 def parse_column_filter(column_elem: ET.Element, namespaces: Optional[Dict[str, str]] = None) -> Optional[Dict]:

@@ -1,4 +1,5 @@
 from .theme import info_box, success_box, warning_box, error_box
+from ..common.ui_error_handling import display_generic_error
 """
 Progressive Loading System for EMIS XML Converter UI
 Implements lazy evaluation and async loading for heavy report tab rendering.
@@ -279,7 +280,7 @@ def progressive_component(
             
             elif component.state == LoadState.ERROR:
                 from .theme import error_box
-                st.markdown(error_box(f"❌ Error loading {component.name}: {component.error}"), unsafe_allow_html=True)
+                display_generic_error(f"❌ Error loading {component.name}: {component.error}", "error")
                 if st.button(f"🔄 Retry {component.name}", key=f"retry_{component_id}"):
                     loader.invalidate_component(component_id)
                     st.rerun()

@@ -6,7 +6,7 @@ Handles parsing of clinical code value sets and code systems
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base_parser import XMLParserBase, get_namespaces
-from ..common.error_handling import ParseResult, create_xml_parsing_context
+from ..common.error_handling import ParseResult, create_xml_parsing_context, create_error_context
 
 
 class ValueSetParser(XMLParserBase):
@@ -355,7 +355,7 @@ class ValueSetParser(XMLParserBase):
         from .xml_utils import is_medication_code_system
         return is_medication_code_system(code_system, table_context, column_context)
     
-    def parse_value_set(self, valueset_elem: ET.Element) -> Optional[Dict]:
+    def parse_value_set(self, valueset_elem: ET.Element, is_linked_criteria: bool = False, is_restriction: bool = False) -> Optional[Dict]:
         """Parse value set information"""
         try:
             code_system = self.parse_child_text(valueset_elem, 'codeSystem')
@@ -363,7 +363,9 @@ class ValueSetParser(XMLParserBase):
                 'id': self.parse_child_text(valueset_elem, 'id'),
                 'code_system': code_system,
                 'description': self.parse_child_text(valueset_elem, 'description'),
-                'values': []
+                'values': [],
+                'is_linked_criteria': is_linked_criteria,
+                'is_restriction': is_restriction
             }
             
             # Parse individual values
@@ -395,7 +397,16 @@ class ValueSetParser(XMLParserBase):
             return result if result['values'] or result.get('all_values') else None
             
         except Exception as e:
-            print(f"Error parsing value set: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="value_set",
+                parsing_stage="value_set_parsing"
+            )
+            self.error_handler.log_exception(
+                "value set parsing",
+                e,
+                create_error_context("value_set_parsing", user_data={"operation": "parse_value_set"})
+            )
             return None
     
     def _parse_value_entry(self, values_elem: ET.Element, code_system: str = '') -> Optional[Dict]:
@@ -413,10 +424,23 @@ class ValueSetParser(XMLParserBase):
                 'include_children': self._parse_boolean_child(values_elem, 'includeChildren'),
                 'is_refset': self._parse_boolean_child(values_elem, 'isRefset'),
                 'is_medication': self._is_medication_from_context(code_system, '', ''),  # Basic medication detection based on code system
-                'code_system': code_system
+                'code_system': code_system,
+                # Extended parsing for additional EMIS XML attributes
+                'inactive': self._parse_boolean_child(values_elem, 'inactive'),
+                'legacy_value': self.parse_child_text(values_elem, 'legacyValue'),
+                'cluster_code': self.parse_child_text(values_elem, 'clusterCode')
             }
         except Exception as e:
-            print(f"Error parsing value entry: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="value_entry",
+                parsing_stage="value_entry_parsing"
+            )
+            self.error_handler.log_exception(
+                "value entry parsing",
+                e,
+                create_error_context("value_entry_parsing", user_data={"operation": "parse_value_entry"})
+            )
             return None
     
     def _parse_all_values(self, all_values_elem: ET.Element, parent_code_system: str = '') -> Dict:
@@ -440,7 +464,16 @@ class ValueSetParser(XMLParserBase):
             
             return result
         except Exception as e:
-            print(f"Error parsing all values: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="all_values",
+                parsing_stage="all_values_parsing"
+            )
+            self.error_handler.log_exception(
+                "all values parsing",
+                e,
+                create_error_context("all_values_parsing", user_data={"operation": "parse_all_values"})
+            )
             return {}
     
     def _parse_boolean_child(self, parent: ET.Element, child_name: str) -> bool:
@@ -472,7 +505,7 @@ class ValueSetParser(XMLParserBase):
 
 
 # Convenience function for backward compatibility
-def parse_value_set(valueset_elem: ET.Element, namespaces: Optional[Dict[str, str]] = None) -> Optional[Dict]:
+def parse_value_set(valueset_elem: ET.Element, namespaces: Optional[Dict[str, str]] = None, is_linked_criteria: bool = False, is_restriction: bool = False) -> Optional[Dict]:
     """Parse value set information"""
     parser = ValueSetParser(namespaces)
-    return parser.parse_value_set(valueset_elem)
+    return parser.parse_value_set(valueset_elem, is_linked_criteria, is_restriction)

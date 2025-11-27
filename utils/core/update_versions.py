@@ -27,9 +27,16 @@ def update_file_versions(file_path, file_type="README"):
     changes_made = 0
     
     # Update version references
-    # Pattern: *Application Version: X.X.X*
-    version_pattern = r'\*Application Version: \d+\.\d+\.\d+\*'
-    replacement = f'*Application Version: {__version__}*'
+    # Handle both simple and README.md complex patterns
+    if file_type == "README":
+        # Pattern: *Application Version: [X.X.X](changelog.md) • [View Release Notes](changelog.md)*
+        version_pattern = r'\*Application Version: \[\d+\.\d+\.\d+\]\(changelog\.md\) • \[View Release Notes\]\(changelog\.md\)\*'
+        replacement = f'*Application Version: [{__version__}](changelog.md) • [View Release Notes](changelog.md)*'
+    else:
+        # Pattern: *Application Version: X.X.X*
+        version_pattern = r'\*Application Version: \d+\.\d+\.\d+\*'
+        replacement = f'*Application Version: {__version__}*'
+    
     new_content = re.sub(version_pattern, replacement, content)
     if new_content != content:
         changes_made += 1

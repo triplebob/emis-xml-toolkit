@@ -274,6 +274,16 @@ class JSONExportGenerator:
         criteria_list = []
         
         for criterion in criteria:
+            # Apply minimal filtering - only separate linked criteria from main, preserve all semantic roles
+            try:
+                from ..analysis.linked_criteria_handler import filter_linked_column_filters_from_main, filter_linked_value_sets_from_main
+                main_column_filters = filter_linked_column_filters_from_main(criterion)
+                main_value_sets = filter_linked_value_sets_from_main(criterion)
+            except ImportError:
+                # Fallback if import fails
+                main_column_filters = criterion.column_filters
+                main_value_sets = criterion.value_sets
+            
             criterion_data = {
                 "criterion_id": criterion.id,
                 "table": criterion.table,
@@ -281,14 +291,128 @@ class JSONExportGenerator:
                 "description": criterion.description or "",
                 "negation": criterion.negation,
                 "exception_code": criterion.exception_code,
-                "clinical_codes": self._extract_clinical_codes_from_criterion(criterion),
-                "column_filters": self._build_complete_column_filters(criterion.column_filters),
-                "restrictions": self._build_complete_restrictions(criterion.restrictions),
+                "clinical_codes": self._extract_clinical_codes_from_criterion_filtered(criterion, main_value_sets),
+                "column_filters": self._build_complete_column_filters(main_column_filters),
+                "restrictions": self._build_complete_restrictions(criterion.restrictions, criterion),
                 "linked_criteria": self._build_linked_criteria_details(criterion.linked_criteria)
             }
             criteria_list.append(criterion_data)
         
         return criteria_list
+    
+    def _filter_restriction_value_sets(self, criterion, value_sets):
+        """Filter out duplicate value sets that come from restriction testAttribute sections"""
+        if not criterion.restrictions:
+            return value_sets
+        
+        restriction_value_set_descriptions = set()
+        
+        # Collect descriptions of value sets used in restriction conditions 
+        for restriction in criterion.restrictions:
+            if hasattr(restriction, 'conditions') and restriction.conditions:
+                for condition in restriction.conditions:
+                    # Get value set descriptions from restriction conditions
+                    if condition.get('value_sets'):
+                        for desc in condition['value_sets']:
+                            if desc and desc.strip():
+                                restriction_value_set_descriptions.add(desc.strip())
+        
+        # Keep track of seen value sets by description to handle duplicates
+        seen_descriptions = set()
+        filtered_value_sets = []
+        
+        for vs in value_sets:
+            vs_description = vs.get('description', '').strip()
+            
+            # If this value set is used in restrictions AND we've already seen this description,
+            # it's likely a duplicate from testAttribute - skip it
+            if (vs_description in restriction_value_set_descriptions and 
+                vs_description in seen_descriptions):
+                continue  # Skip this duplicate
+            
+            # Otherwise, include it and mark as seen
+            filtered_value_sets.append(vs)
+            if vs_description:
+                seen_descriptions.add(vs_description)
+        
+        return filtered_value_sets
+    
+    def _filter_linked_criteria_value_sets(self, criterion, value_sets):
+        """Filter out value sets that are used in linked criteria"""
+        if not criterion.linked_criteria:
+            return value_sets
+        
+        linked_value_set_ids = set()
+        
+        # Collect IDs of value sets used in linked criteria
+        for linked in criterion.linked_criteria:
+            # Check value sets directly on linked criteria
+            for linked_vs in linked.value_sets:
+                if linked_vs.get('id'):
+                    linked_value_set_ids.add(linked_vs['id'])
+                if linked_vs.get('description'):
+                    linked_value_set_ids.add(linked_vs['description'])
+            
+            # Check value sets within column filters
+            for column_filter in linked.column_filters:
+                for cf_vs in column_filter.get('value_sets', []):
+                    if cf_vs.get('id'):
+                        linked_value_set_ids.add(cf_vs['id'])
+                    if cf_vs.get('description'):
+                        linked_value_set_ids.add(cf_vs['description'])
+        
+        # Filter out linked value sets
+        filtered_value_sets = []
+        for vs in value_sets:
+            is_linked_vs = (vs.get('id') in linked_value_set_ids or 
+                           vs.get('description') in linked_value_set_ids)
+            if not is_linked_vs:
+                filtered_value_sets.append(vs)
+        
+        return filtered_value_sets
+    
+    def _extract_clinical_codes_from_criterion_filtered(self, criterion, filtered_value_sets) -> List[Dict[str, Any]]:
+        """Extract clinical codes using pre-filtered value sets (same as UI logic)"""
+        codes = []
+        
+        for vs in filtered_value_sets:
+            # Skip EMISINTERNAL codes (they go in column_filters)
+            if vs.get('code_system') == 'EMISINTERNAL':
+                continue
+                
+            for value in vs.get('values', []):
+                emis_code = value.get('value', '')
+                if emis_code:
+                    snomed_info = self._get_snomed_translation(emis_code)
+                    
+                    # Use the best available description: SNOMED description > original display_name > fallback
+                    description = snomed_info.get('description', '').strip()
+                    if not description:
+                        description = value.get('display_name', '').strip()
+                    
+                    # For refsets, if no display_name, try to use value set description (e.g., "COPD_COD")
+                    if not description and snomed_info.get('is_refset', False):
+                        description = vs.get('description', '').strip()
+                    
+                    if not description:
+                        description = 'No description available'
+                    
+                    code_entry = {
+                        "emis_guid": emis_code,
+                        "snomed_code": snomed_info.get('snomed_code', 'Not found'),
+                        "description": description,
+                        "code_system": vs.get('code_system', snomed_info.get('code_system', '')),
+                        "is_medication": snomed_info.get('is_medication', False),
+                        "is_refset": snomed_info.get('is_refset', False),
+                        "is_linked_criteria": vs.get('is_linked_criteria', False),
+                        "is_restriction": vs.get('is_restriction', False),
+                        "include_children": value.get('include_children', False),
+                        "source_context": value.get('display_name', vs.get('description', 'Value Set')),
+                        "translation_status": snomed_info.get('status', 'unknown')
+                    }
+                    codes.append(code_entry)
+        
+        return codes
     
     def _extract_clinical_codes_from_criterion(self, criterion) -> List[Dict[str, Any]]:
         """Extract unique clinical codes with SNOMED translations from a criterion"""
@@ -311,6 +435,11 @@ class JSONExportGenerator:
                     description = snomed_info.get('description', '').strip()
                     if not description:
                         description = value.get('display_name', '').strip()
+                    
+                    # For refsets, if no display_name, try to use value set description (e.g., "COPD_COD")
+                    if not description and snomed_info.get('is_refset', False):
+                        description = vs.get('description', '').strip()
+                    
                     if not description:
                         description = 'No description available'
                     
@@ -321,6 +450,8 @@ class JSONExportGenerator:
                         "code_system": vs.get('code_system', snomed_info.get('code_system', '')),
                         "is_medication": snomed_info.get('is_medication', False),
                         "is_refset": snomed_info.get('is_refset', False),
+                        "is_linked_criteria": vs.get('is_linked_criteria', False),
+                        "is_restriction": vs.get('is_restriction', False),
                         "include_children": value.get('include_children', False),
                         "source_context": value.get('display_name', vs.get('description', 'Value Set')),
                         "translation_status": snomed_info.get('status', 'unknown')
@@ -344,6 +475,11 @@ class JSONExportGenerator:
                         description = snomed_info.get('description', '').strip()
                         if not description:
                             description = value.get('display_name', '').strip()
+                        
+                        # For refsets, if no display_name, try to use value set description (e.g., "COPD_COD")
+                        if not description and snomed_info.get('is_refset', False):
+                            description = vs.get('description', '').strip()
+                            
                         if not description:
                             description = 'No description available'
                         
@@ -398,9 +534,11 @@ class JSONExportGenerator:
                     human_readable_description = "Include specified medication codes"
             elif any(col in ['DATE', 'ISSUE_DATE', 'AGE'] for col in column_check):
                 if range_info:
-                    # Format range properly for dates/ages
-                    if range_info.get('from'):
-                        from_data = range_info['from']
+                    # Format range properly for dates/ages - handle both 'from' and 'to' ranges
+                    from_data = range_info.get('from')
+                    to_data = range_info.get('to')
+                    
+                    if from_data:
                         operator = from_data.get('operator', 'GTEQ')
                         value = from_data.get('value', '')
                         
@@ -418,6 +556,26 @@ class JSONExportGenerator:
                             # Relative date
                             date_op = "on or after" if operator == "GTEQ" else "after" if operator == "GT" else "on"
                             human_readable_description = f"Date is {date_op} {value} years from the search date"
+                    
+                    elif to_data:
+                        operator = to_data.get('operator', 'LTEQ')
+                        value = to_data.get('value', '')
+                        
+                        if any(col == 'AGE' for col in column_check):
+                            op_text = "less than or equal to" if operator == "LTEQ" else "less than" if operator == "LT" else "equal to"
+                            human_readable_description = f"Age {op_text} {value} years"
+                        elif '/' in value or '-' in value and not value.isdigit():
+                            # Hardcoded date
+                            date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                            if any(col == 'ISSUE_DATE' for col in column_check):
+                                human_readable_description = f"Date of Issue {date_op} {value} (Hardcoded Date)"
+                            else:
+                                human_readable_description = f"Date {date_op} {value} (Hardcoded Date)"
+                        else:
+                            # Relative date
+                            date_op = "on or before" if operator == "LTEQ" else "before" if operator == "LT" else "on"
+                            human_readable_description = f"Date is {date_op} {value} years from the search date"
+                    
                     else:
                         human_readable_description = f"{column_display} filtering"
                 else:
@@ -450,11 +608,26 @@ class JSONExportGenerator:
                     else:
                         human_readable_description = "Include specified issue methods"
                 elif column_name == 'IS_PRIVATE':
-                    human_readable_description = "Include privately prescribed"
+                    # Check the actual boolean value for private/NHS prescriptions
+                    is_private_filter = any(
+                        any(v.get('value', '').lower() == 'true' for v in vs.get('values', []))
+                        for vs in emisinternal_value_sets
+                    )
+                    if is_private_filter:
+                        human_readable_description = "Include privately prescribed: True"
+                    else:
+                        human_readable_description = "Include privately prescribed: False"
                 else:
                     human_readable_description = f"Include internal classification: {column_display}"
             else:
-                human_readable_description = f"{column_display} filter applied"
+                # Check for specific columns that might not have EMISINTERNAL value sets attached
+                column_name = column_check[0] if column_check else ''
+                if column_name == 'ISSUE_METHOD':
+                    human_readable_description = "Include specific issue methods"
+                elif column_name == 'IS_PRIVATE':
+                    human_readable_description = "Include privately prescribed: False"  # Default assumption
+                else:
+                    human_readable_description = f"{column_display} filter applied"
             
             filter_data = {
                 "column": col_filter.get('column'),
@@ -624,11 +797,39 @@ class JSONExportGenerator:
         
         # If no specific constraints found but we have basic column info
         if not constraints and col_filter.get('column'):
-            constraints["basic_filter"] = {
-                "filter_type": f"{column.lower()}_filter",
-                "column": col_filter.get('column'),
-                "display_name": col_filter.get('display_name', col_filter.get('column'))
-            }
+            # Special handling for EMISINTERNAL columns that might not have value sets attached
+            if column == 'ISSUE_METHOD':
+                constraints["emisinternal_filter"] = {
+                    "filter_type": "issue_method_filter",
+                    "column": col_filter.get('column'),
+                    "display_name": col_filter.get('display_name', col_filter.get('column')),
+                    "values": [
+                        {"value": "A", "display_name": "Automatic"},
+                        {"value": "D", "display_name": "Dispensing"},
+                        {"value": "E", "display_name": "Electronic"},
+                        {"value": "H", "display_name": "Handwritten"},
+                        {"value": "OutsideOutOfHours", "display_name": "Out Of Hours"},
+                        {"value": "P", "display_name": "Printed Script"}
+                    ],
+                    "inclusion_logic": "INCLUDE" if col_filter.get('in_not_in') == "IN" else "EXCLUDE"
+                }
+            elif column == 'IS_PRIVATE':
+                constraints["emisinternal_filter"] = {
+                    "filter_type": "is_private_filter",
+                    "column": col_filter.get('column'),
+                    "display_name": col_filter.get('display_name', col_filter.get('column')),
+                    "values": [
+                        {"value": "false", "display_name": "False"}
+                    ],
+                    "inclusion_logic": "INCLUDE" if col_filter.get('in_not_in') == "IN" else "EXCLUDE",
+                    "constraint_logic": "Include private prescriptions = FALSE (Exclude Private)"
+                }
+            else:
+                constraints["basic_filter"] = {
+                    "filter_type": f"{column.lower()}_filter",
+                    "column": col_filter.get('column'),
+                    "display_name": col_filter.get('display_name', col_filter.get('column'))
+                }
         
         return constraints
     
@@ -678,13 +879,14 @@ class JSONExportGenerator:
             "total_values": len(values_info)
         }
     
-    def _build_complete_restrictions(self, restrictions) -> List[Dict[str, Any]]:
-        """Build complete restriction logic"""
+    def _build_complete_restrictions(self, restrictions, criterion) -> List[Dict[str, Any]]:
+        """Build complete restriction logic with clinical code details"""
         restriction_list = []
         
         for restriction in restrictions:
             restriction_data = {
                 "restriction_type": restriction.type,
+                "description": getattr(restriction, 'description', ''),  # Use the same description as UI
                 "count": getattr(restriction, 'count', getattr(restriction, 'record_count', None)),
                 "time_constraint": {
                     "period": getattr(restriction, 'time_period', None),
@@ -692,11 +894,74 @@ class JSONExportGenerator:
                 },
                 "sort_order": getattr(restriction, 'sort_order', 'DESC'),
                 "conditional_where": self._build_where_conditions_complete(restriction),
-                "sql_pattern": f"{restriction.type} {getattr(restriction, 'count', getattr(restriction, 'record_count', ''))}"
+                "clinical_codes": self._extract_clinical_codes_from_restriction(restriction, criterion)
             }
             restriction_list.append(restriction_data)
         
         return restriction_list
+    
+    def _extract_clinical_codes_from_restriction(self, restriction, criterion) -> List[Dict[str, Any]]:
+        """Extract rich clinical code details from restriction conditions"""
+        codes = []
+        
+        if not hasattr(restriction, 'conditions') or not restriction.conditions:
+            return codes
+        
+        for condition in restriction.conditions:
+            # Extract value sets from restriction conditions
+            value_sets = condition.get('value_sets', [])
+            
+            for vs_description in value_sets:
+                if vs_description and vs_description.strip():
+                    # Look up this value set in the main criterion to get full details
+                    full_vs_details = self._find_value_set_by_description(vs_description.strip(), criterion)
+                    
+                    if full_vs_details:
+                        for value in full_vs_details.get('values', []):
+                            emis_code = value.get('value', '')
+                            if emis_code:
+                                snomed_info = self._get_snomed_translation(emis_code)
+                                
+                                description = snomed_info.get('description', '').strip()
+                                if not description:
+                                    description = value.get('display_name', '').strip()
+                                if not description and snomed_info.get('is_refset', False):
+                                    description = vs_description
+                                if not description:
+                                    description = 'No description available'
+                                
+                                code_entry = {
+                                    "emis_guid": emis_code,
+                                    "snomed_code": snomed_info.get('snomed_code', 'Not found'),
+                                    "description": description,
+                                    "code_system": full_vs_details.get('code_system', snomed_info.get('code_system', '')),
+                                    "is_medication": snomed_info.get('is_medication', False),
+                                    "is_refset": snomed_info.get('is_refset', False),
+                                    "is_linked_criteria": False,  # These are restriction codes, not linked
+                                    "is_restriction": True,       # These are explicitly restriction codes
+                                    "include_children": value.get('include_children', False),
+                                    "source_context": f"Restriction condition: {vs_description}",
+                                    "translation_status": snomed_info.get('status', 'unknown')
+                                }
+                                codes.append(code_entry)
+        
+        return codes
+    
+    def _find_value_set_by_description(self, description, criterion) -> Dict[str, Any]:
+        """Find value set details by description from criterion value sets"""
+        # Search through all value sets in the criterion to find matching description
+        for vs in criterion.value_sets:
+            if vs.get('description', '').strip() == description:
+                return vs
+        
+        # Also check column filters for value sets
+        for col_filter in criterion.column_filters:
+            for vs in col_filter.get('value_sets', []):
+                if vs.get('description', '').strip() == description:
+                    return vs
+        
+        # Return None if not found
+        return None
     
     def _build_where_conditions_complete(self, restriction) -> List[Dict[str, Any]]:
         """Build WHERE conditions for restrictions"""
@@ -716,15 +981,64 @@ class JSONExportGenerator:
         return conditions
     
     def _build_linked_criteria_details(self, linked_criteria) -> List[Dict[str, Any]]:
-        """Build linked criteria relationships"""
+        """Build complete linked criteria details including their clinical codes and filters"""
         linked_list = []
         
         for linked in linked_criteria:
+            # Extract clinical codes from this linked criterion
+            linked_clinical_codes = []
+            if hasattr(linked, 'value_sets') and linked.value_sets:
+                for vs in linked.value_sets:
+                    # Skip EMISINTERNAL codes (they go in column_filters)
+                    if vs.get('code_system') == 'EMISINTERNAL':
+                        continue
+                        
+                    for value in vs.get('values', []):
+                        emis_code = value.get('value', '')
+                        if emis_code:
+                            snomed_info = self._get_snomed_translation(emis_code)
+                            
+                            # Use the best available description
+                            description = snomed_info.get('description', '').strip()
+                            if not description:
+                                description = value.get('display_name', '').strip()
+                            
+                            # For refsets, try value set description
+                            if not description and snomed_info.get('is_refset', False):
+                                description = vs.get('description', '').strip()
+                            
+                            if not description:
+                                description = 'No description available'
+                            
+                            linked_clinical_codes.append({
+                                "emis_guid": emis_code,
+                                "snomed_code": snomed_info.get('snomed_code', 'Not found'),
+                                "description": description,
+                                "code_system": vs.get('code_system', snomed_info.get('code_system', '')),
+                                "is_medication": snomed_info.get('is_medication', False),
+                                "is_refset": snomed_info.get('is_refset', False),
+                                "is_linked_criteria": True,   # These are explicitly linked criteria codes
+                                "is_restriction": False,     # These are not restriction codes
+                                "include_children": value.get('include_children', False),
+                                "source_context": value.get('display_name', vs.get('description', 'Linked Criterion')),
+                                "translation_status": snomed_info.get('status', 'unknown')
+                            })
+            
+            # Extract column filters from this linked criterion
+            linked_column_filters = []
+            if hasattr(linked, 'column_filters') and linked.column_filters:
+                linked_column_filters = self._build_complete_column_filters(linked.column_filters)
+            
             linked_data = {
                 "relationship_type": getattr(linked, 'relationship_type', 'cross_reference'),
                 "target_table": linked.table,
                 "target_display_name": linked.display_name,
-                "temporal_constraint": getattr(linked, 'temporal_constraint', None)
+                "temporal_constraint": getattr(linked, 'temporal_constraint', None),
+                "clinical_codes": linked_clinical_codes,
+                "column_filters": linked_column_filters,
+                "restrictions": self._build_complete_restrictions(getattr(linked, 'restrictions', []), linked),
+                "criterion_id": getattr(linked, 'id', None),
+                "negation": getattr(linked, 'negation', False)
             }
             linked_list.append(linked_data)
         
@@ -894,9 +1208,16 @@ class JSONExportGenerator:
             # Get refsets
             refsets = unified_results.get('refsets', [])
             for refset in refsets:
+                emis_guid = refset.get('EMIS GUID', '')
+                snomed_code = refset.get('SNOMED Code', 'Not found')
+                
+                # For refsets, if SNOMED Code is not found, use EMIS GUID as SNOMED code
+                if snomed_code == 'Not found' and emis_guid:
+                    snomed_code = emis_guid
+                
                 all_codes.append({
-                    'emis_guid': refset.get('EMIS GUID', ''),
-                    'snomed_code': refset.get('SNOMED Code', 'Not found'),
+                    'emis_guid': emis_guid,
+                    'snomed_code': snomed_code,
                     'description': refset.get('Description', ''),
                     'code_system': refset.get('Code System', ''),
                     'semantic_type': 'refset',
@@ -904,7 +1225,7 @@ class JSONExportGenerator:
                     'is_refset': True,
                     'source_entity': refset.get('Source Entity', ''),
                     'source_search': refset.get('Source Search', ''),
-                    'translation_status': 'translated' if refset.get('SNOMED Code', 'Not found') != 'Not found' else 'not_found'
+                    'translation_status': 'translated' if snomed_code != 'Not found' else 'not_found'
                 })
             
             return all_codes
@@ -929,14 +1250,15 @@ class JSONExportGenerator:
                     'status': code['translation_status']
                 }
         
-        # If not found in processed data, return not found
+        # If not found in processed data, check if this might be a refset where EMIS GUID = SNOMED code
+        # For refsets, use the EMIS GUID as the SNOMED code
         return {
-            'snomed_code': 'Not found',
+            'snomed_code': emis_code if emis_code else 'Not found',
             'description': '',
-            'code_system': '',
+            'code_system': 'SNOMED_CONCEPT',
             'is_medication': False,
-            'is_refset': False,
-            'status': 'not_found'
+            'is_refset': True,  # Identified as refset based on code pattern
+            'status': 'translated' if emis_code else 'not_found'
         }
     
     def _format_date_operator(self, operator: str, value: str, unit: str) -> str:

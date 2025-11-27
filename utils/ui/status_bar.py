@@ -8,6 +8,10 @@ from ..ui.theme import ThemeColors, ComponentThemes, create_info_box_style, get_
 from ..utils.lookup import load_lookup_table, get_lookup_statistics
 from ..utils.caching.lookup_cache import get_cached_emis_lookup
 from .theme import info_box, success_box, warning_box, error_box
+from ..common.ui_error_handling import (
+    display_error_to_user, display_generic_error, streamlit_safe_execute
+)
+from ..common.error_handling import create_error_context, ErrorSeverity
 
 # NHS Terminology Server integration
 try:
@@ -200,13 +204,16 @@ def render_status_bar():
             # Changelog section - Direct in-app display 
             with st.sidebar.expander(f"🎯 What's New: v{__version__}", expanded=False):
                 st.markdown(f"""
-                    **🌐 NHS Terminology Server & XML Parsing Reliability:**
-                    - NHS integration now has comprehensive error handling with user-friendly messages and adaptive rate limiting for robust server communication.
-                    - XML parsing has been enhanced with defensive programming and structured error reporting, eliminating silent failures.
-                    - Progress tracking shows accurate time estimates with real-time worker status and performance statistics.
-                    - Thread-safe operations now support concurrent terminology expansion with proper credential management across multiple workers.
-                    """)
+                                **🔍 XML Parser & Export Quality Enhancements:**
+                                - Regex patterns future‑proofed for census years with dynamic year extraction across all modules.
+                                - Structured error handling integrated into XML parsing, JSON exports, and 13 UI components for transparent reporting.
+                                - Export handlers unified with flag‑based detection, delivering consistent clinical code metadata and clean separation logic.
+                                - JSON architecture refactored with richer linked criteria details, complete restriction descriptions, and streamlined structure.
+                                - UI filters improved with clearer boolean handling, EMISINTERNAL formatting, and audit‑ready condition descriptions.
+                                - Streamlit progress bars now weight tasks realistically with memory usage and completion metrics for accurate feedback.
+                            """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
+
 
             
             # Store in session state for later use
@@ -319,6 +326,10 @@ def render_status_bar():
             return lookup_df, emis_guid_col, snomed_code_col
                 
         except Exception as e:
-            from .theme import error_box
-            st.markdown(error_box(f"❌ Error loading lookup table: {str(e)}"), unsafe_allow_html=True)
+            # Use structured UI error handling for lookup table errors
+            display_generic_error(
+                f"Error loading lookup table: {str(e)}",
+                error_type="error", 
+                icon="❌"
+            )
             st.stop()

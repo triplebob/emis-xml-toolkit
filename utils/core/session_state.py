@@ -26,6 +26,7 @@ class SessionStateKeys:
     # Core application state
     XML_FILENAME = 'xml_filename'
     XML_CONTENT = 'xml_content'
+    XML_RAW_BYTES = 'xml_raw_bytes'
     UPLOADED_FILENAME = 'uploaded_filename'
     LAST_PROCESSED_FILE = 'last_processed_file'
     IS_PROCESSING = 'is_processing'
@@ -105,6 +106,7 @@ class SessionStateGroups:
     CORE_DATA = [
         SessionStateKeys.XML_FILENAME,
         SessionStateKeys.XML_CONTENT,
+        SessionStateKeys.XML_RAW_BYTES,
         SessionStateKeys.UPLOADED_FILENAME,
         SessionStateKeys.LAST_PROCESSED_FILE
     ]
@@ -113,7 +115,6 @@ class SessionStateGroups:
         SessionStateKeys.IS_PROCESSING,
         SessionStateKeys.PROCESSING_CONTEXT,
         'progress_placeholder',
-        'rendering_placeholder',
         'processing_placeholder'
     ]
     

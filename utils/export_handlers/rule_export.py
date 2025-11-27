@@ -162,28 +162,62 @@ class RuleExportHandler:
             criteria_df_safe = sanitize_dataframe_for_excel(criteria_df)
             criteria_df_safe.to_excel(writer, sheet_name='Criteria', index=False)
             
-            # Clinical codes sheet
+            # Clinical codes sheet with proper criterion type context
             codes_data = []
             for i, criterion in enumerate(group.criteria, 1):
                 if criterion.value_sets:
                     for vs in criterion.value_sets:
+                        # Determine criterion type based on flags
+                        criterion_type = "MAIN CRITERION"
+                        if vs.get('is_restriction', False):
+                            criterion_type = "MAIN CRITERION RESTRICTION"
+                        elif vs.get('is_linked_criteria', False):
+                            criterion_type = "LINKED FEATURE"
+                        
                         for value in vs.get('values', []):
                             codes_data.append({
+                                'Rule Number': rule_number,
                                 'Criterion Number': i,
+                                'Criterion Type': criterion_type,
                                 'Criterion Description': criterion.description,
+                                'Exception Code': criterion.exception_code or '',
                                 'Value Set ID': vs.get('id', ''),
                                 'Value Set Description': vs.get('description', ''),
                                 'Code System': vs.get('code_system', ''),
-                                'Code Value': value.get('value', ''),
+                                'EMIS GUID': value.get('value', ''),
+                                'SNOMED Code': value.get('value', ''),  # For refsets, EMIS GUID = SNOMED Code
+                                'SNOMED Description': '',  # Could be enhanced with lookup
                                 'Display Name': value.get('display_name', ''),
                                 'Include Children': value.get('include_children', False),
                                 'Is Refset': value.get('is_refset', False)
                             })
+                
+                # Add linked criteria codes with proper labeling
+                for j, linked_crit in enumerate(criterion.linked_criteria, 1):
+                    if linked_crit.value_sets:
+                        for vs in linked_crit.value_sets:
+                            for value in vs.get('values', []):
+                                codes_data.append({
+                                    'Rule Number': rule_number,
+                                    'Criterion Number': f"{i}.{j}",
+                                    'Criterion Type': f"LINKED FEATURE {j}",
+                                    'Criterion Description': linked_crit.description or '',
+                                    'Exception Code': linked_crit.exception_code or '',
+                                    'Value Set ID': vs.get('id', ''),
+                                    'Value Set Description': vs.get('description', ''),
+                                    'Code System': vs.get('code_system', ''),
+                                    'EMIS GUID': value.get('value', ''),
+                                    'SNOMED Code': value.get('value', ''),
+                                    'SNOMED Description': '',
+                                    'Display Name': value.get('display_name', ''),
+                                    'Include Children': value.get('include_children', False),
+                                    'Is Refset': value.get('is_refset', False)
+                                })
             
             if codes_data:
                 codes_df = pd.DataFrame(codes_data)
                 codes_df_safe = sanitize_dataframe_for_excel(codes_df)
-                codes_df_safe.to_excel(writer, sheet_name='Clinical_Codes', index=False)
+                codes_df_safe.to_excel(writer, sheet_name=f'Rule_{rule_number}_Codes', index=False)
         
         output.seek(0)
         

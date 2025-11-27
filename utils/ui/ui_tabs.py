@@ -4,8 +4,9 @@ import io
 from datetime import datetime
 import json
 from ..core.session_state import SessionStateKeys
-from .ui_helpers import (
 from .theme import info_box, success_box, warning_box, error_box
+from ..common.ui_error_handling import display_generic_error
+from .ui_helpers import (
     render_section_with_data, 
     render_metrics_row, 
     render_success_rate_metric,
@@ -187,7 +188,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
             from .theme import error_box
-            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            display_generic_error("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.", "error")
             from .theme import info_box
             st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
@@ -329,6 +330,6 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         print(f"Full traceback:\n{error_details}")
         
         from .theme import error_box
-        st.markdown(error_box(f"Error analyzing XML structure: {str(e)}"), unsafe_allow_html=True)
+        display_generic_error(f"Error analyzing XML structure: {str(e)}", "error")
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)

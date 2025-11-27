@@ -1,6 +1,22 @@
-streamlit
-pandas>=2.0.0
-requests
-psutil
-openpyxl>=3.0.0
-cryptography>=3.0.0
+# ClinXML Dependencies - Tested on Python 3.8-3.12
+# Last updated: November 2024
+# Core Streamlit framework
+streamlit>=1.29.0,<2.0.0
+
+# Data processing
+pandas>=2.0.0,<3.0.0
+
+# HTTP requests for NHS API integration
+requests>=2.28.0,<3.0.0
+
+# System monitoring
+psutil>=5.8.0,<6.0.0
+
+# Excel export functionality
+openpyxl>=3.0.0,<4.0.0
+
+# Security for NHS API authentication
+cryptography>=3.4.8,<42.0.0
+
+# Encoding detection for XML files
+chardet>=4.0.0,<6.0.0

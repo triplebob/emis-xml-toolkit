@@ -3,29 +3,35 @@
 A comprehensive web application for analysing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
 Transform complex EMIS XML documents into actionable insights for NHS healthcare teams.
 
-## 📋 ClinXML At a Glance
+## ClinXML At a Glance
 
 | **Feature** | **Capability** | **Benefit** |
 |-------------|----------------|-------------|
-| **🏥 Code Translation** | EMIS GUID → SNOMED via cached lookup tables | Instant code translation without external dependencies |
-| **🌳 NHS API Support** | Optional FHIR R4 hierarchy expansion | Live validation against current NHS terminology |
-| **🔍 Search Analysis** | Multi-tab interface for all EMIS XML types | Complete visibility into search logic and dependencies |
-| **📤 Export System** | Excel, CSV, JSON, XML-ready formats | Ready-to-use outputs for external systems |
-| **⚡ Performance** | Session caching + adaptive threading | Process large XMLs efficiently on any device |
-| **🛡️ Security** | Local processing, optional NHS API | XML data never leaves your session |
+| **Code Translation** | EMIS GUID → SNOMED via cached lookup tables | Instant code translation without external dependencies |
+| **NHS API Support** | Optional FHIR R4 hierarchy expansion | Live validation against current NHS terminology |
+| **Search Analysis** | Multi-tab interface for all EMIS XML types | Complete visibility into search logic and dependencies |
+| **Export System** | Excel, CSV, JSON, XML-ready formats | Ready-to-use outputs for external systems |
+| **Performance** | Session caching + adaptive threading | Process large XMLs efficiently on any device |
+| **Security** | Local processing, optional NHS API | XML data never leaves your session |
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-### Complete Analysis Interface (5 Tabs)
-- **🏥 Clinical Codes**: Advanced SNOMED translation with NHS terminology server integration and dual-mode deduplication
-- **🔍 Search Analysis**: Rule Logic Browser with detailed criterion analysis and dependency visualisation
-- **📋 List Reports**: Column structure analysis with healthcare context and filter logic
-- **📊 Audit Reports**: Multi-population analysis with organisational grouping and quality indicators  
-- **📈 Aggregate Reports**: Statistical analysis with cross-tabulation
+<details>
+<summary><strong>Complete Analysis Interface (5 Tabs)</strong></summary>
 
-### NHS Terminology Server Integration
+- **Clinical Codes**: Advanced SNOMED translation with NHS terminology server integration and dual-mode deduplication
+- **Search Analysis**: Rule Logic Browser with detailed criterion analysis and dependency visualisation
+- **List Reports**: Column structure analysis with healthcare context and filter logic
+- **Audit Reports**: Multi-population analysis with organisational grouping and quality indicators  
+- **Aggregate Reports**: Statistical analysis with cross-tabulation
+
+</details>
+
+<details>
+<summary><strong>NHS Terminology Server Integration</strong></summary>
+
 - **FHIR R4 API Integration**: Direct connection to NHS England Terminology Server
 - **Hierarchical Code Expansion**: Automatic expansion of codes with `includechildren=true` flags  
 - **Adaptive Threading**: Scales 8-20 concurrent workers based on workload size for optimal performance
@@ -34,14 +40,22 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 - **Multiple Export Formats**: CSV, hierarchical JSON, and XML-ready outputs
 - **Real-time Validation**: Individual code lookup and testing capabilities
 
-### Advanced XML Pattern Support
+</details>
+
+<details>
+<summary><strong>Advanced XML Pattern Support</strong></summary>
+
 - **baseCriteriaGroup**: Nested criterion logic within wrapper criteria
 - **Linked Criteria**: Cross-table relationships with temporal constraints
 - **SNOMED Refsets**: Direct code handling with clean description extraction
 - **EMISINTERNAL Classifications**: Episode types, consultation headings, clinical status
 - **Complex Restrictions**: "Latest N WHERE condition" with test attributes
 
-### Comprehensive Export System
+</details>
+
+<details>
+<summary><strong>Comprehensive Export System</strong></summary>
+
 - **Multi-sheet Excel exports** with professional formatting
 - **NHS terminology exports**: SNOMED codes, EMIS mappings, hierarchical JSON
 - **Type-specific report exports** for List/Audit/Aggregate reports
@@ -49,90 +63,74 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 - **Multiple formats**: Excel, CSV, JSON, XML-ready, and TXT reports
 - **Source attribution**: Track codes to their originating searches/reports
 
-### Cache-First Architecture
+</details>
+
+<details>
+<summary><strong>Cache-First Architecture</strong></summary>
+
 - **Multi-tier caching**: Local cache → GitHub cache → API fallback
 - **Optimised performance**: Faster startup and reduced external dependencies
 - **Session persistence**: Results maintained across download operations
 - **Health monitoring**: Automatic cache validation and regeneration
 
-### Enterprise Features
+</details>
+
+<details>
+<summary><strong>Enterprise Features</strong></summary>
+
 - **Hierarchical folder management** with multi-level navigation
 - **Supports EMIS QOF indicators** and custom healthcare quality metrics
 - **Multi-organisation support** for EMIS Enterprise exports
 - **Clinical pathway analysis** with workflow context
 - **Version independence** across EMIS system versions
 
----
-
-## 🎯 Supported EMIS XML Types
-
-### **Search Reports**
-- Population-based searches with complex criteria groups
-- Rule logic analysis with AND/OR operators
-- Population criteria and cross-search references
-- Dependency visualisation and execution flow
-
-### **List Reports** 
-- Multi-column data extraction with column-specific filtering
-- Healthcare context classification (clinical data, appointments, demographics)
-- Per-column search criteria and restrictions analysis
-- Clinical code extraction from report filters
-
-### **Audit Reports**
-- Quality monitoring and compliance tracking
-- Multi-population analysis with member search combinations
-- Organisational grouping (practice codes, user authorisation)
-- Enhanced metadata with creation time and author information
-
-### **Aggregate Reports**
-- Statistical analysis and cross-tabulation
-- Built-in filters and criteria analysis
-- Healthcare metrics and quality measurement
-- Enterprise reporting capabilities
-
-### **Patient Demographics & LSOA Filtering**
-- Future-proof LSOA detection supporting existing 2011 census data, with dynamic year support for future LSOA releases
-- Demographics-only XML analysis without clinical codes
-- Individual LSOA code display in exports
-- Grouped criteria analysis for shared IDs with different demographic values
+</details>
 
 ---
 
-## 🔬 Clinical Code Systems
+## Supported EMIS XML Types
 
-### **SNOMED CT Support**
-- **Concepts and Refsets**: Full SNOMED CT concept hierarchy
-- **NHS Terminology Server**: Live expansion of hierarchical concepts
-- **Direct Refset Handling**: NHS refsets processed as direct SNOMED codes
-- **Legacy Read Codes**: Backward compatibility via mapping tables
-- **Include Children**: Automatic descendant code inclusion with validation
+ClinXML supports all standard EMIS XML exports with specialised analysis for each type:
 
-### **Medication Systems**
-- **dm+d Codes**: Dictionary of medicines and devices
-- **SCT_APPNAME**: Brand-specific medication names (Emerade, EpiPen, etc.)
-- **SCT_CONST**: Constituent/generic drug names 
-- **SCT_DRGGRP**: Drug group classifications
+- **Search Reports**: Population-based searches with complex criteria and dependency analysis
+- **List Reports**: Multi-column data extraction with healthcare context classification
+- **Audit Reports**: Quality monitoring with multi-population analysis and metadata
+- **Aggregate Reports**: Statistical analysis with cross-tabulation and enterprise reporting
+- **Demographics & LSOA**: Future-proof LSOA detection with grouped criteria analysis
 
-### **EMIS Internal Classifications**
-- **Episode Types**: FIRST, NEW, REVIEW, ENDED, NONE
-- **Consultation Headings**: PROBLEM, REVIEW, ISSUE
-- **Clinical Status**: COMPLICATION, ONGOING, RESOLVED
-- **User Authorisation**: Active user and contract status filtering
+📋 **[Complete XML Pattern Reference](docs/emis-xml-patterns.md)** - Detailed technical patterns and examples
 
 ---
 
-## 🚀 Quick Start
+## Clinical Code Systems
 
-### **Option 1: Use Live App (Recommended)**
-**[Access Live Application](https://clinxml.streamlit.app/)** - No installation required
+Translates EMIS GUIDs to SNOMED CT codes with comprehensive system support:
+
+- **SNOMED CT**: Full concept hierarchy with NHS terminology server expansion
+- **dm+d Medications**: Dictionary of medicines and devices with brand/generic classifications
+- **EMIS Internal**: Episode types, consultation headings, and clinical status codes
+- **Legacy Systems**: Read codes via mapping tables for backward compatibility
+
+💊 **[Complete Code System Reference](docs/emis-xml-patterns.md#clinical-code-systems)** - Full technical specifications
+
+---
+
+## Quick Start
+
+### Option 1: Use Live App (Recommended)
+
+<details>
+<summary>No installation required - <strong><a href="https://clinxml.streamlit.app/">Access Live Application</a></strong></summary>
 
 1. Upload your EMIS XML file
 2. View comprehensive analysis across 5 specialised tabs
-3. Optional: Configure NHS terminology server credentials for expansion features
+3. Use NHS terminology server features (credentials pre-configured)
 4. Export detailed reports in multiple formats
 5. Navigate folder structures and analyse dependencies
 
-### **Option 2: Run Locally**
+</details>
+
+### Option 2: Run Locally
 
 #### Prerequisites
 - **Python 3.8-3.12** (tested and verified)
@@ -159,7 +157,10 @@ NHSTSERVER_TOKEN = "your_client_secret_token"
 streamlit run streamlit_app.py
 ```
 
-#### Quick Reference Commands
+<details>
+
+<summary><strong>Quick Reference Commands</strong></summary>
+
 ```bash
 # Clone and setup
 git clone https://github.com/triplebob/emis-xml-toolkit.git
@@ -178,40 +179,46 @@ pip list | grep -E "(streamlit|pandas|requests)"
 streamlit run streamlit_app.py --logger.level debug
 ```
 
----
-
-## 🏗️ System Architecture
-
-> **📊 [View Detailed Architecture Diagram (Mermaid)](docs/architecture/system-architecture-diagram.md)** - Comprehensive visual overview with component relationships
-
-![Architecture Diagram](img/architecture-diagram.svg)
+</details>
 
 ---
 
-## 📁 Project Structure
+## System Architecture
+
+*High-level Overview*
+
+![ClinXML System Architecture - XML upload flows through parsers to translation engine to 5-tab interface to export system with optional NHS terminology integration](img/architecture-diagram.svg)
+
+**Please see [full interactive architecture diagram](docs/architecture/system-architecture-diagram.md) for complete component details**
+
+---
+
+## Project Structure
 
 ClinXML uses a modular architecture with specialised components for analysis, UI rendering, export functionality, and caching. 
 The codebase is organised into logical directories that separate functions and enable maintainable development.
 
 **📋 [Complete Project Structure Documentation](docs/project-structure.md)**
 
-### **Key Directories**
-- **`utils/analysis/`** - Analysis engines and orchestration
-- **`utils/core/`** - Business logic and session management with 60-minute SNOMED caching
-- **`utils/ui/tabs/`** - Modular tab structure for specialised report types
-- **`utils/export_handlers/`** - Comprehensive export system for multiple formats
-- **`utils/terminology_server/`** - NHS Terminology Server FHIR R4 integration
-- **`utils/xml_parsers/`** - Modular XML parsing with universal namespace handling
-- **`utils/caching/`** - Multi-tier caching architecture
-- **`docs/`** - Technical documentation and architecture guides
+### Key Directories
+```
+utils/analysis/               - Analysis engines and orchestration
+utils/core/                   - Business logic and session management with 60-minute SNOMED caching
+utils/ui/tabs/                - Modular tab structure for specialised report types
+utils/export_handlers/        - Comprehensive export system for multiple formats
+utils/terminology_server/     - NHS Terminology Server FHIR R4 integration
+utils/xml_parsers/            - Modular XML parsing with universal namespace handling
+utils/caching/                - Multi-tier caching architecture
+docs/                         - Technical documentation and architecture guides
+```
 
 ---
 
-## 🔧 Technical Specifications
+## Technical Specifications
 
 <details>
 
-<summary><strong>📈 Performance Optimizations</strong></summary>
+<summary><strong>Performance Optimizations</strong></summary>
 
 - **Centralised Cache Management**: Unified caching architecture with optimised TTL settings
 - **Persistent SNOMED Cache**: 60-minute session state cache for EMIS GUID → SNOMED mappings across XML uploads
@@ -225,7 +232,7 @@ The codebase is organised into logical directories that separate functions and e
 
 <details>
 
-<summary><strong>🌳 NHS Terminology Server Integration</strong></summary>
+<summary><strong>NHS Terminology Server Integration</strong></summary>
 
 - **FHIR R4 Compliance**: Full NHS England Terminology Server API support
 - **OAuth2 Authentication**: System-to-system authentication with automatic token refresh
@@ -253,7 +260,7 @@ Error States:
 
 <details>
 
-<summary><strong>⚙️ XML Processing & Data Management</strong></summary>
+<summary><strong>XML Processing & Data Management</strong></summary>
 
 **XML Processing:**
 - **Universal Namespace Handling**: Mixed namespaced/non-namespaced document support
@@ -276,85 +283,112 @@ Error States:
 
 ---
 
-## 📊 Use Cases
+## Use Cases
 
-### **Clinical Governance**
+<details>
+<summary><strong>Clinical Governance</strong></summary>
+
 - **QOF Indicator Analysis**: Quality and Outcomes Framework reporting
 - **Clinical Pathway Review**: Analyse complex care pathways and protocols
 - **Code Set Validation**: Verify SNOMED code usage and mapping accuracy with NHS terminology server
 - **Search Logic Auditing**: Review and optimise clinical search criteria
 - **Hierarchy Validation**: Compare EMIS expectations with current NHS terminology data
 
-### **System Administration**
+</details>
+
+<details>
+<summary><strong>System Administration</strong></summary>
+
 - **EMIS Configuration Review**: Analyse search and report configurations
 - **Folder Organisation**: Review hierarchical folder structures
 - **Dependency Mapping**: Understand search and report relationships
 - **Performance Analysis**: Identify complex searches and optimisation opportunities
 - **Terminology Updates**: Validate code hierarchies against current NHS terminology
 
-### **Healthcare Analytics**
+</details>
+
+<details>
+<summary><strong>Healthcare Analytics</strong></summary>
+
 - **Population Analysis**: Understand search population logic and criteria
 - **Report Structure Review**: Analyse List/Audit/Aggregate report configurations
 - **Clinical Code Translation**: Convert EMIS codes to SNOMED for external systems
 - **Quality Measurement**: Export data for external quality measurement tools
 - **Hierarchical Analysis**: Export parent-child relationships for programmatic integration
 
+</details>
+
 ---
 
-## 🛡️ Security & Privacy
+## Security & Privacy
 
-### **Data Handling**
+<details>
+<summary><strong>Data Handling</strong></summary>
+
 - **No Persistent Storage**: XML files processed in memory only, deleted when session ends
 - **Session-based Processing**: All data cleared when browser session terminates
 - **Local SNOMED Translation**: Core EMIS GUID → SNOMED translation performed locally using pre-cached lookup tables
 - **XML Data Isolation**: Uploaded XML files remain in user's browser session, never transmitted externally
+
+</details>
+
+<details>
+<summary><strong>NHS API Security</strong></summary>
+
 - **Controlled API Usage**: Only NHS Terminology Server accessed (optional, credentials required) for:
   - Individual SNOMED code validation
   - Hierarchical code expansion (`includeChildren=true`)
   - Parent-child relationship verification
 - **API Data Scope**: Only SNOMED codes (not XML content) sent to NHS API for validation/expansion
-- **NHS API Security**: Optional OAuth2 authentication with NHS England for terminology features only
+- **OAuth2 Authentication**: Optional system-to-system authentication with NHS England for terminology features only
+- **No XML Transmission**: Patient data and XML content never sent to external APIs
 
-### **Compliance Considerations**
+</details>
+
+<details>
+<summary><strong>Compliance Considerations</strong></summary>
+
 - **IG Toolkit Compatible**: Designed for NHS IG Toolkit compliance
 - **GDPR Aligned**: No persistent data storage or tracking
 - **Audit Trail**: Processing statistics available for governance
 - **Version Transparency**: Lookup table versions clearly displayed
 - **NHS Terms Compliance**: Usage subject to NHS England API terms of service
 
----
-
-## 🤝 Contributing
-
-**Bug Reports** - Please report issues with detailed XML examples (anonymized) and steps to reproduce.
-
-**Feature Requests** - Enhancement suggestions welcome, particularly for new EMIS XML patterns or export formats.
-
-**Technical Documentation** - Contributions to technical documentation and pattern identification appreciated.
+</details>
 
 ---
 
-## ⚖️ Legal & Compliance
+## Contributing
 
-**Disclaimer** - **EMIS and EMIS Web are trademarks of Optum Inc.** This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any of their subsidiaries. All trademarks are the property of their respective owners.
+Contributions welcome - **[View Contribution Guidelines](CONTRIBUTING.md)**
 
-**License** - This project is provided as-is for healthcare and research purposes. Users are responsible for ensuring compliance with local data protection and clinical governance requirements.
-
-**No Warranty** - This toolkit is provided without warranty of any kind. Healthcare professionals should validate all clinical code translations against authoritative sources before clinical use.
-
----
-
-## 📞 Support
-
-### **Documentation**
-- **Project Structure**: [Complete Directory Structure](docs/project-structure.md)
-- **Architecture Guide**: [Module Architecture](docs/architecture/modules.md)
-- **Session Management**: [Session State Architecture](docs/architecture/session-state-management.md)
-- **NHS Terminology Server**: [Integration Reference](docs/nhs-terminology-server-integration.md)
-- **Technical Patterns**: [EMIS XML Patterns Reference](docs/emis-xml-patterns.md)
-- **Namespace Handling**: [Namespace Documentation](docs/namespace-handling.md)
+- **Bug Reports**: Detailed XML examples (anonymised) with reproduction steps
+- **Feature Requests**: New EMIS XML patterns or export formats
+- **Documentation**: Technical patterns and identification guides
 
 ---
 
-*Last Updated: 25th November 2025*  
-*Application Version: [2.2.5](changelog.md) • [View Release Notes](changelog.md)*
+## Legal & Compliance
+
+**Disclaimer**: **EMIS and EMIS Web are trademarks of Optum Inc.** This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any subsidiaries.
+
+**License**: Provided as-is for healthcare and research. Users responsible for data protection and clinical governance compliance.
+
+**No Warranty**: Healthcare professionals must validate all clinical code translations before clinical use.
+
+---
+
+## Support
+
+**[Complete Documentation Hub](docs/)** with technical guides:
+
+- [Project Structure](docs/project-structure.md) - Directory organisation
+- [Architecture Guide](docs/architecture/modules.md) - System design  
+- [NHS Integration](docs/nhs-terminology-server-integration.md) - API reference
+- [XML Patterns](docs/emis-xml-patterns.md) - Technical patterns
+- [Namespace Handling](docs/namespace-handling.md) - XML processing
+
+---
+
+*Last Updated: 27th November 2025*  
+*Application Version: [2.2.6](changelog.md) • [View Release Notes](changelog.md)*

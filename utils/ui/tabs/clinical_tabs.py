@@ -1,4 +1,3 @@
-from ...ui.theme import info_box, success_box, warning_box, error_box
 """
 Clinical data tab rendering functions.
 
@@ -33,13 +32,13 @@ try:
 except ImportError as e:
     # If imports fail, show the actual error instead of placeholder
     def render_list_reports_tab(xml_content, xml_filename):
-        st.markdown(error_box(f"❌ Import Error for List Reports: {e}"), unsafe_allow_html=True)
+        display_generic_error(f"❌ Import Error for List Reports: {e}", "error")
     
     def render_audit_reports_tab(xml_content, xml_filename):
-        st.markdown(error_box(f"❌ Import Error for Audit Reports: {e}"), unsafe_allow_html=True)
+        display_generic_error(f"❌ Import Error for Audit Reports: {e}", "error")
     
     def render_aggregate_reports_tab(xml_content, xml_filename):
-        st.markdown(error_box(f"❌ Import Error for Aggregate Reports: {e}"), unsafe_allow_html=True)
+        display_generic_error(f"❌ Import Error for Aggregate Reports: {e}", "error")
 
 # Import functions from the new modular tabs structure
 from .analytics_tab import render_analytics_tab
@@ -56,7 +55,7 @@ def _get_expansion_ui():
     except ImportError as e:
         global NHS_TERMINOLOGY_AVAILABLE
         NHS_TERMINOLOGY_AVAILABLE = False
-        st.markdown(error_box(f"NHS Terminology Server integration failed to load: {e}"), unsafe_allow_html=True)
+        display_generic_error(f"NHS Terminology Server integration failed to load: {e}", "error")
         return None
 
 
@@ -731,7 +730,7 @@ def render_clinical_codes_main_tab(results):
 def render_nhs_terminology_tab(results):
     """Render NHS Terminology Server integration tab"""
     if not NHS_TERMINOLOGY_AVAILABLE:
-        st.markdown(error_box("❌ NHS Terminology Server integration not available"), unsafe_allow_html=True)
+        display_generic_error("❌ NHS Terminology Server integration not available", "error")
         st.markdown("""
         <div style="
             background-color: #28546B;

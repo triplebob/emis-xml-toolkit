@@ -9,6 +9,11 @@ tab rendering modules can inherit from or use.
 from abc import ABC, abstractmethod
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
+from ...common.ui_error_handling import (
+    streamlit_safe_execute, display_error_to_user, display_generic_error,
+    create_error_recovery_section
+)
+from ...common.error_handling import create_error_context, ErrorSeverity
 from typing import Dict, Any, Optional
 import streamlit as st
 
@@ -56,18 +61,52 @@ class BaseTab(ABC):
     
     def _handle_error(self, error: Exception, context: str = "processing") -> None:
         """
-        Standardized error handling for tabs
+        Standardized error handling for tabs using structured error handling system
         
         Args:
             error: The exception that occurred
             context: Description of what was being done when error occurred
         """
-        st.markdown(error_box(f"❌ Error during {context}: {str(error)}"), unsafe_allow_html=True)
+        # Use structured UI error handling
+        error_context = create_error_context(
+            operation=f"tab_{context}",
+            user_data={"tab_type": self.__class__.__name__}
+        )
         
-        # Show detailed error in expander for debugging
-        with st.expander("🔍 Error Details", expanded=False):
-            import traceback
-            st.code(traceback.format_exc())
+        # Use streamlit_safe_execute pattern for consistent error handling
+        from ...common.error_handling import ErrorHandler
+        error_handler = ErrorHandler(f"tab_{self.__class__.__name__}")
+        
+        try:
+            # Convert to structured error
+            structured_error = error_handler.log_exception(
+                f"tab {context}",
+                error,
+                error_context,
+                ErrorSeverity.MEDIUM
+            )
+            
+            # Display with structured UI error handling
+            display_error_to_user(structured_error, show_technical_details=True)
+            
+            # Add recovery suggestions for common tab errors
+            create_error_recovery_section(
+                structured_error,
+                recovery_actions=[
+                    "Refresh the page to reload the tab",
+                    "Check that all required data is properly loaded",
+                    "Try switching to a different tab and back",
+                    "Clear browser cache if the issue persists"
+                ]
+            )
+            
+        except Exception as fallback_error:
+            # Fallback to basic error display if structured handling fails
+            display_generic_error(
+                f"Error during {context}: {str(error)}",
+                error_type="error",
+                icon="❌"
+            )
     
     def _get_current_deduplication_mode(self) -> str:
         """

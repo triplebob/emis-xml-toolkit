@@ -15,6 +15,7 @@ from functools import wraps
 import queue
 import uuid
 from .theme import info_box, success_box, warning_box, error_box
+from ..common.ui_error_handling import display_generic_error
 
 from ..core.background_processor import (
     get_background_processor, 
@@ -131,7 +132,7 @@ class AsyncTabRenderer:
                             else:
                                 st.write(task.result)
                         else:
-                            st.markdown(error_box("Task completed but no result available"), unsafe_allow_html=True)
+                            display_generic_error("Task completed but no result available", "error")
                     
                     # Clean up
                     context.progress_placeholder.empty()
@@ -143,7 +144,7 @@ class AsyncTabRenderer:
                 elif task.status == TaskStatus.FAILED:
                     # Task failed - show error
                     with context.content_placeholder.container():
-                        st.markdown(error_box(f"Failed to load {tab_name}: {task.error}"), unsafe_allow_html=True)
+                        display_generic_error(f"Failed to load {tab_name}: {task.error}", "error")
                         if st.button(f"🔄 Retry {tab_name}", key=f"retry_{tab_id}"):
                             # Clear error and retry
                             del self.active_tasks[tab_id]
@@ -345,14 +346,14 @@ class AsyncDataFrameRenderer:
                             enable_search, show_stats, df_id
                         )
                     else:
-                        st.markdown(error_box(f"Failed to load data for {title}"), unsafe_allow_html=True)
+                        display_generic_error(f"Failed to load data for {title}", "error")
                     
                     # Clean up
                     del self.loading_tasks[df_id]
                     return
                 
                 elif task.status == TaskStatus.FAILED:
-                    st.markdown(error_box(f"Error loading {title}: {task.error}"), unsafe_allow_html=True)
+                    display_generic_error(f"Error loading {title}: {task.error}", "error")
                     del self.loading_tasks[df_id]
                     return
         
@@ -519,7 +520,7 @@ def render_async_metrics(
         st.rerun()
     
     elif component.state == LoadState.ERROR:
-        st.markdown(error_box(f"❌ Error loading {title}: {component.error}"), unsafe_allow_html=True)
+        display_generic_error(f"Error loading {title}: {component.error}", "error", "❌")
         if st.button(f"🔄 Retry {title}", key=f"retry_metrics_{metrics_id}"):
             loader.invalidate_component(component_id)
             st.rerun()

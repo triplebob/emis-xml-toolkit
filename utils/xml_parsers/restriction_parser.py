@@ -7,6 +7,9 @@ import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from .base_parser import XMLParserBase, get_namespaces
+from ..common.error_handling import (
+    create_xml_parsing_context, create_error_context
+)
 
 
 @dataclass
@@ -39,7 +42,17 @@ class RestrictionParser(XMLParserBase):
             return self._build_restriction(record_count, direction, test_conditions)
             
         except Exception as e:
-            print(f"Error parsing restriction: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="restriction",
+                parsing_stage="restriction_parsing"
+            )
+            structured_error = self.error_handler.log_exception(
+                "restriction parsing",
+                e,
+                create_error_context("restriction_parsing", user_data={"operation": "parse_restriction"})
+            )
+            # Return unknown restriction with proper error logging
             return SearchRestriction(
                 type="unknown",
                 description="Unknown restriction type"
@@ -127,7 +140,16 @@ class RestrictionParser(XMLParserBase):
                     'range_values': range_values
                 }
         except Exception as e:
-            print(f"Error parsing test condition: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="test_condition",
+                parsing_stage="test_condition_parsing"
+            )
+            self.error_handler.log_exception(
+                "test condition parsing",
+                e,
+                create_error_context("test_condition_parsing", user_data={"operation": "parse_test_condition"})
+            )
         
         return None
     
@@ -226,22 +248,30 @@ class RestrictionParser(XMLParserBase):
             column_name = self._translate_column_name(cond['column'])
             operator = cond['operator'].lower()  # Make operator lowercase
             
-            # Add value set conditions - don't list the codes, just show the operator
+            # Add value set conditions with descriptions for audit trail
             if cond.get('value_sets'):
-                parts.append(f"{column_name} {operator}:")
+                value_set_names = [vs.strip() for vs in cond['value_sets'] if vs.strip()]
+                if value_set_names:
+                    # Include value set descriptions for better auditability
+                    vs_desc = ', '.join(value_set_names[:3])  # Show first 3 to avoid overly long descriptions
+                    if len(value_set_names) > 3:
+                        vs_desc += f" (+{len(value_set_names)-3} more)"
+                    parts.append(f"{column_name} {operator}: {vs_desc}")
+                else:
+                    parts.append(f"{column_name} {operator}:")
             
             # Add range conditions
             if cond.get('range_values'):
-                range_text = ' and '.join(cond['range_values'])  # Use lowercase 'and'
+                range_text = ' AND '.join(cond['range_values'])  # Use uppercase 'AND' to match EMIS XML semantics
                 if parts:
-                    parts.append(f"and {range_text}")
+                    parts.append(f"AND {range_text}")
                 else:
                     parts.append(f"{column_name} {range_text}")
             
             if parts:
                 condition_parts.append(' '.join(parts))
         
-        return ' and '.join(condition_parts)  # Use lowercase 'and'
+        return ' AND '.join(condition_parts)  # Use uppercase 'AND' to match EMIS XML semantics
     
     def _translate_column_name(self, column: str) -> str:
         """Translate legacy EMIS column names to user-friendly terms"""
@@ -254,7 +284,10 @@ class RestrictionParser(XMLParserBase):
             'NUMERIC_VALUE': 'numeric value',
             'DATE': 'date',
             'AGE': 'age',
-            'AGE_AT_EVENT': 'age at event'
+            'AGE_AT_EVENT': 'age at event',
+            'CONSULTATION_HEADING': 'consultation heading',
+            'ORGANISATION_TERM': 'organisation',
+            'ISSUE_DATE': 'issue date'
         }
         return translations.get(column, column.lower())
 

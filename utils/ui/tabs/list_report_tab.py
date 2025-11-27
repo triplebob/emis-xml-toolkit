@@ -11,6 +11,7 @@ Extracted from report_tabs.py to improve modularity and maintainability.
 from .common_imports import *
 from ...core.session_state import SessionStateKeys
 from ...ui.theme import info_box, success_box, warning_box, error_box
+from ...common.ui_error_handling import display_generic_error
 from .tab_helpers import (
     ensure_analysis_cached,
     _get_report_size_category,
@@ -66,7 +67,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
         # Use ONLY cached analysis data - never trigger reprocessing
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if not analysis:
-            st.markdown(error_box("⚠️ Analysis data not available. Please ensure XML processing completed successfully."), unsafe_allow_html=True)
+            display_generic_error("⚠️ Analysis data not available. Please ensure XML processing completed successfully.", "error")
             st.markdown(info_box("💡 Try refreshing the page or uploading your XML file again."), unsafe_allow_html=True)
             return
         
@@ -148,7 +149,7 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.markdown(error_box(f"Error analyzing List Reports: {str(e)}"), unsafe_allow_html=True)
+        display_generic_error(f"Error analyzing List Reports: {str(e)}", "error")
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 

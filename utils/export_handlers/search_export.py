@@ -4,6 +4,7 @@ Handles detailed per-search export functionality with comprehensive breakdowns
 """
 
 import io
+import re
 from datetime import datetime
 import pandas as pd
 from typing import List, Dict, Any, Optional
@@ -345,11 +346,14 @@ class SearchExportHandler:
                 else:
                     clinical_code_sets_count = 0
             
+            # Get clinical code details for enhanced display
+            clinical_codes_summary = self._get_clinical_codes_summary(criterion)
+            
             data.extend([
                 [criterion_label, criterion.display_name or ''],
                 ['  Table', criterion.table],
                 ['  Action', 'Exclude' if criterion.negation else 'Include'],
-                ['  Clinical Code Sets', clinical_code_sets_count],
+                ['  Clinical Codes', clinical_codes_summary],
                 ['  Additional Filters', additional_filters_count],
                 ['  Linked Criteria', 'Yes' if criterion.linked_criteria else 'No'],
                 ['', '']  # Spacer
@@ -387,15 +391,15 @@ class SearchExportHandler:
                 
                 # Mirror UI two-tier filter structure
                 if main_filters:
-                    # First tier: Main Filters (aggregated summaries)
-                    main_filter_summaries = self._generate_main_filter_summaries(main_filters)
-                    for j, summary in enumerate(main_filter_summaries, 1):
+                    # First tier: Main Filters (use enhanced JSON export descriptions)
+                    enhanced_filter_descriptions = self._get_enhanced_filter_descriptions(main_filters)
+                    for j, description in enumerate(enhanced_filter_descriptions, 1):
                         data.extend([
-                            [f'  Filter {j}', summary],
+                            [f'  Filter {j}', description],
                         ])
                     
-                    # Second tier: Additional Filters (individual EMISINTERNAL breakdown)
-                    additional_filters = self._generate_additional_filter_details(main_filters)
+                    # Second tier: Additional Filters (individual EMISINTERNAL breakdown)  
+                    additional_filters = self._generate_additional_filter_details(main_filters, criterion)
                     if additional_filters:
                         data.append(['', ''])  # Spacer
                         data.extend([
@@ -465,7 +469,7 @@ class SearchExportHandler:
                     codes_data.append({
                         'Rule Number': rule_number,
                         'Criterion Number': i,
-                        'Criterion Type': "MAIN CRITERION",
+                        'Criterion Type': "MAIN CRITERION RESTRICTION" if vs.get('is_restriction', False) else "MAIN CRITERION",
                         'Criterion Description': criterion.description,
                         'Exception Code': criterion.exception_code or '',
                         'Value Set ID': vs.get('id', ''),
@@ -498,7 +502,7 @@ class SearchExportHandler:
                                 codes_data.append({
                                     'Rule Number': rule_number,
                                     'Criterion Number': f"{i}.{j}",
-                                    'Criterion Type': f"LINKED TO CRITERION {i}",
+                                    'Criterion Type': f"LINKED FEATURE {j}",
                                     'Criterion Description': linked_crit.description,
                                     'Exception Code': linked_crit.exception_code or '',
                                     'Value Set ID': vs.get('id', ''),
@@ -542,7 +546,7 @@ class SearchExportHandler:
                         all_codes.append({
                             'Rule': rule_num,
                             'Criterion': crit_num,
-                            'Criterion Type': "MAIN CRITERION",
+                            'Criterion Type': "MAIN CRITERION RESTRICTION" if vs.get('is_restriction', False) else "MAIN CRITERION",
                             'Criterion Description': criterion.description,
                             'Exception Code': criterion.exception_code or '',
                             'Value Set': vs.get('description', vs.get('id', 'Unknown')),
@@ -574,7 +578,7 @@ class SearchExportHandler:
                                     all_codes.append({
                                         'Rule': rule_num,
                                         'Criterion': f"{crit_num}.{j}",
-                                        'Criterion Type': f"LINKED TO CRITERION {crit_num}",
+                                        'Criterion Type': f"LINKED FEATURE {j}",
                                         'Criterion Description': linked_crit.description,
                                         'Exception Code': linked_crit.exception_code or '',
                                         'Value Set': vs.get('description', vs.get('id', 'Unknown')),
@@ -1340,6 +1344,16 @@ class SearchExportHandler:
                     # Use the enhanced EMISINTERNAL context
                     return self._get_emisinternal_context(col_filter)
             
+            # Special handling for IS_PRIVATE that might not have value_sets attached
+            column = col_filter.get('column', '')
+            if isinstance(column, list):
+                is_private_column = any('IS_PRIVATE' in str(col).upper() for col in column)
+            else:
+                is_private_column = 'IS_PRIVATE' in str(column).upper()
+            
+            if is_private_column:
+                return "Include privately prescribed: False"
+            
             return f"{display_name} filter applied"
     
     def _format_range_simple(self, range_data):
@@ -1622,15 +1636,11 @@ class SearchExportHandler:
                     # Determine the year from column name for context
                     year_match = None
                     for col in column_upper_list:
-                        if '2011' in col:
-                            year_match = '2011'
-                        elif '2015' in col:
-                            year_match = '2015'
-                        elif '2021' in col:
-                            year_match = '2021'
-                        elif '2031' in col:
-                            year_match = '2031'
-                        break
+                        # Extract year using regex pattern (future-proof for all census years)
+                        year_search = re.search(r'20(\d{2})', col)
+                        if year_search:
+                            year_match = f"20{year_search.group(1)}"
+                            break
                     
                     year_text = f" ({year_match} boundaries)" if year_match else ""
                     summaries.append(f"Include {total_areas} Lower Layer Super Output Areas{year_text}")
@@ -1649,28 +1659,115 @@ class SearchExportHandler:
                     else:
                         summaries.append("Include specified issue methods")
                 elif column_name == 'IS_PRIVATE':
-                    # Check if this is for private or NHS prescriptions
+                    # Check the actual boolean value for private/NHS prescriptions
                     is_private_filter = any(
                         any(v.get('value', '').lower() == 'true' for v in vs.get('values', []))
                         for vs in emisinternal_value_sets
                     )
                     if is_private_filter:
-                        summaries.append("Include privately prescribed")
+                        summaries.append("Include privately prescribed: True")
                     else:
-                        summaries.append("Include privately prescribed")
+                        summaries.append("Include privately prescribed: False")
                 else:
                     summaries.append(f"Include internal classification: {column_display}")
             else:
-                # Fallback for other column types
-                summaries.append(f"{column_display} filter applied")
+                # Check for specific columns that might not have EMISINTERNAL value sets attached
+                column_name = column_upper_list[0] if column_upper_list else ''
+                if column_name == 'ISSUE_METHOD':
+                    summaries.append("Include specific issue methods")
+                elif column_name == 'IS_PRIVATE':
+                    summaries.append("Include privately prescribed: False")  # Default assumption
+                else:
+                    # Fallback for other column types
+                    summaries.append(f"{column_display} filter applied")
         
         return summaries
     
-    def _generate_additional_filter_details(self, main_filters):
+    def _get_enhanced_filter_descriptions(self, main_filters):
+        """Get enhanced filter descriptions using JSON export logic"""
+        descriptions = []
+        
+        try:
+            # Import and use the enhanced JSON export handler
+            from .json_export_generator import JSONExportGenerator
+            json_exporter = JSONExportGenerator()
+            enhanced_filters = json_exporter._build_complete_column_filters(main_filters)
+            
+            for enhanced_filter in enhanced_filters:
+                description = enhanced_filter.get('description', 'Filter applied')
+                descriptions.append(description)
+            
+        except Exception as e:
+            # Fallback to original logic if JSON export fails
+            descriptions = self._generate_main_filter_summaries(main_filters)
+        
+        return descriptions
+    
+    def _get_clinical_codes_summary(self, criterion):
+        """Get simple summary for rule overview - detailed codes are in dedicated tabs"""
+        if not criterion.value_sets:
+            return "No clinical codes"
+        
+        # Simple generic description - details are in the codes tab
+        clinical_value_sets = [vs for vs in criterion.value_sets if vs.get('code_system') != 'EMISINTERNAL']
+        
+        if clinical_value_sets:
+            return "Include specified clinical codes"
+        else:
+            return "No clinical codes"
+    
+    def _generate_additional_filter_details(self, main_filters, criterion=None):
         """Generate detailed breakdown of EMISINTERNAL and patient demographics filters matching UI Additional Filters section"""
         details = []
         
-        # Collect all relevant value sets from all filters (EMISINTERNAL + patient demographics)
+        # Get EMISINTERNAL value sets directly from the criterion
+        if criterion:
+            try:
+                from ..analysis.linked_criteria_handler import filter_linked_value_sets_from_main
+                all_value_sets = filter_linked_value_sets_from_main(criterion)
+                emisinternal_value_sets = [vs for vs in all_value_sets if vs.get('code_system') == 'EMISINTERNAL']
+                
+                # Process EMISINTERNAL value sets directly (they contain the column context)
+                for vs in emisinternal_value_sets:
+                    # Find which column this value set belongs to
+                    associated_column = None
+                    associated_in_not_in = 'IN'
+                    
+                    # Match value set to column by finding which filter references it
+                    for flt in getattr(criterion, 'filters', []):
+                        if hasattr(flt, 'value_sets'):
+                            for flt_vs in flt.value_sets:
+                                if flt_vs.get('id') == vs.get('id'):
+                                    associated_column = flt.column
+                                    associated_in_not_in = flt.in_not_in
+                                    break
+                        if associated_column:
+                            break
+                    
+                    # If we couldn't find the column, try to infer it from the value set content
+                    if not associated_column:
+                        # Check the values to infer column type
+                        vs_values = vs.get('values', [])
+                        if vs_values:
+                            first_value = vs_values[0].get('value', '').lower()
+                            first_display = vs_values[0].get('display_name', '').lower()
+                            
+                            # Detect IS_PRIVATE by boolean values
+                            if first_value in ['true', 'false']:
+                                associated_column = 'IS_PRIVATE'
+                            # Detect ISSUE_METHOD by characteristic values
+                            elif any(term in first_display for term in ['automatic', 'electronic', 'handwritten', 'dispensing']):
+                                associated_column = 'ISSUE_METHOD'
+                    
+                    # Process each value in the value set
+                    for value in vs.get('values', []):
+                        self._add_emisinternal_filter_detail(details, value, vs, associated_column, associated_in_not_in)
+                
+            except Exception as e:
+                # Fallback to original logic if criterion processing fails
+                pass
+        
+        # Original logic for patient demographics and other filters
         filter_data = []
         for cf in main_filters:
             column = cf.get('column', '')
@@ -1720,16 +1817,11 @@ class SearchExportHandler:
             
             # Handle patient demographics filters (LSOA codes) with EMIS-style phrasing
             if item.get('is_patient_demographics', False):
-                # Extract year from column name
+                # Extract year from column name using regex pattern (future-proof for all census years)
                 year_match = None
-                if '2011' in column_name:
-                    year_match = '2011'
-                elif '2015' in column_name:
-                    year_match = '2015'
-                elif '2021' in column_name:
-                    year_match = '2021'
-                elif '2031' in column_name:
-                    year_match = '2031'
+                year_search = re.search(r'20(\d{2})', column_name)
+                if year_search:
+                    year_match = f"20{year_search.group(1)}"
                 
                 year_text = f" ({year_match})" if year_match else ""
                 # Simplified EMIS phrasing: "Include Patients where the Lower Layer Area (2011) is: E01012571"
@@ -1751,7 +1843,13 @@ class SearchExportHandler:
             # Generate description matching UI format
             if display_name and display_name.strip():
                 if column_name == 'ISSUE_METHOD':
-                    details.append(f"{action} {context}: {display_name}")
+                    details.append(f"{action} {display_name} issue method")
+                elif column_name == 'IS_PRIVATE':
+                    # Handle boolean values for IS_PRIVATE column
+                    if display_name.lower() == 'true':
+                        details.append(f"{action} privately prescribed: True")
+                    else:
+                        details.append(f"{action} privately prescribed: False")
                 elif code_value.upper() == 'PROBLEM' and 'consultation' in context:
                     details.append(f"{action} consultations where the consultation heading is: {display_name}")
                 elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
@@ -1762,13 +1860,35 @@ class SearchExportHandler:
                     }
                     details.append(status_descriptions.get(code_value.upper(), f'{action} {context}: {display_name}'))
                 else:
-                    details.append(f"{action} {context}: {display_name}")
+                    details.append(f"{action} {display_name}")
             elif code_value:
                 details.append(f"{action} internal code: {code_value}")
             else:
                 details.append(f"{action} EMIS internal classification")
         
         return details
+    
+    def _add_emisinternal_filter_detail(self, details, value, vs, column_name, in_not_in):
+        """Add a single EMISINTERNAL filter detail to the list"""
+        display_name = value.get('display_name', '')
+        code_value = value.get('value', '')
+        action = "Include" if in_not_in == "IN" else "Exclude"
+        
+        if display_name and display_name.strip():
+            if column_name == 'ISSUE_METHOD':
+                details.append(f"{action} {display_name} issue method")
+            elif column_name == 'IS_PRIVATE':
+                # Handle boolean values for IS_PRIVATE column
+                if display_name.lower() == 'true':
+                    details.append(f"{action} privately prescribed: True")
+                else:
+                    details.append(f"{action} privately prescribed: False")
+            else:
+                details.append(f"{action} {display_name}")
+        elif code_value:
+            details.append(f"{action} internal code: {code_value}")
+        else:
+            details.append(f"{action} EMIS internal classification")
     
     def _render_column_filter_for_export(self, column_filter):
         """Mirror the UI search visualizer column filter logic for all exports (Excel and JSON)"""
@@ -1868,6 +1988,12 @@ class SearchExportHandler:
             # Check for EMISINTERNAL filters and use enhanced context
             if emisinternal_value_sets:
                 return self._get_emisinternal_context(column_filter)
+            
+            # Check for specific columns that might not have EMISINTERNAL value sets attached
+            if any(col == 'ISSUE_METHOD' for col in column_check):
+                return "Include specific issue methods"
+            elif any(col == 'IS_PRIVATE' for col in column_check):
+                return "Include privately prescribed: False"  # Default assumption
             
             # Default fallback using display name
             return f"{display_name} filter applied"

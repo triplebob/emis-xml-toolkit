@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Callable, Optional
 from ..utils.export_debug import log_export_created, track_export_object, log_memory_after_export
 from ..core.session_state import SessionStateKeys
 from .theme import info_box, success_box, warning_box, error_box
+from ..common.ui_error_handling import display_generic_error
 
 
 def create_styled_dataframe(df: pd.DataFrame, style_function: Callable) -> Any:
@@ -396,7 +397,7 @@ def render_metrics_row(metrics: List[Dict[str, Any]], columns: int = 4) -> None:
             # Apply color coding based on thresholds
             if thresholds:
                 if 'error' in thresholds and value >= thresholds['error']:
-                    st.markdown(error_box(f"**{label}:** {value}"), unsafe_allow_html=True)
+                    display_generic_error(f"**{label}:** {value}", "error")
                 elif 'warning' in thresholds and value >= thresholds['warning']:
                     st.markdown(warning_box(f"**{label}:** {value}"), unsafe_allow_html=True)
                 elif 'success' in thresholds and value >= thresholds['success']:
@@ -574,7 +575,7 @@ def render_info_section(
     elif section_type == "success":
         st.markdown(success_box(content), unsafe_allow_html=True)
     elif section_type == "error":
-        st.markdown(error_box(content), unsafe_allow_html=True)
+        display_generic_error(content, "error")
     else:
         st.markdown(info_box(content), unsafe_allow_html=True)
 

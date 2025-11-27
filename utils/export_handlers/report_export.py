@@ -279,9 +279,17 @@ class ReportExportHandler:
                         is_refset = value.get('is_refset', False)
                         include_children = value.get('include_children', False)
                         
+                        # Determine criterion type based on flags (same logic as rule_export.py)
+                        criterion_type = "MAIN CRITERION"
+                        if value_set.get('is_restriction', False):
+                            criterion_type = "MAIN CRITERION RESTRICTION"
+                        elif value_set.get('is_linked_criteria', False):
+                            criterion_type = "LINKED FEATURE"
+                        
                         code_info = {
                             'Group': group_idx,
                             'Criterion': criterion_idx,
+                            'Criterion Type': criterion_type,
                             'Criterion Name': criterion.display_name,
                             'Table': criterion.table,
                             'Code System': system_display,

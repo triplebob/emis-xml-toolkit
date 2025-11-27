@@ -1,5 +1,102 @@
 # Changelog
 
+## v2.2.6 - XML Parser Enhancement & Export Quality Improvements (27th November 2025)
+
+### 🔍 **XML Parser Code Review Comprehensive Fixes**
+
+**Enhanced Pattern Matching & Future-Proofing:**
+- **Demographics Detection Fix**: Replaced `re.match` with `re.search` for proper handling of embedded demographic terms in EMIS columns (LONDON_LOWER_AREA patterns)
+- **Year Future-Proofing**: Updated `20\d{2}` regex pattern across all modules for automatic future census support
+- **Dynamic Year Extraction**: Enhanced export handlers to dynamically extract years without maintenance requirements
+
+**Error Visibility & Data Consistency:**
+- **Negation Warning System**: Added comprehensive warnings for empty negation elements with proper handling in legacy parsing
+- **Column Filter Consistency**: Fixed dual return types (list vs string) ensuring consistent downstream processing
+- **Namespace Handling Cleanup**: Replaced manual namespace merges with `find_elements_both()` calls reducing code duplication
+
+**Column Translation & Semantic Enhancement:**
+- **Extended Column Coverage**: Added missing translations for CONSULTATION_HEADING, ORGANISATION_TERM, ISSUE_DATE
+- **Auditability Improvements**: Enhanced condition descriptions to include value set names in audit reports
+- **Semantic Formatting**: Fixed condition joining to use uppercase "AND" for EMIS XML standards consistency
+
+**Extended EMIS XML Support:**
+- **Comprehensive Value Parsing**: Added support for missing attributes in value entries: inactive, legacyValue, clusterCode
+- **Enhanced Error Handling**: Implemented structured error reporting across restriction, valueset, and linked criteria parsers
+
+### 📊 **Export Quality & Clinical Code Context Enhancement**
+
+**Advanced Clinical Code Semantics:**
+- **Flag-Based Detection**: Implemented proper `is_restriction` and `is_linked_criteria` flags during XML parsing
+- **Criterion Type Labelling**: Fixed "MAIN CRITERION RESTRICTION" detection using systematic flag checking
+- **Unified Terminology**: Standardised linked criteria labelling to "LINKED FEATURE" across all export handlers
+- **Semantic Separation**: UI filtering now properly distinguishes restriction codes from main criterion codes
+
+**Export Handler Quality Improvements:**
+- **Consistent Detection Logic**: Updated all 4 export handlers (`search_export.py`, `rule_export.py`, `clinical_code_export.py`, `report_export.py`) with unified flag-based approach
+- **Clinical Code Metadata**: Full clinical code details in restrictions with EMIS GUID, SNOMED code, translation status
+- **Clean Data Separation**: Removed complex post-processing in favour of clean flag-based approach
+
+### 🔧 **JSON Export Architecture Refactoring**
+
+**Linked Criteria Proper Separation:**
+- **Advanced Filtering Logic**: Applied UI separation logic to JSON exports distinguishing main criterion from restrictions and linked criteria
+- **Rich Linked Details**: Enhanced linked criteria sections with full clinical codes, restrictions, and metadata
+- **Master Export Inheritance**: Improvements apply to both individual and master JSON exports through shared generation
+
+**EMIS Integration & Data Quality:**
+- **Refset Handling Improvements**: Fixed EMIS GUID → SNOMED mapping with proper descriptions using valueset data
+- **Restriction Description Fix**: Added missing description fields showing complete restriction details
+- **Clean JSON Structure**: Removed technical fields, enhanced constraint details, fixed empty value handling
+
+### 🎨 **UI Display & Filter Enhancement**
+
+**Filter Display Improvements:**
+- **EMISINTERNAL Formatting**: Enhanced ISSUE_METHOD display to "Include Automatic issue method" from generic formatting
+- **Boolean Handling**: Proper IS_PRIVATE display showing "Include privately prescribed: False" with context
+- **Additional Filter Cleanup**: Intelligent filtering to remove redundant boolean values when properly handled elsewhere
+- **Consistent Auditability**: Improved filter descriptions across main and additional filter sections
+
+### 📈 **Error Handling Integration & Infrastructure**
+
+**Streamlit Application Enhancements:**
+- **Unified Error Handling**: Replaced debug_logger.log_error with error_handler.handle_error() for consistency
+- **Progress Bar Intelligence**: Task-weight based system with realistic complexity weighting and fluid updates
+- **Memory Monitoring**: Enhanced completion messages with memory usage and processing time metrics
+- **Code Quality**: Import optimisation, encoding detection improvements, consistent error categorisation
+
+**UI Error System Unification:**
+- **Structured Error Components**: Complete integration across 13 UI components using centralised error handling
+- **Theme Consistency**: Proper error_box, warning_box, info_box usage with custom theme integration
+- **Circular Import Resolution**: Maintained theme.py integration while resolving import conflicts
+- **Documentation Restructure**: Three-tier documentation system (clinical users, technical, UI integration)
+
+---
+
+### ⚡ **Technical Benefits & Performance Impact**
+
+**Development Quality:**
+- **Maintainability**: Flag-based approach eliminates complex post-processing logic
+- **Future-Proofing**: Regex patterns support automatic year updates without code changes
+- **Error Transparency**: Enhanced visibility into parsing issues with structured reporting
+
+**Data Integrity:**
+- **Semantic Accuracy**: Proper distinction between restriction and main criterion codes
+- **Export Quality**: JSON exports now match UI detail level with complete metadata
+- **Consistent Terminology**: Unified labelling across all export formats
+- **Enhanced Auditability**: Value set names in condition descriptions for better transparency
+
+**User Experience:**
+- **Cleaner UI Display**: Improved filter formatting and boolean value handling
+- **Professional Error Handling**: Centralised error system with proper categorisation
+- **Enhanced Progress Feedback**: Realistic progress bars with detailed status and timing
+- **Memory Awareness**: Real-time memory monitoring with completion statistics
+
+---
+
+*Version 2.2.6 delivers comprehensive XML parser enhancements, advanced export quality improvements, and unified error handling architecture, ensuring robust clinical data processing with enhanced semantic accuracy and professional error management.*
+
+---
+
 ## v2.2.5 - NHS Terminology Server Reliability & XML Parsing Resilience (25th November 2025)
 
 ### 🌐 **NHS Terminology Server Reliability Enhancement Plan**
@@ -1038,6 +1135,6 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 
 ---
 
-*Last Updated: 25th November 2025*  
-*Application Version: 2.2.5*  
+*Last Updated: 27th November 2025*  
+*Application Version: 2.2.6*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*

@@ -1,20 +1,53 @@
 import streamlit as st
+import chardet
 from utils.ui import render_status_bar, render_results_tabs
 from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
 from utils.core import translate_emis_to_snomed
 from utils.core.session_state import SessionStateKeys, clear_processing_state, clear_results_state, clear_export_state, clear_all_except_core, clear_for_new_xml, clear_for_new_xml_selection
-from utils.ui.theme import ThemeColors, create_info_box_style, info_box
-from utils.analysis.search_analyzer import SearchAnalyzer
-from utils.analysis.report_analyzer import ReportAnalyzer
+from utils.ui.theme import ThemeColors, create_info_box_style, info_box, success_box, warning_box, error_box
 from utils.utils import get_debug_logger, render_debug_controls
 from utils.analysis import render_performance_controls, display_performance_metrics
 from utils.utils import create_processing_stats
-from utils.ui.theme import info_box, success_box, warning_box, error_box
+from utils.common.error_handling import (
+    ErrorHandler, XMLParsingError, FileOperationError, DataValidationError,
+    create_error_context, handle_xml_parsing_error, handle_file_operation_error,
+    ErrorSeverity, ErrorCategory
+)
+from utils.common.ui_error_handling import (
+    display_error_to_user, display_generic_error, streamlit_safe_execute
+)
 import time
 import psutil
 import os
+import hashlib
 import xml.etree.ElementTree as ET
+from utils.utils.caching.cache_manager import cache_manager
 
+# Task weight configuration for realistic progress tracking
+TASK_WEIGHTS = {
+    'encoding_detection': 5,    # 5% - Fast encoding detection
+    'xml_parsing': 15,          # 15% - XML structure parsing
+    'cache_building': 10,       # 10% - Building lookup caches (if needed)
+    'guid_processing': 10,      # 10% - Processing EMIS GUIDs
+    'translation': 40,          # 40% - SNOMED translation (main work)
+    'statistics': 10,           # 10% - Creating audit statistics
+    'finalization': 5,          # 5% - Finalizing results
+    'analysis': 5               # 5% - XML structure analysis
+}
+
+# Cumulative progress points for each stage
+PROGRESS_POINTS = {
+    'start': 0,
+    'encoding': TASK_WEIGHTS['encoding_detection'],
+    'parsing': TASK_WEIGHTS['encoding_detection'] + TASK_WEIGHTS['xml_parsing'],
+    'cache': TASK_WEIGHTS['encoding_detection'] + TASK_WEIGHTS['xml_parsing'] + TASK_WEIGHTS['cache_building'],
+    'guids': TASK_WEIGHTS['encoding_detection'] + TASK_WEIGHTS['xml_parsing'] + TASK_WEIGHTS['cache_building'] + TASK_WEIGHTS['guid_processing'],
+    'translation_prep': TASK_WEIGHTS['encoding_detection'] + TASK_WEIGHTS['xml_parsing'] + TASK_WEIGHTS['cache_building'] + TASK_WEIGHTS['guid_processing'] + 5,  # Mid-way through translation
+    'translation': TASK_WEIGHTS['encoding_detection'] + TASK_WEIGHTS['xml_parsing'] + TASK_WEIGHTS['cache_building'] + TASK_WEIGHTS['guid_processing'] + TASK_WEIGHTS['translation'],
+    'statistics': 100 - TASK_WEIGHTS['finalization'] - TASK_WEIGHTS['analysis'],
+    'finalization': 100 - TASK_WEIGHTS['analysis'],
+    'complete': 100
+}
 
 # Page configuration
 st.set_page_config(
@@ -27,7 +60,7 @@ st.set_page_config(
 # Main app
 def main():
     # Load lookup table and render status bar first
-    from utils.common import streamlit_safe_execute, show_file_error
+    from utils.common import streamlit_safe_execute
     
     # Use safe execution for status bar rendering
     status_result = streamlit_safe_execute(
@@ -41,6 +74,9 @@ def main():
         return
     
     lookup_df, emis_guid_col, snomed_code_col = status_result
+    
+    # Initialize error handler for this session
+    error_handler = ErrorHandler("streamlit_main")
     
     try:
         # Initialize debug logger
@@ -117,8 +153,7 @@ def main():
                 if st.button("🛑 Cancel Processing", type="secondary"):
                     # Comprehensive cleanup when cancelling - same as new XML upload
                     clear_for_new_xml()
-                    st.session_state[SessionStateKeys.IS_PROCESSING] = False
-                    from utils.ui.theme import success_box
+                    clear_processing_state()
                     st.markdown(success_box("Processing cancelled - all data cleared"), unsafe_allow_html=True)
                     st.rerun()
                 
@@ -131,20 +166,39 @@ def main():
                 
                 # Process the file - remove spinner to avoid UI conflicts
                 try:
-                    # Read XML content
-                    xml_content = uploaded_xml.read().decode('utf-8')
+                    # Initialize progress tracking FIRST for immediate feedback
+                    progress_bar = None
+                    status_text = None
+                    if perf_settings.get('show_progress', True):
+                        progress_bar = st.progress(0, text="Starting XML processing...")
+                        status_text = st.empty()  # For detailed status updates
+                    
+                    # Read raw bytes and detect encoding
+                    raw_bytes = uploaded_xml.read()
+                    if progress_bar:
+                        progress_bar.progress(PROGRESS_POINTS['encoding'], text="Processing file encoding...")
+                        if status_text:
+                            status_text.text(f"📁 File size: {len(raw_bytes):,} bytes - Detecting encoding...")
+                    
+                    # Fast encoding detection - only sample first 10KB for speed
+                    sample_size = min(10240, len(raw_bytes))  # 10KB max sample
+                    detected = chardet.detect(raw_bytes[:sample_size])
+                    encoding = detected['encoding'] or 'utf-8'
+                    xml_content = raw_bytes.decode(encoding, errors='replace')
+                    
+                    if status_text:
+                        status_text.text(f"✅ Encoding detected: {encoding} ({detected.get('confidence', 0):.1%} confidence)")
+                    
+                    # Store raw bytes in session state to avoid re-read issues
+                    st.session_state[SessionStateKeys.XML_RAW_BYTES] = raw_bytes
                     
                     # Cloud-optimized processing with progress tracking (no spinner)
                     start_time = time.time()
                     
-                    # Track memory usage
+                    # Track memory usage with peak monitoring
                     process = psutil.Process(os.getpid())
                     memory_start = process.memory_info().rss / 1024 / 1024  # MB
-                    
-                    # Initialize progress tracking
-                    progress_bar = None
-                    if perf_settings.get('show_progress', True):
-                        progress_bar = st.progress(0, text="Starting XML processing...")
+                    memory_peak = memory_start
                     
                     # Log processing start
                     if debug_logger:
@@ -153,14 +207,21 @@ def main():
                         
                         # Parse XML with memory optimization
                         if progress_bar:
-                            progress_bar.progress(5, text="Parsing XML structure...")
+                            progress_bar.progress(PROGRESS_POINTS['parsing'], text="Parsing XML structure...")
+                            if status_text:
+                                status_text.text(f"🔍 Scanning XML for EMIS GUIDs and clinical codes...")
                         
                         # Use cached XML code extraction from cache_manager
-                        from utils.utils.caching.cache_manager import cache_manager
-                        import hashlib
                         
-                        xml_content_hash = hashlib.md5(xml_content.encode()).hexdigest()
+                        xml_content_hash = hashlib.md5(raw_bytes).hexdigest()
                         emis_guids = cache_manager.cache_xml_code_extraction(xml_content_hash, xml_content)
+                        
+                        if status_text and emis_guids:
+                            status_text.text(f"✅ Found {len(emis_guids):,} clinical codes in XML structure")
+                        
+                        # Update memory peak after parsing
+                        current_memory = process.memory_info().rss / 1024 / 1024
+                        memory_peak = max(memory_peak, current_memory)
                         
                         # Store emis_guids in session state for potential reprocessing
                         st.session_state[SessionStateKeys.EMIS_GUIDS] = emis_guids
@@ -173,7 +234,6 @@ def main():
                             # Check if this XML contains valid searches/reports even without clinical codes
                             # This handles patient demographics filtering XMLs and other non-clinical patterns
                             try:
-                                import xml.etree.ElementTree as ET
                                 root = ET.fromstring(xml_content)
                                 
                                 # Check for report elements (with any namespace)
@@ -193,17 +253,29 @@ def main():
                                     translated_codes = {}
                                 else:
                                     # No reports found - truly invalid XML
-                                    if debug_logger:
-                                        debug_logger.log_error(Exception("No EMIS GUIDs or valid reports found"), "XML parsing")
-                                    from utils.ui.theme import error_box
-                                    st.markdown(error_box("No EMIS GUIDs or valid search reports found in the XML file"), unsafe_allow_html=True)
+                                    # Create structured error for empty XML processing
+                                    empty_xml_error = handle_xml_parsing_error(
+                                        "XML file processing", 
+                                        Exception("No EMIS GUIDs or valid reports found"), 
+                                        "document_root"
+                                    )
+                                    error_handler.handle_error(empty_xml_error)
+                                    
+                                    # Use structured UI error display
+                                    display_error_to_user(empty_xml_error, show_technical_details=True)
                                     return
                                     
                             except Exception as parse_error:
-                                if debug_logger:
-                                    debug_logger.log_error(parse_error, "XML structure validation")
-                                from utils.ui.theme import error_box
-                                st.markdown(error_box(f"Error validating XML structure: {str(parse_error)}"), unsafe_allow_html=True)
+                                # Create structured error for XML validation failure
+                                validation_error = handle_xml_parsing_error(
+                                    "XML structure validation", 
+                                    parse_error, 
+                                    "document_structure"
+                                )
+                                error_handler.handle_error(validation_error)
+                                
+                                # Use structured UI error display
+                                display_error_to_user(validation_error, show_technical_details=True)
                                 return
                         else:
                             # Normal processing path with clinical codes
@@ -226,7 +298,7 @@ def main():
                                 if cache_info["status"] == "not_cached":
                                     # Cache needs building - show progress
                                     if progress_bar:
-                                        progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
+                                        progress_bar.progress(PROGRESS_POINTS['cache'], text="Building EMIS lookup cache for terminology server (first time)...")
                                     
                                     cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
                                     
@@ -239,19 +311,33 @@ def main():
                                     # Cache check failed - try to build anyway
                                     cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
                             
+                            # Calculate unique GUIDs for accurate user messaging
+                            unique_guids = set(guid_info['emis_guid'] for guid_info in emis_guids)
+                            
+                            # Pre-calculate clinical/medication GUIDs to match completion count
+                            clinical_med_guids = set()
+                            for guid_info in emis_guids:
+                                # Only count non-refset GUIDs that will appear in clinical/medications categories
+                                if not guid_info.get('is_refset', False):
+                                    clinical_med_guids.add(guid_info['emis_guid'])
+                            
                             if progress_bar:
-                                progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
+                                progress_bar.progress(PROGRESS_POINTS['guids'], text=f"Found {len(unique_guids)} unique GUIDs from {len(emis_guids)} references, preparing translation...")
                             
                             # Show progress as toast notification
                             st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
                             
                             # Translate to SNOMED codes with progress tracking
                             if progress_bar:
-                                progress_bar.progress(30, text="Processing clinical codes...")
+                                progress_bar.progress(PROGRESS_POINTS['translation_prep'], text="Processing clinical codes...")
+                                if status_text:
+                                    status_text.text(f"🔄 Translating all discovered codes to SNOMED...")
                             
                             # Get deduplication mode from session state, default to unique_codes
                             deduplication_mode = st.session_state.get(SessionStateKeys.CURRENT_DEDUPLICATION_MODE, 'unique_codes')
                             
+                            # Show intermediate progress during translation
+                            translation_start_time = time.time()
                             translated_codes = translate_emis_to_snomed(
                                 emis_guids, 
                                 lookup_df, 
@@ -259,9 +345,21 @@ def main():
                                 snomed_code_column,
                                 deduplication_mode
                             )
+                            translation_time = time.time() - translation_start_time
+                            
+                            if status_text:
+                                # Count successful translations for clinical and medications only (same logic as success_rate)
+                                success_count = sum(1 for item in translated_codes.get('clinical', []) if item.get('Mapping Found') == 'Found')
+                                success_count += sum(1 for item in translated_codes.get('medications', []) if item.get('Mapping Found') == 'Found')
+                                total_translated = len(translated_codes.get('clinical', [])) + len(translated_codes.get('medications', []))
+                                status_text.text(f"✅ Translation complete: {success_count:,}/{total_translated:,} codes mapped ({translation_time:.1f}s)")
+                            
+                            # Update memory peak after translation
+                            current_memory = process.memory_info().rss / 1024 / 1024
+                            memory_peak = max(memory_peak, current_memory)
                             
                             if progress_bar:
-                                progress_bar.progress(75, text="Translation complete, generating statistics...")
+                                progress_bar.progress(PROGRESS_POINTS['translation'], text="Translation complete, generating statistics...")
                             
                             # Show progress as toast notification
                             st.toast("Creating audit statistics and finalizing results...", icon="📊")
@@ -272,17 +370,17 @@ def main():
                         else:
                             # No clinical codes - skip translation but still show progress
                             if progress_bar:
-                                progress_bar.progress(30, text="No clinical codes found, processing structure only...")
+                                progress_bar.progress(PROGRESS_POINTS['translation_prep'], text="No clinical codes found, processing structure only...")
                             st.toast("Processing patient demographics filters and XML structure...", icon="📍")
                         
-                        # Calculate processing time and memory usage
+                        # Calculate processing time and final memory usage
                         processing_time = time.time() - start_time
                         memory_end = process.memory_info().rss / 1024 / 1024  # MB
-                        memory_peak = max(memory_start, memory_end)
+                        memory_peak = max(memory_peak, memory_end)  # Update final peak
                         
                         # Create audit statistics (handle case with no clinical codes)
                         if progress_bar:
-                            progress_bar.progress(85, text="Creating audit statistics...")
+                            progress_bar.progress(PROGRESS_POINTS['statistics'], text="Creating audit statistics...")
                         
                         # Use empty dict for translated_codes if no clinical codes found
                         if 'translated_codes' not in locals():
@@ -297,7 +395,7 @@ def main():
                         )
                         
                         if progress_bar:
-                            progress_bar.progress(95, text="Finalizing results...")
+                            progress_bar.progress(PROGRESS_POINTS['finalization'], text="Finalizing results...")
                         
                         # Store results in session state
                         st.session_state[SessionStateKeys.RESULTS] = translated_codes
@@ -306,11 +404,11 @@ def main():
                         st.session_state[SessionStateKeys.XML_CONTENT] = xml_content  # Store for search rule analysis
                         
                         # Clear processing state as soon as we have results
-                        st.session_state[SessionStateKeys.IS_PROCESSING] = False
+                        clear_processing_state()
                         
                         # Generate analysis for report structure tabs (SEPARATE from clinical codes)
                         if progress_bar:
-                            progress_bar.progress(97, text="Analyzing XML structure...")
+                            progress_bar.progress(PROGRESS_POINTS['finalization'], text="Analyzing XML structure...")
                         
                         # CRITICAL SEPARATION: Keep report analysis completely isolated from clinical codes
                         try:
@@ -329,8 +427,13 @@ def main():
                             st.session_state[SessionStateKeys.REPORT_RESULTS] = getattr(analysis, 'report_results', None)
                             
                         except Exception as e:
-                            if debug_logger:
-                                debug_logger.log_error(e, "XML structure analysis")
+                            # Create structured error for analysis failure (non-critical)
+                            analysis_error = handle_xml_parsing_error(
+                                "XML structure analysis", 
+                                e, 
+                                "analysis_module"
+                            )
+                            error_handler.handle_error(analysis_error)
                             # Don't fail the whole process if analysis fails, but preserve clinical codes functionality
                             st.session_state[SessionStateKeys.XML_STRUCTURE_ANALYSIS] = None
                             st.session_state[SessionStateKeys.SEARCH_ANALYSIS] = None
@@ -347,16 +450,17 @@ def main():
                         if debug_logger:
                             debug_logger.log_processing_complete(processing_time, success_rate)
                         
-                        # Complete progress with helpful message about rendering
+                        # Complete progress
                         if progress_bar:
-                            progress_bar.progress(100, text="Processing Complete! Rendering Results - This May Take a Moment...")
-                        
-                        # Remove the rendering message as it's no longer needed
-                        rendering_placeholder = st.empty()
-                        
-                        # Clear progress bar after longer pause to show the message
-                        if progress_bar:
-                            time.sleep(1.0)  # Longer pause to show completion message
+                            # Get final memory usage for completion message
+                            final_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+                            processing_time_str = f"{processing_time:.1f}s" if processing_time < 60 else f"{processing_time/60:.1f}m"
+                            
+                            completion_text = f"✅ Processing Complete in {processing_time_str}! Memory: {final_memory:.1f}MB"
+                            progress_bar.progress(PROGRESS_POINTS['complete'], text=completion_text)
+                            
+                            # Brief pause to show completion message
+                            time.sleep(0.5)
                             progress_bar.empty()
                         
                         # Show success with detailed toast notification - handle empty translated_codes for patient demographics XMLs
@@ -411,41 +515,79 @@ def main():
                             }
                             display_performance_metrics(metrics)
                         
-                        # Clear the rendering message
-                        if 'rendering_placeholder' in locals():
-                            rendering_placeholder.empty()
                         
-                        # Reset processing state on completion - ensure clean state
-                        st.session_state[SessionStateKeys.IS_PROCESSING] = False
-                        # Also clear any progress indicators to ensure clean UI
+                        # Reset processing state on completion - ensure clean state and progress indicators
                         clear_processing_state()
                         st.rerun()
                 
+                except ET.ParseError as e:
+                    # XML parsing specific error with structured UI handling
+                    xml_error = handle_xml_parsing_error("XML file processing", e, "root")
+                    error_handler.handle_error(xml_error)
+                    
+                    # Use structured UI error display
+                    display_error_to_user(xml_error, show_technical_details=True)
+                    
+                    # Reset processing state on error
+                    clear_processing_state()
+                    st.rerun()
+                    
+                except UnicodeDecodeError as e:
+                    # Encoding detection/decoding error with structured UI handling
+                    file_error = handle_file_operation_error(
+                        "encoding detection", 
+                        uploaded_xml.name if uploaded_xml else "unknown", 
+                        e
+                    )
+                    error_handler.handle_error(file_error)
+                    
+                    # Use structured UI error display
+                    display_error_to_user(file_error, show_technical_details=True)
+                    
+                    # Reset processing state on error
+                    clear_processing_state()
+                    st.rerun()
+                    
+                except MemoryError as e:
+                    # Memory exhaustion error with structured UI handling
+                    context = create_error_context(
+                        operation="XML processing",
+                        user_data={"file_size": uploaded_xml.size if uploaded_xml else 0}
+                    )
+                    memory_error = error_handler.log_exception(
+                        "XML file processing", 
+                        e, 
+                        context, 
+                        ErrorSeverity.HIGH
+                    )
+                    
+                    # Use structured UI error display
+                    display_error_to_user(memory_error, show_technical_details=True)
+                    
+                    # Reset processing state on error
+                    clear_processing_state()
+                    st.rerun()
+                    
                 except Exception as e:
-                    # Print detailed error information to console for debugging
-                    import traceback
-                    full_error = traceback.format_exc()
+                    # Generic exception with structured UI handling
+                    context = create_error_context(
+                        operation="XML processing", 
+                        file_path=uploaded_xml.name if uploaded_xml else "unknown",
+                        user_data={"file_size": uploaded_xml.size if uploaded_xml else 0}
+                    )
                     
-                    print("="*80)
-                    print("GEOGRAPHICAL XML PROCESSING ERROR")
-                    print("="*80)
-                    print(f"Error type: {type(e).__name__}")
-                    print(f"Error message: {str(e)}")
-                    print("\nFull traceback:")
-                    print(full_error)
-                    print("="*80)
+                    # Use the structured error handler to log and categorize the exception
+                    structured_error = error_handler.log_exception(
+                        "XML file processing", 
+                        e, 
+                        context, 
+                        ErrorSeverity.MEDIUM
+                    )
                     
-                    if debug_logger:
-                        debug_logger.log_error(e, "XML processing")
-                    from utils.ui.theme import error_box
-                    st.markdown(error_box(f"Error processing XML: {str(e)}"), unsafe_allow_html=True)
+                    # Use structured UI error display
+                    display_error_to_user(structured_error, show_technical_details=True)
                     
-                    # Clear the rendering message if it exists
-                    if 'rendering_placeholder' in locals():
-                        rendering_placeholder.empty()
-                    # Reset processing state on error - ensure clean state
-                    st.session_state[SessionStateKeys.IS_PROCESSING] = False
-                    # Also clear any progress indicators to ensure clean UI
+                    # Reset processing state on error - ensure clean state and progress indicators
                     clear_processing_state()
                     st.rerun()
         

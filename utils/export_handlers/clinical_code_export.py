@@ -43,7 +43,7 @@ class ClinicalCodeExportHandler:
                 main_criteria = [c for c in group.criteria if not self._is_linked_criterion(c, group.criteria)]
                 
                 for crit_num, criterion in enumerate(main_criteria, 1):
-                    # Extract codes from main criterion
+                    # Extract codes from main criterion (both regular and restriction codes, flagged appropriately)
                     codes = self._extract_codes_from_criterion(
                         criterion, search, rule_num, crit_num, include_search_context, include_source_tracking, is_report_criteria, "MAIN CRITERION"
                     )
@@ -52,7 +52,7 @@ class ClinicalCodeExportHandler:
                     # Extract codes from linked criteria
                     for linked_num, linked_crit in enumerate(criterion.linked_criteria, 1):
                         linked_codes = self._extract_codes_from_criterion(
-                            linked_crit, search, rule_num, f"{crit_num}.{linked_num}", include_search_context, include_source_tracking, is_report_criteria, f"LINKED TO CRITERION {crit_num}"
+                            linked_crit, search, rule_num, f"{crit_num}.{linked_num}", include_search_context, include_source_tracking, is_report_criteria, f"LINKED FEATURE {linked_num}"
                         )
                         all_codes.extend(linked_codes)
         
@@ -155,7 +155,7 @@ class ClinicalCodeExportHandler:
         return best_entry
     
     def _extract_codes_from_criterion(self, criterion, search, rule_num, crit_num, include_context, include_source_tracking=False, is_report_criteria=False, criterion_type="MAIN CRITERION"):
-        """Extract clinical codes from a criterion"""
+        """Extract clinical codes from a criterion using is_restriction flag to determine type"""
         codes = []
         
         if not criterion.value_sets:
@@ -164,6 +164,11 @@ class ClinicalCodeExportHandler:
         for vs in criterion.value_sets:
             if not vs.get('values'):
                 continue
+            
+            # Determine the actual criterion type based on the is_restriction flag
+            actual_criterion_type = criterion_type
+            if vs.get('is_restriction', False) and criterion_type == "MAIN CRITERION":
+                actual_criterion_type = "MAIN CRITERION RESTRICTION"
                 
             for value in vs['values']:
                 code_data = {
@@ -184,7 +189,7 @@ class ClinicalCodeExportHandler:
                         'Author': search.author or 'N/A',
                         'Rule Number': rule_num,
                         'Criterion Number': crit_num,
-                        'Criterion Type': criterion_type,
+                        'Criterion Type': actual_criterion_type,
                         'Criterion Description': criterion.description or '',
                         'Criterion Table': criterion.table
                     })

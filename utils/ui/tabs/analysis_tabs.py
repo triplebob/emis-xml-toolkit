@@ -19,6 +19,7 @@ from .common_imports import *
 from ...core.session_state import SessionStateKeys
 from .base_tab import BaseTab, TabRenderer
 from ...ui.theme import info_box, success_box, warning_box, error_box
+from ...common.ui_error_handling import display_generic_error
 from .tab_helpers import (
     _reprocess_with_new_mode,
     _lookup_snomed_for_ui,
@@ -51,7 +52,7 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            display_generic_error("Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.", "error", "⚠️")
             st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
@@ -143,7 +144,7 @@ def render_search_analysis_tab(xml_content: str, xml_filename: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        st.markdown(error_box(f"Error analyzing search structure: {str(e)}"), unsafe_allow_html=True)
+        display_generic_error(f"Error analyzing search structure: {str(e)}", "error")
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -172,7 +173,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         # If analysis isn't already cached, show error instead of hanging for 10 minutes
         analysis = st.session_state.get(SessionStateKeys.SEARCH_ANALYSIS) or st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
         if analysis is None:
-            st.markdown(error_box("⚠️ Analysis not available. Please ensure XML processing completed successfully and try refreshing the page."), unsafe_allow_html=True)
+            display_generic_error("Analysis not available. Please ensure XML processing completed successfully and try refreshing the page.", "error", "⚠️")
             st.markdown(info_box("💡 Try switching to the 'Clinical Codes' tab first, then return to this tab."), unsafe_allow_html=True)
             return
         
@@ -307,7 +308,7 @@ def render_xml_structure_tabs(xml_content: str, xml_filename: str):
         print(f"Error: {str(e)}")
         print(f"Full traceback:\n{error_details}")
         
-        st.markdown(error_box(f"Error analyzing XML structure: {str(e)}"), unsafe_allow_html=True)
+        display_generic_error(f"Error analyzing XML structure: {str(e)}", "error")
         with st.expander("Debug Information", expanded=False):
             st.code(error_details)
 
@@ -431,7 +432,7 @@ def render_detailed_rules_tab(analysis, xml_filename):
                         gc.collect()
                         st.markdown(success_box("✅ Rule analysis report generated successfully"), unsafe_allow_html=True)
                 except Exception as e:
-                    st.markdown(error_box(f"Rule analysis export failed: {e}"), unsafe_allow_html=True)
+                    display_generic_error(f"Rule analysis export failed: {e}", "error")
         
         # Execute the fragment
         rule_analysis_export_fragment()

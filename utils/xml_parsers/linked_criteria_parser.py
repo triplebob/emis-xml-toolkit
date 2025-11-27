@@ -6,6 +6,9 @@ Handles parsing of linked criteria and their relationships
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional
 from .base_parser import XMLParserBase, get_namespaces
+from ..common.error_handling import (
+    create_xml_parsing_context, create_error_context
+)
 
 
 class LinkedCriteriaParser(XMLParserBase):
@@ -24,7 +27,7 @@ class LinkedCriteriaParser(XMLParserBase):
                 # Import here to avoid circular imports
                 from .criterion_parser import CriterionParser
                 criterion_parser = CriterionParser(self.namespaces)
-                criterion = criterion_parser.parse_criterion(criterion_elem)
+                criterion = criterion_parser.parse_criterion(criterion_elem, is_linked_criteria=True)
                 
                 # Add relationship info to the criterion if parsed successfully
                 if criterion and relationship_info:
@@ -34,7 +37,16 @@ class LinkedCriteriaParser(XMLParserBase):
                 
                 return criterion
         except Exception as e:
-            print(f"Error parsing linked criterion: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="linked_criterion",
+                parsing_stage="linked_criterion_parsing"
+            )
+            self.error_handler.log_exception(
+                "linked criterion parsing",
+                e,
+                create_error_context("linked_criterion_parsing", user_data={"operation": "parse_linked_criterion"})
+            )
         
         return None
     
@@ -55,7 +67,16 @@ class LinkedCriteriaParser(XMLParserBase):
             
             return relationship
         except Exception as e:
-            print(f"Error parsing relationship: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="relationship",
+                parsing_stage="relationship_parsing"
+            )
+            self.error_handler.log_exception(
+                "relationship parsing",
+                e,
+                create_error_context("relationship_parsing", user_data={"operation": "parse_relationship"})
+            )
             return {}
     
     def _parse_relationship_range(self, range_value_elem: ET.Element) -> Dict[str, Any]:
@@ -75,7 +96,16 @@ class LinkedCriteriaParser(XMLParserBase):
             
             return range_info
         except Exception as e:
-            print(f"Error parsing relationship range: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="relationship_range",
+                parsing_stage="relationship_range_parsing"
+            )
+            self.error_handler.log_exception(
+                "relationship range parsing",
+                e,
+                create_error_context("relationship_range_parsing", user_data={"operation": "parse_relationship_range"})
+            )
             return {}
     
     def _parse_range_boundary(self, boundary_elem: ET.Element) -> Dict[str, Any]:
@@ -96,7 +126,16 @@ class LinkedCriteriaParser(XMLParserBase):
             
             return boundary
         except Exception as e:
-            print(f"Error parsing range boundary: {e}")
+            # Use structured error handling as documented
+            xml_context = create_xml_parsing_context(
+                element_name="range_boundary",
+                parsing_stage="range_boundary_parsing"
+            )
+            self.error_handler.log_exception(
+                "range boundary parsing",
+                e,
+                create_error_context("range_boundary_parsing", user_data={"operation": "parse_range_boundary"})
+            )
             return {}
     
     def parse_relationship_description(self, relationship: Dict[str, Any]) -> str:
