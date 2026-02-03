@@ -27,6 +27,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE
 .vscode/
@@ -44,3 +45,6 @@ Thumbs.db
 project_tracker.md
 retired_code.md
 nul
+
+# Export files (temporary)
+exports/

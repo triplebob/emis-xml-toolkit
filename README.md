@@ -1,17 +1,39 @@
-![ClinXML - The Unofficial EMIS XML Toolkit](img/clinxml.svg)
+![ClinXML - The Unofficial EMIS XML Toolkit](static/clinxml.svg)
 
-A comprehensive web application for analysing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation. 
+
+![ClinXML](https://img.shields.io/badge/ClinXML™-Toolkit-0A6EBD.svg)
+![Proprietary](https://img.shields.io/badge/License-All%20Rights%20Reserved-B30000.svg)
+![ClinXML Legal](https://img.shields.io/badge/Legal-ClinXML%20Compliant-7A1CAC.svg)
+![EULA](https://img.shields.io/badge/EULA-ClinXML%20Toolkit-1E81B0.svg)
+
+
+```
+© 2026 ClinXML™ — All rights reserved.
+
+This repository and its contents are proprietary. No part of this software,
+including source code, documentation, or compiled artifacts, may be copied,
+modified, distributed, or used for commercial purposes without explicit
+written permission from the author.
+
+ClinXML™ is an unofficial EMIS XML toolkit and is not affiliated with,
+endorsed by, or sponsored by Optum Inc, EMIS Health, or any subsidiaries.
+All trademarks belong to their respective owners.
+```
+
+---
+
+A comprehensive web application for analysing EMIS XML files with advanced search logic analysis, NHS terminology server integration, and clinical code translation.
 Transform complex EMIS XML documents into actionable insights for NHS healthcare teams.
 
 ## ClinXML At a Glance
 
 | **Feature** | **Capability** | **Benefit** |
 |-------------|----------------|-------------|
-| **Code Translation** | EMIS GUID → SNOMED via cached lookup tables | Instant code translation without external dependencies |
+| **Code Translation** | EMIS GUID to SNOMED via encrypted lookup tables | Instant code translation without external dependencies |
 | **NHS API Support** | Optional FHIR R4 hierarchy expansion | Live validation against current NHS terminology |
 | **Search Analysis** | Multi-tab interface for all EMIS XML types | Complete visibility into search logic and dependencies |
 | **Export System** | Excel, CSV, JSON, XML-ready formats | Ready-to-use outputs for external systems |
-| **Performance** | Session caching + adaptive threading | Process large XMLs efficiently on any device |
+| **Performance** | Encrypted parquet caching with filtered lookups | Memory-efficient processing on any device |
 | **Security** | Local processing, optional NHS API | XML data never leaves your session |
 
 ---
@@ -21,11 +43,14 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 <details>
 <summary><strong>Complete Analysis Interface (5 Tabs)</strong></summary>
 
-- **Clinical Codes**: Advanced SNOMED translation with NHS terminology server integration and dual-mode deduplication
-- **Search Analysis**: Rule Logic Browser with detailed criterion analysis and dependency visualisation
-- **List Reports**: Column structure analysis with healthcare context and filter logic
-- **Audit Reports**: Multi-population analysis with organisational grouping and quality indicators  
-- **Aggregate Reports**: Statistical analysis with cross-tabulation
+- **Clinical Codes**: SNOMED translation with deduplication modes and source tracking
+  - Summary, Clinical Codes, Medications, RefSets, Pseudo RefSets, Pseudo Members
+  - Child Code Finder with NHS terminology expansion
+  - Analytics dashboard with processing statistics
+- **XML Explorer**: Native file browser with folder navigation and dependency visualisation
+- **Searches**: Rule Logic Browser with detailed criterion analysis and exports
+- **Reports**: List, Audit, and Aggregate report viewers with structured metadata
+- **Code Lookup**: Standalone SNOMED lookup without requiring XML upload
 
 </details>
 
@@ -33,12 +58,11 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 <summary><strong>NHS Terminology Server Integration</strong></summary>
 
 - **FHIR R4 API Integration**: Direct connection to NHS England Terminology Server
-- **Hierarchical Code Expansion**: Automatic expansion of codes with `includechildren=true` flags  
-- **Adaptive Threading**: Scales 8-20 concurrent workers based on workload size for optimal performance
+- **Hierarchical Code Expansion**: Automatic expansion of codes with `includeChildren=true` flags
+- **Batch Processing**: Concurrent expansion with adaptive worker scaling
 - **Session-based Caching**: Eliminates repeated API calls with intelligent result caching
-- **EMIS Comparison Analysis**: Compare EMIS expected vs actual child counts from terminology server
-- **Multiple Export Formats**: CSV, hierarchical JSON, and XML-ready outputs
-- **Real-time Validation**: Individual code lookup and testing capabilities
+- **Multiple Export Formats**: CSV with optional XML snippet column for EMIS implementation
+- **Individual Code Lookup**: Test and validate codes without uploading XML files
 
 </details>
 
@@ -50,39 +74,40 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 - **SNOMED Refsets**: Direct code handling with clean description extraction
 - **EMISINTERNAL Classifications**: Episode types, consultation headings, clinical status
 - **Complex Restrictions**: "Latest N WHERE condition" with test attributes
+- **Pseudo-Refsets**: Pattern-based identification with dedicated handling
 
 </details>
 
 <details>
 <summary><strong>Comprehensive Export System</strong></summary>
 
-- **Multi-sheet Excel exports** with professional formatting
-- **NHS terminology exports**: SNOMED codes, EMIS mappings, hierarchical JSON
-- **Type-specific report exports** for List/Audit/Aggregate reports
-- **Smart filtering**: Export all codes, matched only, or unmatched only
-- **Multiple formats**: Excel, CSV, JSON, XML-ready, and TXT reports
-- **Source attribution**: Track codes to their originating searches/reports
+- **Lazy Generation**: Export files created only when download button clicked
+- **Search Exports**: Excel and JSON with rule logic, criteria, and clinical codes
+- **Report Exports**: Excel and JSON for List, Audit, and Aggregate reports
+- **Clinical Exports**: CSV with deduplication modes and source attribution
+- **NHS Terminology Exports**: Expansion results with optional XML snippet column
+- **Context-Sensitive Naming**: Dynamic filenames reflecting content and source
 
 </details>
 
 <details>
-<summary><strong>Cache-First Architecture</strong></summary>
+<summary><strong>Encrypted Lookup Architecture</strong></summary>
 
-- **Multi-tier caching**: Local cache → GitHub cache → API fallback
-- **Optimised performance**: Faster startup and reduced external dependencies
-- **Session persistence**: Results maintained across download operations
-- **Health monitoring**: Automatic cache validation and regeneration
+- **Memory Optimisation**: Encrypted bytes stored in session state instead of full DataFrame
+- **Fernet Encryption**: AES-128-CBC with HMAC authentication for data integrity
+- **Filtered Lookups**: XML processing uses filtered subset of lookup data
+- **Automatic Cache Generation**: First load generates encrypted cache from private repo
+- **Version Synchronisation**: Lookup version info fetched from source repository
 
 </details>
 
 <details>
-<summary><strong>Enterprise Features</strong></summary>
+<summary><strong>Plugin-Based Parsing</strong></summary>
 
-- **Hierarchical folder management** with multi-level navigation
-- **Supports EMIS QOF indicators** and custom healthcare quality metrics
-- **Multi-organisation support** for EMIS Enterprise exports
-- **Clinical pathway analysis** with workflow context
-- **Version independence** across EMIS system versions
+- **Pattern Plugins**: Modular detectors for XML patterns (restrictions, demographics, temporal filters)
+- **Flag Registry**: Centralised flag validation with 95+ canonical flags
+- **ElementClassifier**: Unified element classification for searches, reports, and folders
+- **Extensible Architecture**: New patterns supported by adding plugins without core changes
 
 </details>
 
@@ -90,15 +115,15 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 
 ## Supported EMIS XML Types
 
-ClinXML supports all standard EMIS XML exports with specialised analysis for each type:
+ClinXML supports all standard EMIS XML population manager exports with specialised analysis for each type:
 
 - **Search Reports**: Population-based searches with complex criteria and dependency analysis
 - **List Reports**: Multi-column data extraction with healthcare context classification
 - **Audit Reports**: Quality monitoring with multi-population analysis and metadata
 - **Aggregate Reports**: Statistical analysis with cross-tabulation and enterprise reporting
-- **Demographics & LSOA**: Future-proof LSOA detection with grouped criteria analysis
+- **Demographics and LSOA**: Geographic criteria with confidence-based detection
 
-📋 **[Complete XML Pattern Reference](docs/emis-xml-patterns.md)** - Detailed technical patterns and examples
+**[Complete XML Pattern Reference](docs/xml-pattern-library/emis-xml-patterns.md)** - Detailed technical patterns and examples
 
 ---
 
@@ -110,8 +135,6 @@ Translates EMIS GUIDs to SNOMED CT codes with comprehensive system support:
 - **dm+d Medications**: Dictionary of medicines and devices with brand/generic classifications
 - **EMIS Internal**: Episode types, consultation headings, and clinical status codes
 - **Legacy Systems**: Read codes via mapping tables for backward compatibility
-
-💊 **[Complete Code System Reference](docs/emis-xml-patterns.md#clinical-code-systems)** - Full technical specifications
 
 ---
 
@@ -132,11 +155,12 @@ Translates EMIS GUIDs to SNOMED CT codes with comprehensive system support:
 
 ### Option 2: Run Locally
 
+<details>
+<summary><strong>Prerequisites and Installation</strong></summary>
+
 #### Prerequisites
 - **Python 3.8-3.12** (tested and verified)
-- **Pinned dependencies** as specified in requirements.txt
-- MKB lookup table with EMIS GUID to SNOMED mappings
-- NHS England System-to-System credentials (optional, for terminology server features)
+- **Dependencies** as specified in requirements.txt
 
 #### Installation
 ```bash
@@ -145,20 +169,38 @@ cd emis-xml-toolkit
 pip install -r requirements.txt
 ```
 
-#### Configuration (Optional)
-Create `.streamlit/secrets.toml` for NHS terminology server integration:
-```toml
-NHSTSERVER_ID = "Your_Organisation_Consumer_ID"
-NHSTSERVER_TOKEN = "your_client_secret_token"
-```
-
 #### Run Application
 ```bash
 streamlit run streamlit_app.py
 ```
 
-<details>
+</details>
 
+<details>
+<summary><strong>Configuration (secrets.toml)</strong></summary>
+
+Create `.streamlit/secrets.toml` for full functionality:
+
+**Required for lookup table:**
+```toml
+GZIP_TOKEN = "your_encryption_password"
+```
+
+**Required for first-time cache generation (if no local cache exists):**
+```toml
+GITHUB_TOKEN = "your_github_token"
+LOOKUP_TABLE_URL = "https://raw.githubusercontent.com/.../lookup.parquet"
+```
+
+**Optional for NHS terminology features:**
+```toml
+NHSTSERVER_ID = "Your_Organisation_Consumer_ID"
+NHSTSERVER_TOKEN = "your_client_secret_token"
+```
+
+</details>
+
+<details>
 <summary><strong>Quick Reference Commands</strong></summary>
 
 ```bash
@@ -169,13 +211,11 @@ cd emis-xml-toolkit && pip install -r requirements.txt
 # Run locally
 streamlit run streamlit_app.py
 
-# Run tests (performance & session state tests included)
+# Run tests (both test runners)
+python -m pytest -q tests
 python -m unittest discover tests/
 
-# Check dependencies
-pip list | grep -E "(streamlit|pandas|requests)"
-
-# View logs (check terminal output or OS-specific Streamlit logs)
+# Run with debug logging
 streamlit run streamlit_app.py --logger.level debug
 ```
 
@@ -187,29 +227,31 @@ streamlit run streamlit_app.py --logger.level debug
 
 *High-level Overview*
 
-![ClinXML System Architecture - XML upload flows through parsers to translation engine to 5-tab interface to export system with optional NHS terminology integration](img/architecture-diagram.svg)
+![ClinXML System Architecture](static/architecture-diagram.svg)
 
-**Please see [full interactive architecture diagram](docs/architecture/system-architecture-diagram.md) for complete component details**
+**[Full Interactive Architecture Diagram](docs/architecture/system-architecture-diagram.md)** for complete component details
 
 ---
 
 ## Project Structure
 
-ClinXML uses a modular architecture with specialised components for analysis, UI rendering, export functionality, and caching. 
-The codebase is organised into logical directories that separate functions and enable maintainable development.
+ClinXML v3 uses a modular `utils/` architecture with clean separation between parsing, metadata, caching, exports, terminology integration, and UI rendering.
 
-**📋 [Complete Project Structure Documentation](docs/project-structure.md)**
+**[Complete Project Structure Documentation](docs/project-structure.md)**
 
 ### Key Directories
 ```
-utils/analysis/               - Analysis engines and orchestration
-utils/core/                   - Business logic and session management with 60-minute SNOMED caching
-utils/ui/tabs/                - Modular tab structure for specialised report types
-utils/export_handlers/        - Comprehensive export system for multiple formats
-utils/terminology_server/     - NHS Terminology Server FHIR R4 integration
-utils/xml_parsers/            - Modular XML parsing with universal namespace handling
-utils/caching/                - Multi-tier caching architecture
-docs/                         - Technical documentation and architecture guides
+utils/
+  parsing/              - XML parsing pipeline with element classification
+  pattern_plugins/      - Modular pattern detectors and flag emitters
+  metadata/             - Code enrichment, flags, and SNOMED translation
+  caching/              - Lookup table management and XML caching
+  exports/              - Search, report, and clinical code exports
+  terminology_server/   - NHS Terminology Server FHIR R4 integration
+  ui/                   - Status bar, theme, and tab composition
+  system/               - Session state, versioning, and error handling
+docs/                   - Technical documentation and architecture guides
+tests/                  - Parser, plugin, export, namespace, cache, translation, and performance tests
 ```
 
 ---
@@ -217,61 +259,50 @@ docs/                         - Technical documentation and architecture guides
 ## Technical Specifications
 
 <details>
+<summary><strong>Performance Optimisations</strong></summary>
 
-<summary><strong>Performance Optimizations</strong></summary>
-
-- **Centralised Cache Management**: Unified caching architecture with optimised TTL settings
-- **Persistent SNOMED Cache**: 60-minute session state cache for EMIS GUID → SNOMED mappings across XML uploads
-- **Report-Specific Caching**: Instant dropdown switching with 10,000-entry SNOMED cache
-- **Memory Management**: Real-time monitoring with automatic garbage collection
-- **Dictionary-based Lookups**: O(1) SNOMED translation (100x faster than DataFrame searches)
-- **Progressive Loading**: Section-by-section rendering with native Streamlit spinners
+- **Encrypted Parquet Cache**: Lookup table stored as encrypted bytes, not full DataFrame
+- **Filtered Lookups**: Per-XML subset extraction for enrichment paths
+- **Persistent SNOMED Cache**: 60-minute session state cache across XML uploads
 - **Lazy Export Generation**: Export files created only when requested
+- **Memory Management**: Real-time monitoring with automatic garbage collection
+- **Cached Parsing Outputs**: Pipeline and structure outputs cached per XML hash
 
 </details>
 
 <details>
-
 <summary><strong>NHS Terminology Server Integration</strong></summary>
 
 - **FHIR R4 Compliance**: Full NHS England Terminology Server API support
-- **OAuth2 Authentication**: System-to-system authentication with automatic token refresh
+- **OAuth2 Authentication**: System-to-system authentication with thread-safe token management
 - **ECL Support**: Expression Constraint Language for hierarchical expansion
-- **Adaptive Threading**: Dynamic worker scaling (8-20 workers) optimised for Streamlit Cloud 2.7GB limits
-- **Session Caching**: Intelligent result caching eliminates repeated API calls for instant reuse
-- **Rate Limiting**: Graceful handling of API constraints and timeouts
+- **Adaptive Scaling**: Worker count scales based on workload size
+- **Session Caching**: Expansion results cached with TTL and bounded size
+- **Rate Limiting**: Graceful handling of API constraints with retry logic
 
-**Terminology Server Fallback Matrix:**
+**Lookup Priority:**
 ```
-Code Lookup Priority:
-1. Session Cache      → Instant (if previously fetched)
-2. GitHub Cache       → ~2-3 seconds (bulk EMIS mappings)
-3. NHS API Direct     → ~5-15 seconds (live validation)
-4. Graceful Degradation → Show unmapped codes with explanatory message
-
-Error States:
-• API Unavailable     → Fall back to cached mappings only
-• Authentication Fail → Disable hierarchy expansion, core translation continues  
-• Rate Limited        → Exponential backoff with cache fallback
-• Network Timeout     → Retry with cached results where available
+1. Session Cache      - Instant (if previously fetched)
+2. Local Cache        - Fast (encrypted parquet)
+3. GitHub API         - Slower (cache generation)
+4. NHS API Direct     - For terminology expansion only
 ```
 
 </details>
 
 <details>
-
-<summary><strong>XML Processing & Data Management</strong></summary>
+<summary><strong>XML Processing and Data Management</strong></summary>
 
 **XML Processing:**
 - **Universal Namespace Handling**: Mixed namespaced/non-namespaced document support
-- **Robust Error Handling**: Comprehensive exception management with graceful degradation
-- **Memory Optimisation**: Efficient processing of large XML files (40+ entities)
-- **Cloud Compatibility**: Optimised for Streamlit Cloud deployment
+- **Plugin-Based Detection**: Pattern plugins emit structured flags during parsing
+- **Flag Validation**: All flags validated against canonical registry definitions
+- **Memory Optimisation**: Efficient processing with filtered lookups
 
 **Data Management:**
-- **Dual-mode Deduplication**: Unique codes vs per-source tracking
+- **Deduplication Modes**: Unique codes vs per-source tracking
+- **CodeStore**: Centralised deduplicated code storage with source attribution
 - **Session State Integration**: Persistent analysis across tab navigation
-- **Export Filtering**: Conditional data inclusion based on user selection
 - **Source Attribution**: Track clinical codes to originating searches/reports
 
 **Browser Compatibility:**
@@ -290,7 +321,7 @@ Error States:
 
 - **QOF Indicator Analysis**: Quality and Outcomes Framework reporting
 - **Clinical Pathway Review**: Analyse complex care pathways and protocols
-- **Code Set Validation**: Verify SNOMED code usage and mapping accuracy with NHS terminology server
+- **Code Set Validation**: Verify SNOMED code usage and mapping accuracy
 - **Search Logic Auditing**: Review and optimise clinical search criteria
 - **Hierarchy Validation**: Compare EMIS expectations with current NHS terminology data
 
@@ -303,7 +334,6 @@ Error States:
 - **Folder Organisation**: Review hierarchical folder structures
 - **Dependency Mapping**: Understand search and report relationships
 - **Performance Analysis**: Identify complex searches and optimisation opportunities
-- **Terminology Updates**: Validate code hierarchies against current NHS terminology
 
 </details>
 
@@ -314,33 +344,32 @@ Error States:
 - **Report Structure Review**: Analyse List/Audit/Aggregate report configurations
 - **Clinical Code Translation**: Convert EMIS codes to SNOMED for external systems
 - **Quality Measurement**: Export data for external quality measurement tools
-- **Hierarchical Analysis**: Export parent-child relationships for programmatic integration
 
 </details>
 
 ---
 
-## Security & Privacy
+## Security and Privacy
 
 <details>
 <summary><strong>Data Handling</strong></summary>
 
 - **No Persistent Storage**: XML files processed in memory only, deleted when session ends
 - **Session-based Processing**: All data cleared when browser session terminates
-- **Local SNOMED Translation**: Core EMIS GUID → SNOMED translation performed locally using pre-cached lookup tables
-- **XML Data Isolation**: Uploaded XML files remain in user's browser session, never transmitted externally
+- **Local SNOMED Translation**: Core translation performed using pre-cached lookup tables
+- **XML Data Isolation**: Uploaded files remain in user's browser session
 
 </details>
 
 <details>
 <summary><strong>NHS API Security</strong></summary>
 
-- **Controlled API Usage**: Only NHS Terminology Server accessed (optional, credentials required) for:
+- **Controlled API Usage**: Only NHS Terminology Server accessed (optional) for:
   - Individual SNOMED code validation
-  - Hierarchical code expansion (`includeChildren=true`)
+  - Hierarchical code expansion
   - Parent-child relationship verification
-- **API Data Scope**: Only SNOMED codes (not XML content) sent to NHS API for validation/expansion
-- **OAuth2 Authentication**: Optional system-to-system authentication with NHS England for terminology features only
+- **API Data Scope**: Only SNOMED codes sent to NHS API, not XML content
+- **OAuth2 Authentication**: System-to-system authentication with secure credential handling
 - **No XML Transmission**: Patient data and XML content never sent to external APIs
 
 </details>
@@ -358,37 +387,39 @@ Error States:
 
 ---
 
-## Contributing
-
-Contributions welcome - **[View Contribution Guidelines](CONTRIBUTING.md)**
-
-- **Bug Reports**: Detailed XML examples (anonymised) with reproduction steps
-- **Feature Requests**: New EMIS XML patterns or export formats
-- **Documentation**: Technical patterns and identification guides
-
----
-
-## Legal & Compliance
-
-**Disclaimer**: **EMIS and EMIS Web are trademarks of Optum Inc.** This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any subsidiaries.
-
-**License**: Provided as-is for healthcare and research. Users responsible for data protection and clinical governance compliance.
-
-**No Warranty**: Healthcare professionals must validate all clinical code translations before clinical use.
-
----
-
-## Support
+## Support and Documentation
 
 **[Complete Documentation Hub](docs/)** with technical guides:
 
 - [Project Structure](docs/project-structure.md) - Directory organisation
-- [Architecture Guide](docs/architecture/modules.md) - System design  
-- [NHS Integration](docs/nhs-terminology-server-integration.md) - API reference
-- [XML Patterns](docs/emis-xml-patterns.md) - Technical patterns
-- [Namespace Handling](docs/namespace-handling.md) - XML processing
+- [Module Architecture](docs/architecture/modules.md) - System design
+- [Test Suite Reference](docs/architecture/testing.md) - Test coverage and patterns
+- [NHS Integration](docs/terminology-server/term-server-overview.md) - Terminology server guide
+- [XML Patterns](docs/xml-pattern-library/emis-xml-patterns.md) - Technical patterns
+- [Flags and Plugins](docs/flags-and-plugins/flags.md) - Flag system reference
+- [Session State](docs/architecture/session-state-management.md) - State management
+- [Namespace Handling](docs/architecture/namespace-handling.md) - XML processing
 
 ---
 
-*Last Updated: 27th November 2025*  
-*Application Version: [2.2.6](changelog.md) • [View Release Notes](changelog.md)*
+## License and Usage
+
+**Disclaimer:** EMIS and EMIS Web are trademarks of Optum Inc.  
+This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, NHS England, or any subsidiaries.  
+All trademarks belong to their respective owners.
+
+This software is proprietary and part of the ClinXML™ family of tools.
+
+The official licensing terms for the ClinXML Toolkit are published in the ClinXML Legal repository:
+
+- [**EULA**](https://github.com/triplebob/clinxml-legal/blob/main/EULA-clinxml.md)
+- [**License**](https://github.com/triplebob/clinxml-legal/blob/main/LICENSE-clinxml.md)
+
+**No Warranty:** All clinical code translations, mappings, and outputs must be independently validated before clinical use.  
+Users accept full responsibility for any decisions made using this toolkit.
+
+
+---
+
+*Last Updated: 3rd February 2026*
+*Application Version: [3.0.0](changelog.md) - [View Release Notes](changelog.md)*

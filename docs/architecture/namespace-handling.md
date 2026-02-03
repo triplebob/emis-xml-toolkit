@@ -1,201 +1,246 @@
 # EMIS XML Namespace Handling Reference
 
 ## Overview
-EMIS XML files can have mixed namespace structures (which is a MASSIVE pain in the arse - thanks EMIS) where some elements are namespaced (`<emis:element>`) and others are not (`<element>`). This technical reference documents the centralized namespace handling architecture and implementation patterns.
 
-## Core Pattern for Mixed Namespace Handling
+ClinXML v3 handles mixed EMIS namespace formats through shared parsing helpers in `utils/parsing/namespace_utils.py`.
+The goal is consistent behaviour when XML contains:
+
+- Fully prefixed tags (`<emis:report>`)
+- Unprefixed tags (`<report>`)
+- Mixed usage inside the same subtree
+
+---
+
+## Namespace Capture and Normalisation
+
+Namespace extraction happens in `utils/parsing/document_loader.py`:
+
+**Process:**
+1. `_extract_namespaces()` reads namespace declarations via `ElementTree.iterparse(..., events=("start-ns",))`
+2. If extraction fails, a default map is applied: `{"emis": "http://www.e-mis.com/emisopen"}`
+3. If `emis` is missing from the extracted map, it is added
+
+**Result:** Downstream parsers always receive an `emis` namespace alias.
+
+---
+
+## Core Namespace Helpers
+
+`utils/parsing/namespace_utils.py` provides the canonical helper set:
+
+<details>
+<summary><strong>find_ns(elem, tag, namespaces)</strong></summary>
+
+Find first matching node (bare tag first, then `emis:` path).
+
 ```python
-# CORRECT Pattern - Check non-namespaced first, then namespaced
-element = parent.find('elementName')
-if element is None:
-    element = parent.find('emis:elementName', namespaces)
+from utils.parsing.namespace_utils import find_ns
 
-# INCORRECT Pattern - Avoid this
-element = parent.find('emis:elementName', namespaces) or parent.find('elementName')
+# Finds <name> or <emis:name>
+name_elem = find_ns(report_elem, "name", namespaces)
 ```
 
-## Centralized Namespace Architecture
+</details>
 
-### NamespaceHandler Class
-**Location**: `util_modules/xml_parsers/namespace_handler.py`
+<details>
+<summary><strong>findall_ns(elem, tag, namespaces)</strong></summary>
 
-The centralized NamespaceHandler provides universal namespace handling for all XML parsing operations.
+Find all matching elements, combining bare + `emis:` matches, deduplicated by element identity.
 
-**Core Methods**:
 ```python
-class NamespaceHandler:
-    def find(self, parent, element_name):
-        """Find element with fallback namespace handling"""
-    
-    def findall(self, parent, element_name):
-        """Find all elements with fallback namespace handling"""
-    
-    def get_text_from_child(self, parent, child_name, default=''):
-        """Extract text from child element with fallback handling"""
+from utils.parsing.namespace_utils import findall_ns
+
+# Finds all <criteriaGroup> and <emis:criteriaGroup>
+groups = findall_ns(search_elem, "population/criteriaGroup", namespaces)
 ```
 
-### XMLParserBase Integration
-**Location**: `util_modules/xml_parsers/base_parser.py`
+</details>
 
-All XML parsers inherit from XMLParserBase, which provides automatic namespace handling through the `self.ns` attribute.
+<details>
+<summary><strong>get_text_ns(elem, tag, namespaces)</strong></summary>
 
-**Usage Pattern**:
+Text extraction wrapper around `find_ns`.
+
 ```python
-class CustomParser(XMLParserBase):
-    def parse_element(self, element):
-        # Automatic namespace handling
-        child = self.ns.find(element, 'childElement')
-        text_value = self.ns.get_text_from_child(element, 'textElement', 'default')
-        all_items = self.ns.findall(element, 'itemElement')
+from utils.parsing.namespace_utils import get_text_ns
+
+# Gets text from <name> or <emis:name>
+name = get_text_ns(report_elem, "name", namespaces)
 ```
 
-## Files with Namespace Handling
+</details>
 
-### Core XML Parsing
-1. **xml_utils.py** - Core EMIS GUID extraction (21 patterns converted)
-2. **util_modules/xml_parsers/base_parser.py** - Centralized solution base
-3. **util_modules/xml_parsers/namespace_handler.py** - Universal handler
-4. **streamlit_app.py** - Main application XML processing
+<details>
+<summary><strong>find_child_any(parent, candidate_tags, namespaces)</strong></summary>
 
-### XML Parser Modules
-All parsers automatically inherit namespace handling through XMLParserBase:
-- **report_parser.py** - List report structure parsing
-- **value_set_parser.py** - Value set parsing  
-- **criterion_parser.py** - Search criteria parsing
-- **restriction_parser.py** - Search restriction parsing
-- **linked_criteria_parser.py** - Linked criteria parsing
+Find first matching child across multiple tag candidates.
 
-### Analysis Modules
-1. **xml_structure_analyzer.py** - XML structure analysis (4 patterns converted)
-2. **report_analyzer.py** - Report structure analysis (12 patterns converted)
-3. **xml_element_classifier.py** - Element classification (7 patterns converted)
-4. **search_analyzer.py** - Search analysis (6 patterns converted)
-5. **search_rule_analyzer.py** - Search rule analysis (7 patterns converted)
+```python
+from utils.parsing.namespace_utils import find_child_any
 
-### UI Modules
-1. **util_modules/ui/ui_tabs.py** - SearchReport vs Report attribute handling
+# Finds first match among multiple possible tag names
+author = find_child_any(elem, ["author", "createdBy", "owner"], namespaces)
+```
 
-## Namespace Pattern Inventory
+</details>
 
-### Common Namespaced Elements
+<details>
+<summary><strong>get_child_text_any(elem, candidate_tags, namespaces)</strong></summary>
+
+Get text from first matching child across candidate tags.
+
+```python
+from utils.parsing.namespace_utils import get_child_text_any
+
+# Gets text from first match among candidate tags
+folder_id = get_child_text_any(elem, ["folder", "parentFolderId"], namespaces)
+```
+
+</details>
+
+<details>
+<summary><strong>get_attr_any(elem, candidate_attrs)</strong></summary>
+
+Attribute lookup with localname fallback for namespaced attributes.
+
+```python
+from utils.parsing.namespace_utils import get_attr_any
+
+# Gets attribute, checking both plain and namespaced variants
+guid = get_attr_any(elem, ["guid", "id", "GUID"])
+```
+
+</details>
+
+---
+
+## Path Conversion
+
+`_to_emis_path()` supports bare, nested, and descendant paths:
+
+| Input | Output |
+|-------|--------|
+| `name` | `emis:name` |
+| `criteria/criterion` | `emis:criteria/emis:criterion` |
+| `.//population` | `.//emis:population` |
+
+---
+
+## Usage in the Parsing Pipeline
+
+**Primary usage locations:**
+
+| Module | Usage |
+|--------|-------|
+| `utils/parsing/node_parsers/search_parser.py` | Search element navigation |
+| `utils/parsing/node_parsers/report_parser.py` | Report element navigation |
+| `utils/parsing/node_parsers/criterion_parser.py` | Criterion element navigation |
+| `utils/parsing/node_parsers/value_set_parser.py` | Value set extraction |
+| `utils/parsing/node_parsers/structure_parser.py` | Structure analysis |
+| `utils/metadata/flag_mapper.py` | Candidate-tag and candidate-attribute extraction |
+
+**ElementClassifier** (`utils/parsing/element_classifier.py`) also applies dual-path discovery for top-level buckets by querying namespaced and plain paths, then deduplicating results.
+
+---
+
+## Implementation Patterns
+
+### Preferred Pattern
+
+```python
+from utils.parsing.namespace_utils import find_ns, findall_ns, get_text_ns
+
+# Single element lookup
+name = get_text_ns(report_elem, "name", namespaces)
+
+# Multiple element lookup
+groups = findall_ns(search_elem, "population/criteriaGroup", namespaces)
+
+# Optional element lookup
+parent = find_ns(report_elem, "parent", namespaces)
+if parent is not None:
+    parent_id = parent.text
+```
+
+### For Variable Tag Names
+
+```python
+from utils.parsing.namespace_utils import find_child_any, get_child_text_any
+
+# Multiple possible tag names
+folder_id = get_child_text_any(elem, ["folder", "parentFolderId"], namespaces)
+
+# Element lookup with fallback
+author = find_child_any(elem, ["author", "createdBy"], namespaces)
+```
+
+---
+
+## Important Edge Cases
+
+### Element Fallback Logic
+
+**Avoid** `a or b` with `ElementTree.find(...)` results for element fallback logic.
+
+```python
+# WRONG - empty element evaluates to False
+elem = root.find("a") or root.find("b")  # May skip empty but present element
+
+# CORRECT - explicit None check
+elem = root.find("a")
+if elem is None:
+    elem = root.find("b")
+```
+
+**For plugin code**, use the `find_first` helper from `utils/pattern_plugins/base.py`:
+
+```python
+from utils.pattern_plugins.base import find_first
+
+# Tries each query in order, returns first match
+elem = find_first(root, namespaces, ".//tag", ".//emis:tag")
+```
+
+### Mixed Namespace Content
+
+For mixed namespace content, helpers intentionally check both bare and namespaced forms. This handles XML like:
+
 ```xml
-<!-- Report Structure -->
 <emis:report>
-<emis:listReport>
-<emis:auditReport>
-<emis:aggregateReport>
-
-<!-- Report Metadata -->
-<emis:name>
-<emis:description>  
-<emis:creationTime>
-<emis:author>
-
-<!-- Column Structure -->
-<emis:columnGroup>
-<emis:logicalTableName>
-<emis:displayName>
-<emis:columnar>
-<emis:listColumn>
-<emis:column>
-
-<!-- Search Criteria -->
-<emis:criterion>
-<emis:table>
-<emis:negation>
-<emis:filterAttribute>
-<emis:columnValue>
-<emis:inNotIn>
-
-<!-- Value Sets -->
-<emis:valueSet>
-<emis:id>
-<emis:codeSystem>
-<emis:values>
-<emis:value>
-<emis:includeChildren>
-<emis:isRefset>
-
-<!-- Restrictions -->
-<emis:restriction>
-<emis:columnOrder>
-<emis:recordCount>
-<emis:direction>
-<emis:testAttribute>
-
-<!-- Linked Criteria -->
-<emis:linkedCriterion>
-<emis:relationship>
-<emis:parentColumn>
-<emis:childColumn>
-<emis:rangeValue>
-
-<!-- Aggregation -->
-<emis:customAggregate>
-<emis:group>
-<emis:result>
-<emis:source>
-<emis:calculationType>
-<emis:rows>
-<emis:columns>
-<emis:groupId>
-
-<!-- Other -->
-<emis:libraryItem>
-<emis:criteria>
-<emis:sort>
+    <name>Report Name</name>  <!-- bare tag -->
+    <emis:criteria>           <!-- namespaced tag -->
+        <criterion>...</criterion>
+    </emis:criteria>
+</emis:report>
 ```
 
-### Mixed Namespace Patterns
-1. **Parent Namespaced, Children Not**: `<emis:columnGroup><logicalTableName>` 
-2. **Some Siblings Namespaced**: `<emis:valueSet><id>` vs `<emis:valueSet><emis:id>`
-3. **Fallback Patterns**: Try non-namespaced first, then namespaced
+### Namespaced Attributes
 
-## Implementation Standards
+For namespaced attributes, `get_attr_any()` compares attribute local names so both plain and namespaced variants can resolve:
 
-### Universal Patterns Available
 ```python
-# Via XMLParserBase (for all parsers):
-element = self.ns.find(parent, 'elementName')  # Handles both namespaced/non-namespaced
-elements = self.ns.findall(parent, 'elementName')  # Handles both variants
-text = self.ns.get_text_from_child(parent, 'childName', 'default')  # Direct text extraction
+# Handles both guid="abc" and emis:guid="abc"
+guid = get_attr_any(elem, ["guid", "id"])
 ```
 
-### Search Analyzer Critical Patterns
-```python
-# Properly converted patterns:
-report_id = self.ns.find(report_elem, 'id')
-group_id = self.ns.find(group_elem, 'definition')
-pop_id = self.ns.find(pop_elem, 'SearchIdentifier')
-```
+---
 
-## Testing Requirements
+## Practical Rules for New Parsers
 
-### Test Cases for Mixed Namespace Handling
-1. **All Namespaced Elements** - Standard EMIS format
-2. **All Non-Namespaced Elements** - Alternative EMIS format
-3. **Mixed Namespace Elements** - Most common production format
-4. **Inconsistent Namespace Usage** - Within same document variations
+1. **Accept and pass through `namespaces`** in parser signatures
+2. **Use `find_ns`/`findall_ns`/`get_text_ns`** instead of hardcoding `emis:` XPath in feature code
+3. **Use candidate-based helpers** (`find_child_any`, `get_child_text_any`, `get_attr_any`) where schemas vary between XML variants
+4. **Keep namespace fallbacks centralised** in `namespace_utils.py` rather than adding bespoke fallback logic per parser
 
-### Validation Criteria
-- Element discovery works regardless of namespace presence
-- Text extraction functions correctly for both patterns
-- No parsing failures due to namespace mismatches
-- Fallback handling preserves data integrity
+---
 
-## Architecture Benefits
+## Related Documentation
 
-### Centralized Management
-- Single point of namespace logic maintenance
-- Consistent handling across all parsers
-- Automatic inheritance for new parsers
+- **[Module Architecture](modules.md)** - System overview
+- **[Flags Technical Guide](../flags-and-plugins/flags.md)** - Flag system
+- **[Plugin Development Guide](../flags-and-plugins/plugins.md)** - Pattern plugins
 
-### Robust Fallback Handling
-- Graceful degradation for namespace variations
-- No data loss due to namespace inconsistencies
-- Future-proof against EMIS format changes
+---
 
-### Performance Optimization
-- Efficient fallback pattern implementation
-- Minimal overhead for namespace checking
-- Cached namespace declarations
+*Last Updated: 3rd February 2026*
+*Application Version: 3.0.0*

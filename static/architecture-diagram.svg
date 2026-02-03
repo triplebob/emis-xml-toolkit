@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" role="img" aria-labelledby="title desc">
+  <title id="title">ClinXML v3 Architecture Diagram</title>
+  <desc id="desc">Data flow from XML upload through parsing, enrichment, translation, user interface tabs, exports, and optional NHS terminology integration.</desc>
+
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .panel { fill: #111827; stroke: #334155; stroke-width: 1.5; rx: 10; }
+      .box { fill: #1f2937; stroke: #475569; stroke-width: 1.5; rx: 8; }
+      .box2 { fill: #1e293b; stroke: #64748b; stroke-width: 1.5; rx: 8; }
+      .opt { fill: #102a43; stroke: #3b82f6; stroke-width: 1.5; rx: 8; }
+      .title { fill: #f8fafc; font: 700 28px 'Segoe UI', Arial, sans-serif; }
+      .subtitle { fill: #cbd5e1; font: 500 14px 'Segoe UI', Arial, sans-serif; }
+      .label { fill: #f1f5f9; font: 600 15px 'Segoe UI', Arial, sans-serif; }
+      .small { fill: #cbd5e1; font: 500 12px 'Segoe UI', Arial, sans-serif; }
+      .section { fill: #93c5fd; font: 700 13px 'Segoe UI', Arial, sans-serif; letter-spacing: 0.08em; }
+      .line { stroke: #94a3b8; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .lineOpt { stroke: #60a5fa; stroke-width: 2; fill: none; marker-end: url(#arrowBlue); }
+    </style>
+
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#60a5fa"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="860"/>
+
+  <text class="title" x="48" y="54">ClinXML v3 System Architecture</text>
+  <text class="subtitle" x="48" y="80">Current pipeline, module boundaries, and optional NHS terminology integration</text>
+
+  <!-- Main pipeline panel -->
+  <rect class="panel" x="36" y="112" width="1328" height="430"/>
+  <text class="section" x="56" y="138">PRIMARY DATA FLOW</text>
+
+  <!-- Boxes row 1 -->
+  <rect class="box" x="56" y="170" width="190" height="76"/>
+  <text class="label" x="84" y="205">XML Upload</text>
+  <text class="small" x="70" y="226">streamlit_app.py</text>
+
+  <rect class="box" x="290" y="170" width="220" height="76"/>
+  <text class="label" x="318" y="200">Decode + Parse</text>
+  <text class="small" x="308" y="221">utils/parsing + pattern plugins</text>
+
+  <rect class="box" x="552" y="170" width="220" height="76"/>
+  <text class="label" x="575" y="200">CodeStore + Flags</text>
+  <text class="small" x="576" y="221">dedup + metadata normalization</text>
+
+  <rect class="box" x="814" y="170" width="220" height="76"/>
+  <text class="label" x="844" y="200">Lookup Enrichment</text>
+  <text class="small" x="840" y="221">encrypted parquet lookup APIs</text>
+
+  <rect class="box" x="1076" y="170" width="250" height="76"/>
+  <text class="label" x="1112" y="200">Translation + Categorisation</text>
+  <text class="small" x="1134" y="221">snomed_translation.py</text>
+
+  <!-- Boxes row 2 -->
+  <rect class="box2" x="266" y="304" width="290" height="86"/>
+  <text class="label" x="314" y="338">Top-Level UI Tabs</text>
+  <text class="small" x="294" y="359">Clinical Codes | XML Explorer | Searches</text>
+  <text class="small" x="344" y="377">Reports | Code Lookup</text>
+
+  <rect class="box2" x="624" y="304" width="290" height="86"/>
+  <text class="label" x="692" y="338">On-Demand Exports</text>
+  <text class="small" x="652" y="359">Search/Report JSON + Excel,</text>
+  <text class="small" x="658" y="377">Clinical/Terminology CSV</text>
+
+  <!-- Main flow arrows -->
+  <path class="line" d="M246 208 L290 208"/>
+  <path class="line" d="M510 208 L552 208"/>
+  <path class="line" d="M772 208 L814 208"/>
+  <path class="line" d="M1034 208 L1076 208"/>
+
+  <path class="line" d="M1201 246 L1201 282 L556 282 L556 334"/>
+  <path class="line" d="M556 347 L624 347"/>
+
+  <!-- Optional NHS panel -->
+  <rect class="panel" x="36" y="572" width="1328" height="252"/>
+  <text class="section" x="56" y="598">OPTIONAL NHS TERMINOLOGY INTEGRATION</text>
+
+  <rect class="opt" x="86" y="634" width="270" height="86"/>
+  <text class="label" x="144" y="668">OAuth2 API Client</text>
+  <text class="small" x="110" y="689">utils/terminology_server/client.py</text>
+
+  <rect class="opt" x="418" y="634" width="270" height="86"/>
+  <text class="label" x="456" y="668">Service + Expansion Cache</text>
+  <text class="small" x="444" y="689">service.py (TTL + bounded size)</text>
+
+  <rect class="opt" x="750" y="634" width="270" height="86"/>
+  <text class="label" x="804" y="668">Expansion Workflow</text>
+  <text class="small" x="808" y="689">expansion_workflow.py</text>
+
+  <rect class="opt" x="1082" y="634" width="220" height="86"/>
+  <text class="label" x="1108" y="668">UI Integration</text>
+  <text class="small" x="1104" y="689">Code Lookup + Child Finder</text>
+
+  <path class="lineOpt" d="M356 677 L418 677"/>
+  <path class="lineOpt" d="M688 677 L750 677"/>
+  <path class="lineOpt" d="M1020 677 L1082 677"/>
+
+  <!-- Cross-links between main and optional -->
+  <path class="lineOpt" d="M411 390 L411 610"/>
+  <path class="lineOpt" d="M772 390 L772 610"/>
+
+  <text class="small" x="430" y="500">UI calls terminology workflows on demand</text>
+  <text class="small" x="791" y="518">No XML payload sent to NHS endpoints</text>
+</svg>

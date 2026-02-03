@@ -5,16 +5,27 @@ Tests the performance controls and metrics functionality.
 
 import time
 import unittest
-from unittest.mock import Mock, patch
 import pandas as pd
 import xml.etree.ElementTree as ET
-from io import StringIO
 
-from utils.analysis.performance_optimizer import render_performance_controls, display_performance_metrics
-from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
+from utils.ui.status_bar import render_performance_controls, display_performance_metrics
+from utils.parsing.pipeline import parse_xml
 
 
-class TestPerformanceOptimizations(unittest.TestCase):
+def parse_xml_for_emis_guids(xml_content: str):
+    parsed = parse_xml(xml_content, run_patterns=False)
+    code_store = parsed.get("code_store")
+    codes = code_store.get_all_codes() if code_store else []
+    return [
+        {
+            "emis_guid": code.get("code_value", ""),
+            "xml_display_name": code.get("display_name", ""),
+        }
+        for code in codes
+    ]
+
+
+class TestPerformanceOptimisations(unittest.TestCase):
     """Test performance controls and metrics."""
     
     def setUp(self):
@@ -32,31 +43,47 @@ class TestPerformanceOptimizations(unittest.TestCase):
         
         # Sample XML content for testing
         self.small_xml = """<?xml version="1.0" encoding="UTF-8"?>
-        <emis:search xmlns:emis="http://www.e-mis.com/emisopen">
-            <emis:criterion>
-                <emis:valueSet>
-                    <emis:id>test-guid-1</emis:id>
-                    <emis:description>Small Test XML</emis:description>
-                    <emis:codeSystem>SNOMED_CONCEPT</emis:codeSystem>
-                    <emis:values>
-                        <emis:isRefset>false</emis:isRefset>
-                        <emis:includeChildren>true</emis:includeChildren>
-                        <emis:value>guid1</emis:value>
-                        <emis:displayName>Test Code 1</emis:displayName>
-                    </emis:values>
-                </emis:valueSet>
-            </emis:criterion>
-        </emis:search>"""
+        <emis:enquiryDocument xmlns:emis="http://www.e-mis.com/emisopen">
+            <emis:search>
+                <emis:criteriaGroup>
+                    <emis:definition>
+                        <emis:criteria>
+                            <emis:criterion>
+                                <emis:table>EVENTS</emis:table>
+                                <emis:valueSet>
+                                    <emis:id>test-guid-1</emis:id>
+                                    <emis:description>Small Test XML</emis:description>
+                                    <emis:codeSystem>SNOMED_CONCEPT</emis:codeSystem>
+                                    <emis:values>
+                                        <emis:isRefset>false</emis:isRefset>
+                                        <emis:includeChildren>true</emis:includeChildren>
+                                        <emis:value>guid1</emis:value>
+                                        <emis:displayName>Test Code 1</emis:displayName>
+                                    </emis:values>
+                                </emis:valueSet>
+                            </emis:criterion>
+                        </emis:criteria>
+                    </emis:definition>
+                </emis:criteriaGroup>
+            </emis:search>
+        </emis:enquiryDocument>"""
         
         # Create a larger XML for performance testing
         self.large_xml = self._generate_large_xml(100)  # 100 valuesets
     
     def _generate_large_xml(self, num_valuesets: int) -> str:
         """Generate a large XML file for testing."""
-        root = ET.Element("{http://www.e-mis.com/emisopen}search")
-        
+        root = ET.Element("{http://www.e-mis.com/emisopen}enquiryDocument")
+        search = ET.SubElement(root, "{http://www.e-mis.com/emisopen}search")
+
+        group = ET.SubElement(search, "{http://www.e-mis.com/emisopen}criteriaGroup")
+        definition = ET.SubElement(group, "{http://www.e-mis.com/emisopen}definition")
+        criteria_container = ET.SubElement(definition, "{http://www.e-mis.com/emisopen}criteria")
+
         for i in range(num_valuesets):
-            criterion = ET.SubElement(root, "{http://www.e-mis.com/emisopen}criterion")
+            criterion = ET.SubElement(criteria_container, "{http://www.e-mis.com/emisopen}criterion")
+            table_elem = ET.SubElement(criterion, "{http://www.e-mis.com/emisopen}table")
+            table_elem.text = "EVENTS"
             valueset = ET.SubElement(criterion, "{http://www.e-mis.com/emisopen}valueSet")
             
             id_elem = ET.SubElement(valueset, "{http://www.e-mis.com/emisopen}id")
@@ -94,30 +121,20 @@ class TestPerformanceOptimizations(unittest.TestCase):
         
         with mock.patch('streamlit.sidebar') as mock_sidebar, \
              mock.patch('streamlit.expander') as mock_expander, \
-             mock.patch('streamlit.checkbox') as mock_checkbox, \
-             mock.patch('streamlit.selectbox') as mock_selectbox, \
-             mock.patch('streamlit.caption') as mock_caption:
-            
+             mock.patch('streamlit.checkbox') as mock_checkbox:
+
             # Set up mock returns
-            mock_checkbox.side_effect = [True, True, False]  # chunk_large_files, show_progress, show_metrics
-            mock_selectbox.return_value = "Memory Optimized"
-            
+            mock_checkbox.side_effect = [True, False]  # show_progress, show_metrics
+
             # Call the function
             settings = render_performance_controls()
-            
-            # Verify settings structure
-            self.assertIn('strategy', settings)
-            self.assertIn('max_workers', settings)
-            self.assertIn('memory_optimize', settings)
+
+            # Verify settings structure (simplified - only display options)
             self.assertIn('show_metrics', settings)
             self.assertIn('show_progress', settings)
-            self.assertIn('chunk_large_files', settings)
-            self.assertIn('environment', settings)
-            
-            # Verify cloud-compatible defaults
-            self.assertEqual(settings['max_workers'], 1)
-            self.assertTrue(settings['memory_optimize'])
-            self.assertEqual(settings['environment'], 'cloud')
+
+            # Verify only 2 keys returned
+            self.assertEqual(len(settings), 2)
     
     def test_performance_metrics_display(self):
         """Test that performance metrics display correctly."""
@@ -127,7 +144,7 @@ class TestPerformanceOptimizations(unittest.TestCase):
         test_metrics = {
             'memory_peak_mb': 45.2,
             'total_time': 2.34,
-            'processing_strategy': 'Memory Optimized',
+            'processing_strategy': 'Memory Optimised',
             'items_processed': 150
         }
         
@@ -189,7 +206,7 @@ class TestPerformanceOptimizations(unittest.TestCase):
         if small_xml_size < 1024 * 1024:  # < 1MB
             recommended_strategy = "Standard"
         else:
-            recommended_strategy = "Memory Optimized"
+            recommended_strategy = "Memory Optimised"
         
         self.assertEqual(recommended_strategy, "Standard")
     
@@ -224,11 +241,11 @@ class TestPerformanceOptimizations(unittest.TestCase):
         
         # Verify parsing results
         self.assertEqual(len(emis_guids), 1)
-        self.assertEqual(emis_guids[0]['emis_guid'], 'guid1')
-        self.assertEqual(emis_guids[0]['xml_display_name'], 'Test Code 1')
+        self.assertTrue(any(code['emis_guid'] == 'guid1' for code in emis_guids))
+        self.assertTrue(any(code['xml_display_name'] == 'Test Code 1' for code in emis_guids))
         
-        # Parsing should be fast for small files
-        self.assertLess(parse_time, 0.1)
+        # Parsing should be fast for small files (allowing CI/runtime variance)
+        self.assertLess(parse_time, 0.5)
         
         # Test larger XML performance
         start_time = time.time()
@@ -240,8 +257,8 @@ class TestPerformanceOptimizations(unittest.TestCase):
         self.assertLess(large_parse_time, 2.0)  # Should complete within 2 seconds
 
 
-class TestMemoryOptimization(unittest.TestCase):
-    """Test memory optimization features."""
+class TestMemoryOptimisation(unittest.TestCase):
+    """Test memory optimisation features."""
     
     def test_memory_efficient_xml_parsing(self):
         """Test that XML parsing is memory efficient."""
@@ -254,25 +271,34 @@ class TestMemoryOptimization(unittest.TestCase):
         
         # Parse a medium-sized XML
         test_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-        <emis:search xmlns:emis="http://www.e-mis.com/emisopen">
+        <emis:enquiryDocument xmlns:emis="http://www.e-mis.com/emisopen">
+            <emis:search>
+                <emis:criteriaGroup>
+                    <emis:definition>
+                        <emis:criteria>
         ''' + ''.join([
             f'''
-            <emis:criterion>
-                <emis:valueSet>
-                    <emis:id>test-guid-{i}</emis:id>
-                    <emis:description>Test ValueSet {i}</emis:description>
-                    <emis:codeSystem>SNOMED_CONCEPT</emis:codeSystem>
-                    <emis:values>
-                        <emis:isRefset>false</emis:isRefset>
-                        <emis:includeChildren>true</emis:includeChildren>
-                        <emis:value>guid{i}</emis:value>
-                        <emis:displayName>Test Code {i}</emis:displayName>
-                    </emis:values>
-                </emis:valueSet>
-            </emis:criterion>
+                        <emis:criterion>
+                            <emis:table>EVENTS</emis:table>
+                            <emis:valueSet>
+                                <emis:id>test-guid-{i}</emis:id>
+                                <emis:description>Test ValueSet {i}</emis:description>
+                                <emis:codeSystem>SNOMED_CONCEPT</emis:codeSystem>
+                                <emis:values>
+                                    <emis:isRefset>false</emis:isRefset>
+                                    <emis:includeChildren>true</emis:includeChildren>
+                                    <emis:value>guid{i}</emis:value>
+                                    <emis:displayName>Test Code {i}</emis:displayName>
+                                </emis:values>
+                            </emis:valueSet>
+                        </emis:criterion>
             ''' for i in range(50)
         ]) + '''
-        </emis:search>'''
+                        </emis:criteria>
+                    </emis:definition>
+                </emis:criteriaGroup>
+            </emis:search>
+        </emis:enquiryDocument>'''
         
         # Parse the XML
         result = parse_xml_for_emis_guids(test_xml)

@@ -20,3 +20,6 @@ cryptography>=3.4.8,<42.0.0
 
 # Encoding detection for XML files
 chardet>=4.0.0,<6.0.0
+
+# Visualisation for folder/dependency trees
+plotly>=5.0.0,<6.0.0

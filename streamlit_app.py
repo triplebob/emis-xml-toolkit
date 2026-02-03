@@ -1,27 +1,57 @@
 import streamlit as st
 import chardet
-from utils.ui import render_status_bar, render_results_tabs
-from utils.xml_parsers.xml_utils import parse_xml_for_emis_guids
-from utils.core import translate_emis_to_snomed
-from utils.core.session_state import SessionStateKeys, clear_processing_state, clear_results_state, clear_export_state, clear_all_except_core, clear_for_new_xml, clear_for_new_xml_selection
-from utils.ui.theme import ThemeColors, create_info_box_style, info_box, success_box, warning_box, error_box
-from utils.utils import get_debug_logger, render_debug_controls
-from utils.analysis import render_performance_controls, display_performance_metrics
-from utils.utils import create_processing_stats
-from utils.common.error_handling import (
-    ErrorHandler, XMLParsingError, FileOperationError, DataValidationError,
-    create_error_context, handle_xml_parsing_error, handle_file_operation_error,
-    ErrorSeverity, ErrorCategory
+from utils.ui import render_status_bar, render_results_tabs, apply_custom_styling, render_performance_controls, display_performance_metrics
+from utils.metadata.snomed_translation import translate_emis_to_snomed
+from utils.system.session_state import (
+    SessionStateKeys,
+    clear_processing_state,
+    clear_all_except_core,
+    clear_for_new_xml,
+    clear_for_new_xml_selection,
 )
-from utils.common.ui_error_handling import (
-    display_error_to_user, display_generic_error, streamlit_safe_execute
+import hashlib
+from utils.ui.theme import ThemeColours, create_info_box_style, info_box, success_box, warning_box, error_box
+from utils.system import get_debug_logger, render_debug_controls
+from utils.metadata.processing_stats import create_processing_stats
+from utils.system.error_handling import (
+    ErrorHandler,
+    create_error_context,
+    handle_xml_parsing_error,
+    handle_file_operation_error,
+    ErrorSeverity,
+    display_error_to_user,
+    display_generic_error,
+    streamlit_safe_execute,
 )
+
+
+# Simple file session tracking functions
+def generate_file_hash(filename: str, filesize: int) -> str:
+    """Generate hash based on filename and filesize."""
+    file_identity = f"{filename}_{filesize}"
+    return hashlib.md5(file_identity.encode()).hexdigest()[:16]
+
+
+def is_reprocessing_same_file(filename: str, filesize: int) -> bool:
+    """Check if this is reprocessing the same file with existing results."""
+    new_hash = generate_file_hash(filename, filesize)
+    current_hash = st.session_state.get('current_file_hash')
+    processed_hash = st.session_state.get('last_processed_hash')
+    has_results = SessionStateKeys.PIPELINE_CODES in st.session_state
+    
+    return (new_hash == current_hash == processed_hash and has_results)
+
+
+def mark_file_processed(filename: str, filesize: int):
+    """Mark current file as processed."""
+    file_hash = generate_file_hash(filename, filesize)
+    st.session_state['last_processed_hash'] = file_hash
 import time
 import psutil
 import os
 import hashlib
 import xml.etree.ElementTree as ET
-from utils.utils.caching.cache_manager import cache_manager
+from utils.caching.cache_manager import cache_manager
 
 # Task weight configuration for realistic progress tracking
 TASK_WEIGHTS = {
@@ -52,16 +82,16 @@ PROGRESS_POINTS = {
 # Page configuration
 st.set_page_config(
     page_title="The Unofficial EMIS XML Toolkit",
-    page_icon="img/favicon.ico",
+    page_icon="static/favicon.ico",
     layout="wide"
 )
+# Apply global custom styling (buttons, sidebar, etc.)
+apply_custom_styling()
 
 
 # Main app
 def main():
     # Load lookup table and render status bar first
-    from utils.common import streamlit_safe_execute
-    
     # Use safe execution for status bar rendering
     status_result = streamlit_safe_execute(
         "render_status_bar",
@@ -72,40 +102,58 @@ def main():
     
     if status_result is None:
         return
+
+    emis_guid_col, snomed_code_col, version_info = status_result
     
-    lookup_df, emis_guid_col, snomed_code_col = status_result
-    
-    # Initialize error handler for this session
+    # Initialise error handler for this session
     error_handler = ErrorHandler("streamlit_main")
     
     try:
-        # Initialize debug logger
+        # Initialise debug logger
         debug_logger = get_debug_logger()
         
         # Render performance controls in sidebar (near top)
         perf_settings = render_performance_controls()
-        
+
         # Render debug controls in sidebar (at bottom)
         render_debug_controls()
-    
+
+        # Logo at bottom of sidebar
+        import pathlib
+        import base64
+        logo_path = pathlib.Path("static/logo.svg")
+        if logo_path.exists():
+            with open(logo_path, "r", encoding="utf-8") as f:
+                svg_content = f.read()
+            # Encode SVG as base64 data URI
+            svg_b64 = base64.b64encode(svg_content.encode("utf-8")).decode("utf-8")
+            logo_uri = f"data:image/svg+xml;base64,{svg_b64}"
+
+            st.sidebar.markdown(
+                f"""
+                <div class="sidebar-footer" style="margin-top: 50px; text-align: center;">
+                    <img src="{logo_uri}" style="width:100px; height:auto;" />
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
     except Exception as e:
         st.sidebar.error(f"Error in performance features: {str(e)}")
         st.sidebar.info("Running in basic mode")
         debug_logger = None
-        perf_settings = {'strategy': 'Memory Optimized', 'max_workers': 1, 'memory_optimize': True, 'show_metrics': False, 'show_progress': True}
+        perf_settings = {'show_metrics': False, 'show_progress': True}
     
-    # Get lookup table from session state
-    lookup_df = st.session_state.get(SessionStateKeys.LOOKUP_DF)
+    # Get lookup column names from session state
     emis_guid_column = st.session_state.get(SessionStateKeys.EMIS_GUID_COL)
     snomed_code_column = st.session_state.get(SessionStateKeys.SNOMED_CODE_COL)
-    version_info = st.session_state.get(SessionStateKeys.LOOKUP_VERSION_INFO)
     
     # Header and upload section in columns
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2, 1.2])
     
     with col1:
         # Clean header without button
-        st.image("img/clinxml.svg", width=620)
+        st.image("static/clinxml.svg", width=620)
         st.caption("*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Comprehensive EMIS XML analysis and clinical code extraction for NHS healthcare teams*")
         
         # Dynamic MKB version text
@@ -124,75 +172,199 @@ def main():
             type=['xml'],
             help="Select an EMIS clinical search XML file"
         )
+
+        st.markdown(
+            """
+            <style>
+            .processing-spinner {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                color: #9aa7b2;
+                font-size: 0.9rem;
+            }
+            .processing-spinner .spinner {
+                width: 16px;
+                height: 16px;
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                border-top-color: #6ea8ff;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         
         if uploaded_xml is not None:
-            # Check if this is a different file than previously processed
-            current_file_info = f"{uploaded_xml.name}_{uploaded_xml.size}"
-            if st.session_state.get(SessionStateKeys.LAST_PROCESSED_FILE) != current_file_info:
-                # New file selected - lightweight cleanup preserving lookup cache (keeps status bar loaded)
+            # Detect encoding and decode content (sample only to avoid large-file slowdown)
+            xml_bytes = uploaded_xml.read()
+            sample_bytes = xml_bytes[:200_000]  # ~200KB sample for fast detection
+            detected = chardet.detect(sample_bytes)
+            encoding = detected['encoding'] or 'utf-8'
+
+            # Try detected encoding first
+            try:
+                xml_content = xml_bytes.decode(encoding)
+            except (UnicodeDecodeError, LookupError):
+                # If detected encoding fails (or is invalid), try UTF-8
+                try:
+                    xml_content = xml_bytes.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Last resort: UTF-8 with error replacement
+                    xml_content = xml_bytes.decode('utf-8', errors='replace')
+                    st.warning(f"File contains invalid UTF-8 characters. Some characters may be replaced with �.")
+            try:
+                uploaded_xml.seek(0)
+            except Exception:
+                pass
+            
+            # Check whether this is a different file
+            new_hash = generate_file_hash(uploaded_xml.name, uploaded_xml.size)
+            current_hash = st.session_state.get('current_file_hash')
+            
+            if new_hash != current_hash:
+                # Different file: clear session and store file info
                 clear_for_new_xml_selection()
-                
-                # Store new file info and show notification
-                st.session_state[SessionStateKeys.LAST_PROCESSED_FILE] = current_file_info
+                st.session_state['current_file_hash'] = new_hash
+                st.session_state[SessionStateKeys.UPLOADED_FILE] = uploaded_xml
+                st.session_state[SessionStateKeys.XML_FILENAME] = uploaded_xml.name
+                st.session_state[SessionStateKeys.XML_FILESIZE] = uploaded_xml.size
+                st.session_state[SessionStateKeys.UPLOADED_FILENAME] = uploaded_xml.name
                 st.toast(f"New file uploaded: {uploaded_xml.name}", icon="📁")
                 st.rerun()
+            else:
+                # Same file - just ensure content is stored and preserve filename
+                st.session_state[SessionStateKeys.UPLOADED_FILE] = uploaded_xml
+                # Ensure filename and filesize are always set (in case cleared during reprocessing)
+                st.session_state[SessionStateKeys.XML_FILENAME] = uploaded_xml.name
+                st.session_state[SessionStateKeys.XML_FILESIZE] = uploaded_xml.size
+                st.session_state[SessionStateKeys.UPLOADED_FILENAME] = uploaded_xml.name
             
-            # Initialize processing state
+            # Initialise processing state
             if SessionStateKeys.IS_PROCESSING not in st.session_state:
                 st.session_state[SessionStateKeys.IS_PROCESSING] = False
             
+            button_col, indicator_col = st.columns([1.4, 1])
+
             # Show process button or cancel button based on state
             if not st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
-                if st.button("🔄 Process XML File", type="primary"):
-                    # Comprehensive cleanup when processing starts (includes export cache + GC)
-                    clear_for_new_xml()
-                    
-                    st.session_state[SessionStateKeys.IS_PROCESSING] = True
-                    st.rerun()
-            else:
-                if st.button("🛑 Cancel Processing", type="secondary"):
-                    # Comprehensive cleanup when cancelling - same as new XML upload
-                    clear_for_new_xml()
-                    clear_processing_state()
-                    st.markdown(success_box("Processing cancelled - all data cleared"), unsafe_allow_html=True)
-                    st.rerun()
+                # Check if this is reprocessing the same file
+                is_reprocessing = is_reprocessing_same_file(uploaded_xml.name, uploaded_xml.size)
                 
+                if is_reprocessing:
+                    button_text = "🔄 Reprocess XML File"
+                    button_help = "Reprocess as if loading a new file — clears all cache"
+                else:
+                    button_text = "🔄 Process XML File"
+                    button_help = "Process XML file for analysis"
+                with button_col:
+                    process_clicked = st.button(button_text, help=button_help)
+                with indicator_col:
+                    st.markdown("&nbsp;", unsafe_allow_html=True)
+
+                if process_clicked:
+                    if is_reprocessing:
+                        # Reprocess = reset to fresh state, keeping only the uploaded file
+                        # This shows "Process XML File" button on next render
+                        uploaded_file_backup = st.session_state.get(SessionStateKeys.UPLOADED_FILE)
+                        filename_backup = st.session_state.get(SessionStateKeys.XML_FILENAME)
+                        filesize_backup = st.session_state.get(SessionStateKeys.XML_FILESIZE)
+
+                        st.cache_data.clear()
+                        clear_for_new_xml()
+
+                        # Reset hash tracking so the file is treated as not yet processed
+                        st.session_state.pop('last_processed_hash', None)
+                        st.session_state.pop('current_file_hash', None)
+
+                        # Restore only the uploaded file
+                        if uploaded_file_backup:
+                            st.session_state[SessionStateKeys.UPLOADED_FILE] = uploaded_file_backup
+                        if filename_backup:
+                            st.session_state[SessionStateKeys.XML_FILENAME] = filename_backup
+                            st.session_state[SessionStateKeys.UPLOADED_FILENAME] = filename_backup
+                        if filesize_backup:
+                            st.session_state[SessionStateKeys.XML_FILESIZE] = filesize_backup
+
+                        st.toast("Ready to reprocess - click 'Process XML File'", icon="🔄")
+                        st.rerun()
+                    else:
+                        # Normal processing flow
+                        st.cache_data.clear()
+                        clear_for_new_xml()
+                        st.session_state[SessionStateKeys.PROCESSING_CONTEXT] = "process"
+                        st.session_state[SessionStateKeys.IS_PROCESSING] = True
+                        st.rerun()
+            else:
+                with button_col:
+                    if st.button("🛑 Cancel Processing", type="secondary"):
+                        # Comprehensive cleanup when cancelling - same as XML upload
+                        clear_for_new_xml()
+                        clear_processing_state()
+                        st.markdown(success_box("Processing cancelled - all data cleared"), unsafe_allow_html=True)
+                        st.rerun()
+                with indicator_col:
+                    if st.session_state.get(SessionStateKeys.PROCESSING_CONTEXT) == "reprocess":
+                        st.markdown(
+                            "<div class=\"processing-spinner\"><span class=\"spinner\"></span>Reprocessing...</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown("&nbsp;", unsafe_allow_html=True)
+
                 # Show file info as toast notification
                 file_size_mb = uploaded_xml.size / (1024 * 1024)
                 if file_size_mb > 10:
-                    st.toast(f"Large file detected ({file_size_mb:.1f} MB). Processing optimized for cloud.", icon="⚠️")
+                    st.toast(f"Large file detected ({file_size_mb:.1f} MB). Processing optimised for cloud.", icon="⚠️")
                 elif file_size_mb > 1:
                     st.toast(f"Medium file ({file_size_mb:.1f} MB). Using memory-efficient processing.", icon="📁")
-                
+
                 # Process the file - remove spinner to avoid UI conflicts
                 try:
-                    # Initialize progress tracking FIRST for immediate feedback
+                    # Initialise progress tracking FIRST for immediate feedback
                     progress_bar = None
                     status_text = None
                     if perf_settings.get('show_progress', True):
                         progress_bar = st.progress(0, text="Starting XML processing...")
                         status_text = st.empty()  # For detailed status updates
+                        # Force UI flush so progress bar renders before heavy processing
+                        time.sleep(0.05)
                     
-                    # Read raw bytes and detect encoding
-                    raw_bytes = uploaded_xml.read()
+                    # Get stored content from session state (file already read during upload)
+                    uploaded_file = st.session_state.get(SessionStateKeys.UPLOADED_FILE) or uploaded_xml
+                    raw_bytes = None
+                    if uploaded_file is not None:
+                        try:
+                            uploaded_file.seek(0)
+                        except Exception:
+                            pass
+                        raw_bytes = uploaded_file.read()
+                        try:
+                            uploaded_file.seek(0)
+                        except Exception:
+                            pass
+                    if not raw_bytes:
+                        st.error("No XML content found. Please re-upload the file.")
+                        st.session_state[SessionStateKeys.IS_PROCESSING] = False
+                        st.rerun()
+                        
                     if progress_bar:
-                        progress_bar.progress(PROGRESS_POINTS['encoding'], text="Processing file encoding...")
+                        progress_bar.progress(PROGRESS_POINTS['encoding'], text="Reading XML content...")
                         if status_text:
-                            status_text.text(f"📁 File size: {len(raw_bytes):,} bytes - Detecting encoding...")
+                            status_text.text(f"📁 File size: {len(raw_bytes):,} bytes - Content ready for processing")
                     
-                    # Fast encoding detection - only sample first 10KB for speed
-                    sample_size = min(10240, len(raw_bytes))  # 10KB max sample
-                    detected = chardet.detect(raw_bytes[:sample_size])
-                    encoding = detected['encoding'] or 'utf-8'
-                    xml_content = raw_bytes.decode(encoding, errors='replace')
+                    # Decode XML content and get encoding info for display
+                    from utils.parsing.encoding import decode_xml_bytes
+                    xml_content, encoding_used, declared_encoding, guessed_encoding = decode_xml_bytes(raw_bytes)
                     
                     if status_text:
-                        status_text.text(f"✅ Encoding detected: {encoding} ({detected.get('confidence', 0):.1%} confidence)")
+                        status_text.empty()
                     
-                    # Store raw bytes in session state to avoid re-read issues
-                    st.session_state[SessionStateKeys.XML_RAW_BYTES] = raw_bytes
-                    
-                    # Cloud-optimized processing with progress tracking (no spinner)
+                    # Cloud-optimised processing with progress tracking (no spinner)
                     start_time = time.time()
                     
                     # Track memory usage with peak monitoring
@@ -205,14 +377,13 @@ def main():
                         debug_logger.log_xml_processing_start(uploaded_xml.name, uploaded_xml.size)
                         debug_logger.log_user_action("process_xml_file", {"filename": uploaded_xml.name})
                         
-                        # Parse XML with memory optimization
+                        # Parse XML with memory optimisation
                         if progress_bar:
                             progress_bar.progress(PROGRESS_POINTS['parsing'], text="Parsing XML structure...")
                             if status_text:
                                 status_text.text(f"🔍 Scanning XML for EMIS GUIDs and clinical codes...")
                         
-                        # Use cached XML code extraction from cache_manager
-                        
+                        # Use cached XML code extraction from cache_manager (silent in UI)
                         xml_content_hash = hashlib.md5(raw_bytes).hexdigest()
                         emis_guids = cache_manager.cache_xml_code_extraction(xml_content_hash, xml_content)
                         
@@ -284,48 +455,29 @@ def main():
                         
                         # Only do clinical code processing if we have EMIS GUIDs
                         if emis_guids:
-                            # Check if EMIS lookup cache needs building for terminology server integration
-                            from utils.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
-                            
-                            # Skip cache building if we already loaded from cache
-                            load_source = version_info.get('load_source', 'unknown')
-                            if load_source == 'cache':
-                                # We already loaded from cache, no need to rebuild
-                                cache_built = True
-                            else:
-                                cache_info = get_cache_info(lookup_df, version_info)
-                                
-                                if cache_info["status"] == "not_cached":
-                                    # Cache needs building - show progress
-                                    if progress_bar:
-                                        progress_bar.progress(PROGRESS_POINTS['cache'], text="Building EMIS lookup cache for terminology server (first time)...")
-                                    
-                                    cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                                    
-                                    if cache_built:
-                                        st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
-                                elif cache_info["status"] == "cached":
-                                    # Cache already exists - no delay needed
-                                    cache_built = True
-                                else:
-                                    # Cache check failed - try to build anyway
-                                    cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                            # Get lookup DataFrame for translation
+                            from utils.caching.lookup_manager import get_full_lookup_df
+                            lookup_df, lookup_emis_col, lookup_snomed_col = get_full_lookup_df()
                             
                             # Calculate unique GUIDs for accurate user messaging
-                            unique_guids = set(guid_info['emis_guid'] for guid_info in emis_guids)
+                            def _get_emis_guid(entry):
+                                return entry.get('emis_guid') or entry.get('EMIS GUID')
+
+                            unique_guids = set(g for g in (_get_emis_guid(g) for g in emis_guids) if g)
                             
                             # Pre-calculate clinical/medication GUIDs to match completion count
                             clinical_med_guids = set()
                             for guid_info in emis_guids:
                                 # Only count non-refset GUIDs that will appear in clinical/medications categories
-                                if not guid_info.get('is_refset', False):
-                                    clinical_med_guids.add(guid_info['emis_guid'])
+                                guid_val = _get_emis_guid(guid_info)
+                                if guid_val and not guid_info.get('is_refset', False):
+                                    clinical_med_guids.add(guid_val)
                             
                             if progress_bar:
                                 progress_bar.progress(PROGRESS_POINTS['guids'], text=f"Found {len(unique_guids)} unique GUIDs from {len(emis_guids)} references, preparing translation...")
                             
                             # Show progress as toast notification
-                            st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
+                            st.toast(f"Analysing XML structure and extracting clinical data...", icon="⚙️")
                             
                             # Translate to SNOMED codes with progress tracking
                             if progress_bar:
@@ -339,12 +491,18 @@ def main():
                             # Show intermediate progress during translation
                             translation_start_time = time.time()
                             translated_codes = translate_emis_to_snomed(
-                                emis_guids, 
-                                lookup_df, 
-                                emis_guid_column, 
-                                snomed_code_column,
+                                emis_guids,
+                                lookup_df,
+                                lookup_emis_col or emis_guid_column,
+                                lookup_snomed_col or snomed_code_column,
                                 deduplication_mode
                             )
+                            # Warm unified clinical cache so tabs render immediately on first pass
+                            try:
+                                from utils.ui.tabs.tab_helpers import get_unified_clinical_data
+                                _ = get_unified_clinical_data()
+                            except Exception:
+                                pass
                             translation_time = time.time() - translation_start_time
                             
                             if status_text:
@@ -388,57 +546,23 @@ def main():
                         
                         audit_stats = create_processing_stats(
                             uploaded_xml.name,
-                            xml_content,
+                            None,
                             emis_guids or [],  # Use empty list if None
                             translated_codes,
-                            processing_time
+                            processing_time,
+                            file_size_bytes=uploaded_xml.size
                         )
                         
                         if progress_bar:
                             progress_bar.progress(PROGRESS_POINTS['finalization'], text="Finalizing results...")
                         
-                        # Store results in session state
-                        st.session_state[SessionStateKeys.RESULTS] = translated_codes
+                        # Store core metadata for current file session
                         st.session_state[SessionStateKeys.XML_FILENAME] = uploaded_xml.name
                         st.session_state[SessionStateKeys.AUDIT_STATS] = audit_stats
-                        st.session_state[SessionStateKeys.XML_CONTENT] = xml_content  # Store for search rule analysis
+                        # XML content is streamed on demand for the XML viewer
                         
                         # Clear processing state as soon as we have results
                         clear_processing_state()
-                        
-                        # Generate analysis for report structure tabs (SEPARATE from clinical codes)
-                        if progress_bar:
-                            progress_bar.progress(PROGRESS_POINTS['finalization'], text="Analyzing XML structure...")
-                        
-                        # CRITICAL SEPARATION: Keep report analysis completely isolated from clinical codes
-                        try:
-                            # Use single analysis call for report structure tabs only
-                            from utils.analysis.xml_structure_analyzer import analyze_search_rules
-                            
-                            # Run full XML structure analysis - this is ONLY for report tabs, not clinical codes
-                            analysis = analyze_search_rules(xml_content)
-                            
-                            # Store analysis results in separate, isolated session keys
-                            st.session_state[SessionStateKeys.XML_STRUCTURE_ANALYSIS] = analysis  # Full analysis for report tabs
-                            st.session_state[SessionStateKeys.SEARCH_ANALYSIS] = analysis  # Legacy compatibility
-                            
-                            # Extract specialized results for report structure display
-                            st.session_state[SessionStateKeys.SEARCH_RESULTS] = getattr(analysis, 'search_results', None)
-                            st.session_state[SessionStateKeys.REPORT_RESULTS] = getattr(analysis, 'report_results', None)
-                            
-                        except Exception as e:
-                            # Create structured error for analysis failure (non-critical)
-                            analysis_error = handle_xml_parsing_error(
-                                "XML structure analysis", 
-                                e, 
-                                "analysis_module"
-                            )
-                            error_handler.handle_error(analysis_error)
-                            # Don't fail the whole process if analysis fails, but preserve clinical codes functionality
-                            st.session_state[SessionStateKeys.XML_STRUCTURE_ANALYSIS] = None
-                            st.session_state[SessionStateKeys.SEARCH_ANALYSIS] = None
-                            st.session_state[SessionStateKeys.SEARCH_RESULTS] = None
-                            st.session_state[SessionStateKeys.REPORT_RESULTS] = None
                         
                         # Calculate success rate for logging - handle empty translated_codes for patient demographics XMLs
                         total_found = sum(1 for item in translated_codes.get('clinical', []) if item.get('Mapping Found') == 'Found')
@@ -484,31 +608,31 @@ def main():
                         if pseudo_refset_count > 0:
                             breakdown_parts.append(f"{pseudo_refset_count} pseudo-refsets")
                         
-                        # PERFORMANCE FIX: Use simple toast without expensive analysis operations
-                        # Quick structure analysis for toast
+                        # Use lightweight pipeline metadata for the completion toast
                         try:
-                            # Use already computed analysis from session state
-                            analysis = st.session_state.get(SessionStateKeys.XML_STRUCTURE_ANALYSIS)
-                            if analysis:
-                                folder_count = len(analysis.folders) if analysis.folders else 0
-                                total_reports = len(analysis.reports) if analysis.reports else 0
-                                
-                                breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items"
-                                st.toast(f"Processing complete! Found {len(emis_guids)} GUIDs • {total_reports} reports • {folder_count} folders • {total_display_items} clinical items", icon="✅")
-                            else:
-                                # Fallback to simple message if analysis not available
-                                breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items" 
-                                st.toast(f"Processing complete! Found {total_display_items} items: {breakdown_text}", icon="✅")
+                            entities = st.session_state.get(SessionStateKeys.PIPELINE_ENTITIES) or []
+                            folders = st.session_state.get(SessionStateKeys.PIPELINE_FOLDERS) or []
+                            report_count = 0
+                            for ent in entities:
+                                flags = ent.get("flags", {}) or {}
+                                etype = flags.get("element_type") or flags.get("source_type")
+                                if etype in {"list_report", "audit_report", "aggregate_report"}:
+                                    report_count += 1
+                            folder_count = len(folders)
+                            breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items"
+                            st.toast(
+                                f"Processing complete! Found {len(emis_guids)} GUIDs • {report_count} reports • "
+                                f"{folder_count} folders • {total_display_items} clinical items",
+                                icon="✅",
+                            )
                         except Exception:
-                            # Fallback to original message if any issues
-                            breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items" 
+                            breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items"
                             st.toast(f"Processing complete! Found {total_display_items} items: {breakdown_text}", icon="✅")
                         
                         # Show performance metrics if enabled
                         if perf_settings.get('show_metrics', False):
                             metrics = {
                                 'total_time': processing_time,
-                                'processing_strategy': perf_settings.get('strategy', 'Memory Optimized'),
                                 'items_processed': total_display_items,
                                 'success_rate': success_rate,
                                 'memory_peak_mb': memory_peak
@@ -594,30 +718,44 @@ def main():
         else:
             st.markdown(info_box("📤 Upload an XML file to begin processing"), unsafe_allow_html=True)
     
-    # Full-width results section - only show when not processing
+    # Full-width results section - only show when not processing and results exist
     if not st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
+        # Check if any processing has occurred (pipeline results only)
+        has_results = (
+            st.session_state.get(SessionStateKeys.PIPELINE_CODES) or
+            st.session_state.get(SessionStateKeys.PIPELINE_ENTITIES)
+        )
         
         st.subheader("📊 Results")
-        render_results_tabs(st.session_state.get(SessionStateKeys.RESULTS))
+        render_results_tabs()
     elif st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
         # Show processing indicator
         st.subheader("⏳ Processing...")
         st.markdown(info_box("Processing your XML file. This may take a few moments for large files."), unsafe_allow_html=True)
 
-    # Footer
+    # Footer with copyright and disclaimer
+    from datetime import datetime
+    current_year = datetime.now().year
+
     st.markdown("---")
     st.markdown(
-        """
-        <div style='text-align: center; color: #aaa;'>
-        <p>ClinXML - The Unofficial EMIS XML Toolkit | Comprehensive XML analysis and clinical code extraction</p>
-        <p style='font-size: 0.8em; margin-top: 10px;'>
-        <strong>Disclaimer:</strong> EMIS and EMIS Web are trademarks of Optum Inc. This unofficial toolkit is not affiliated with, 
-        endorsed by, or sponsored by Optum Inc, EMIS Health, or any of their subsidiaries. All trademarks are the property of their respective owners.
+        f"""<div style="text-align: center; color: #aaa; font-size: 0.8em; margin-top: 30px;">
+        <p style="margin-bottom: 8px; opacity: 1.0;">
+            <strong>ClinXML™ - The Unofficial EMIS XML Toolkit</strong> | Comprehensive XML analysis and clinical code extraction |
+            <strong>© {current_year} ClinXML™</strong> All rights reserved.
         </p>
-        </div>
-        """, 
-        unsafe_allow_html=True
+        <p style='font-size: 0.9em; margin-top: 8px;'>
+            <strong>Disclaimer:</strong> EMIS and EMIS Web are trademarks of Optum Inc. This unofficial toolkit is not affiliated with, endorsed by, or sponsored by Optum Inc, EMIS Health, or any of their subsidiaries. All trademarks are the property of their respective owners.
+        </p>
+        <p style="font-size: 0.9em; opacity: 0.8;">
+            Unauthorised copying, distribution, or commercial use prohibited. |
+            By using this application you agree to the
+            <a href='https://github.com/triplebob/clinxml-legal/blob/main/EULA-clinxml.md' style="color: inherit;">>ClinXML™ EULA</a>.
+        </p>
+        </div>""",
+        unsafe_allow_html=True,
     )
+
 
 if __name__ == "__main__":
     main()

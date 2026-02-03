@@ -1,1078 +1,673 @@
-# EMIS XML Converter - Module Architecture
+# ClinXML Module Architecture
 
 ## Overview
 
-This application converts EMIS XML search files into SNOMED clinical codes and provides detailed analysis of search logic, rules, and criteria. The codebase uses a unified pipeline architecture with specialised analyzers for efficient processing and consistent data handling across the application.
+ClinXML v3 is organised around a parsing-first pipeline with dedicated packages for metadata enrichment, caching, UI composition, export generation, and terminology integration. This guide provides detailed descriptions of each module with responsibilities, key functions, and modification guidance.
 
-## Core Application Flow
+---
 
-```
-streamlit_app.py (file upload)
-    ↓ XML content
-extract_codes_with_separate_parsers() (separate search/report parsing)
-    ↓ GUID list with source attribution
-utils.core.translator (GUIDs → SNOMED codes)
-    ↓ translated results
-utils.analysis.analysis_orchestrator (unified analysis coordination)
-    ↓ orchestrated results
-utils.ui.ui_tabs (main interface coordinator)
-    ↓ delegates to modular tabs
-utils.ui.tabs.* (specialised tab rendering)
-    ↓ export requests
-utils.export_handlers (specialised export handling)
+## End-to-End Flow
+
+```text
+streamlit_app.py
+  -> utils.ui.status_bar.render_status_bar()
+  -> utils.caching.cache_manager.cache_xml_code_extraction()
+      -> utils.caching.xml_cache.cache_parsed_xml()
+          -> utils.parsing.pipeline.parse_xml()
+          -> utils.metadata.enrichment / serialisation
+  -> utils.metadata.snomed_translation.translate_emis_to_snomed()
+  -> utils.ui.ui_tabs.render_results_tabs()
+  -> utils.exports.* (on demand)
 ```
 
-## Main Application Files
+---
+
+## Main Application
 
 ### `streamlit_app.py` - Main Application Entry Point
+
 **Purpose:** Primary Streamlit application that coordinates all processing.
 
 **Responsibilities:**
 - File upload interface and user controls
-- XML processing orchestration using separate parsers
-- Progress tracking and user feedback
-- Session state management with caching
-- Dual-mode deduplication support (unique codes vs per-source)
-- Performance controls and debug features
-- Memory optimization and Streamlit Cloud compatibility
+- XML processing orchestration using the parsing pipeline
+- Progress tracking with weighted task stages
+- Session state management with file hashing
+- SNOMED translation coordination
+- Performance controls and debug mode
 
 **Key Functions:**
-- File upload and processing workflow
-- Session state cache management for file switching
-- Performance monitoring and debug logging integration
-- Safe execution patterns with error handling
+- `main()` - Application entry point
+- `generate_file_hash()` - Create file identity hash
+- `is_reprocessing_same_file()` - Detect reprocessing of same file
+- `mark_file_processed()` - Update processing state
 
-**When to modify:** UI layout changes, main workflow changes, parser coordination updates.
+**When to modify:** UI layout changes, main workflow changes, progress tracking updates.
 
+---
 
-## Core Business Logic (`utils/core/`)
+## Parsing Pipeline (`utils/parsing/`)
 
-### `translator.py` - GUID to SNOMED Translation
-**Purpose:** Converts extracted GUIDs to SNOMED codes using lookup table with persistent caching.
+The parsing layer is the canonical XML processing module. All XML analysis flows through this pipeline.
 
-**Responsibilities:**
-- Fast dictionary-based GUID lookups with 60-minute persistent cache
-- Clinical vs medication classification
-- Pseudo-refset handling and success/failure tracking
-- Dual-mode deduplication system
-- Results organization by category
-- SNOMED cache management and TTL validation
+### `pipeline.py` - Orchestrated Parsing Pipeline
 
-**Deduplication Modes:**
-- `unique_codes`: Deduplicate by SNOMED code only
-- `unique_per_entity`: Deduplicate by (source_guid, SNOMED code) combination
-
-**SNOMED Cache Integration:**
-- Retrieves cached EMIS GUID → SNOMED mappings at translation start
-- Enhances lookup dictionary with cached mappings for performance
-- Updates cache with new mappings discovered during translation
-- Automatic expired cache cleanup before processing
-
-**When to modify:** Translation logic changes, new code categories, lookup optimization, cache performance tuning.
-
-### `report_classifier.py` - EMIS Report Type Classification
-**Purpose:** Classifies EMIS reports into 4 types: Search, List Report, Audit Report, Aggregate Report.
+**Purpose:** Single entry point for parsing XML into entities, code stores, and optional pattern results.
 
 **Responsibilities:**
-- Report type detection based on XML structure
-- Search vs report filtering
-- Report counting and grouping functions
-- Classification logic based on XML element presence
+- Load document via `document_loader`
+- Classify elements via `ElementClassifier`
+- Produce `ParsedDocument` with buckets
+- Orchestrate node parsers for searches, reports
+- Create and populate `CodeStore` for deduplication
+- Optionally run pattern plugins
+
+**Key Functions:**
+- `parse_xml(xml_content, source_name, run_patterns)` - Main parsing entry point
+
+**Returns:**
+```python
+{
+    "parsed_document": ParsedDocument,
+    "entities": List[Dict],
+    "code_store": CodeStore,
+    "pattern_results": List[PatternResult]  # optional
+}
+```
+
+**When to modify:** Pipeline orchestration changes, new entity types, parse output shape changes.
+
+---
+
+### `document_loader.py` - XML Document Loading
+
+**Purpose:** Load XML content and extract namespaces.
+
+**Responsibilities:**
+- Parse XML string to ElementTree
+- Extract namespace declarations via `iterparse`
+- Ensure `emis` namespace always available
+- Build document metadata
+
+**Key Functions:**
+- `load_document(xml_content, source_name)` - Returns (root, namespaces, metadata)
+
+**When to modify:** Encoding issues, namespace handling, metadata extraction.
+
+---
+
+### `element_classifier.py` - Element Classification
+
+**Purpose:** Classify XML elements into logical buckets (searches, reports, folders).
+
+**Responsibilities:**
+- Identify searches vs reports vs folders
+- Distinguish list/audit/aggregate report types
+- Deduplicate elements found via multiple paths
+
+**Key Classes:**
+- `ElementClassifier` - Main classification engine
+- `ClassifiedBuckets` - Container for classified elements
+
+**When to modify:** New element types, classification rules, bucket structure.
+
+---
+
+### `namespace_utils.py` - Namespace Helpers
+
+**Purpose:** Provide consistent namespace handling for mixed namespaced/non-namespaced XML.
+
+**Key Functions:**
+- `find_ns(elem, tag, namespaces)` - Find first matching element
+- `findall_ns(elem, tag, namespaces)` - Find all matching elements
+- `get_text_ns(elem, tag, namespaces)` - Get element text
+- `find_child_any(parent, candidate_tags, namespaces)` - Find from candidates
+- `get_child_text_any(elem, candidate_tags, namespaces)` - Get text from candidates
+- `get_attr_any(elem, candidate_attrs)` - Get attribute with fallback
+
+**When to modify:** Namespace resolution issues, new helper requirements.
+
+---
+
+### `node_parsers/` - Structured XML Parsers
+
+**Purpose:** Parse specific XML node types into structured data.
+
+<details>
+<summary><strong>search_parser.py</strong></summary>
+
+**Purpose:** Parse search elements including criteria, value sets, and linked criteria.
+
+**Key Functions:**
+- `parse_search(elem, namespaces, code_store)` - Parse search element
+
+**When to modify:** Search structure changes, new criteria patterns.
+
+</details>
+
+<details>
+<summary><strong>report_parser.py</strong></summary>
+
+**Purpose:** Parse list, audit, and aggregate reports.
+
+**Key Functions:**
+- `parse_report(elem, namespaces, report_type, code_store)` - Parse report element
+
+**When to modify:** Report structure changes, new report types.
+
+</details>
+
+<details>
+<summary><strong>criterion_parser.py</strong></summary>
+
+**Purpose:** Parse individual criterion elements with flag mapping.
+
+**When to modify:** Criterion structure changes, new criterion types.
+
+</details>
+
+<details>
+<summary><strong>value_set_parser.py</strong></summary>
+
+**Purpose:** Parse value sets and extract clinical codes.
+
+**When to modify:** Value set structure changes, code extraction logic.
+
+</details>
+
+---
+
+## Pattern Plugins (`utils/pattern_plugins/`)
+
+Modular detector framework for XML patterns. Each plugin inspects element context and emits structured flags.
+
+### `registry.py` - Plugin Registration
+
+**Purpose:** Manage plugin registration and execution.
+
+**Key Functions:**
+- `@register_pattern(pattern_id)` - Decorator for plugin registration
+- `pattern_registry.run_all(context)` - Execute all registered plugins
+- `pattern_registry.load_all_modules(package)` - Load all plugin modules
+
+**When to modify:** Plugin execution flow, registration mechanism.
+
+---
+
+### `base.py` - Plugin Data Contracts
+
+**Purpose:** Define `PatternContext` and `PatternResult` data classes, plus shared helper functions.
+
+**Key Classes:**
+- `PatternContext` - Input context (element, namespaces, path, container_info)
+- `PatternResult` - Output result (id, description, flags, confidence, notes)
+
+**Helper Functions:**
+- `tag_local(elem)` - Returns local tag name, stripping namespace prefix
+- `find_first(elem, namespaces, *queries)` - Safe namespace fallback lookup (avoids ElementTree truthiness issues)
+
+**When to modify:** Plugin contract changes, shared helper additions.
+
+---
+
+### Plugin Modules
+
+| Module | Pattern IDs | Primary Flags |
+|--------|-------------|---------------|
+| `restrictions.py` | `restriction_latest_earliest`, `restriction_test_attribute` | `has_restriction`, `restriction_type`, `record_count` |
+| `temporal.py` | `temporal_single_value`, `temporal_range` | `has_temporal_filter`, `temporal_variable_value` |
+| `demographics.py` | `demographics_lsoa`, `demographics_geo` | `is_patient_demographics`, `demographics_type` |
+| `refsets.py` | `refset_detection` | `is_refset`, `is_pseudo_refset`, `is_pseudo_member` |
+| `relationships.py` | `linked_relationship` | `relationship_type`, `parent_column`, `child_column` |
+| `logic.py` | `logic_negation_and_actions` | `negation`, `member_operator` |
+| `medication.py` | `medication_code_system` | `is_medication_code`, `medication_type_flag` |
+| `parameters.py` | `parameters` | `has_parameter`, `parameter_names` |
+| `enterprise.py` | `enterprise_metadata`, `qof_contract` | `enterprise_reporting_level`, `qmas_indicator` |
+| `emisinternal.py` | `emisinternal_classification` | `has_emisinternal_filters`, `emisinternal_values` |
+| `column_filters.py` | `column_filters` | `column_filters` |
+
+**When to modify:** Add new pattern detection, update existing patterns.
+
+---
+
+## Metadata (`utils/metadata/`)
+
+Enrichment and domain projection layer.
+
+### `flag_registry.py` - Canonical Flag Definitions
+
+**Purpose:** Define all valid flags with constraints and validators.
+
+**Key Components:**
+- `FlagDefinition` - Flag definition with name, description, domain, validator
+- `FLAG_DEFINITIONS` - Dictionary of 95+ canonical flags
+- Validators: `_is_bool`, `_non_empty_str`, `_list_str`, `_list_obj`
+
+**When to modify:** Add/update flag definitions.
+
+---
+
+### `flag_mapper.py` - Flag Mapping and Validation
+
+**Purpose:** Map and validate flags from parsing to canonical form.
+
+**Key Functions:**
+- `map_element_flags(element, results, defaults, namespaces)` - Merge plugin flags
+- `validate_flags(flags)` - Validate against FLAG_DEFINITIONS
+
+**When to modify:** Flag mapping logic, validation behaviour.
+
+---
+
+### `snomed_translation.py` - EMIS to SNOMED Translation
+
+**Purpose:** Translate EMIS GUIDs to SNOMED codes using lookup table.
+
+**Responsibilities:**
+- Create lookup dictionaries for O(1) access
+- Handle cached SNOMED mappings (60-minute TTL)
+- Support deduplication modes (unique_codes, unique_per_entity)
+- Categorise results (clinical, medications, refsets, pseudo-refsets)
+
+**Key Functions:**
+- `translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col, deduplication_mode)`
+
+**When to modify:** Translation logic, deduplication modes, categorisation.
+
+---
+
+### `enrichment.py` - Code Enrichment
+
+**Purpose:** Enrich parsed codes with additional metadata.
+
+**When to modify:** Enrichment logic, new metadata fields.
+
+---
+
+### `serialisers.py` - UI/Export Row Shaping
+
+**Purpose:** Transform parsed data into UI-ready and export-ready formats.
+
+**When to modify:** Output format changes, new fields.
+
+---
+
+## Caching (`utils/caching/`)
+
+Cache and lookup infrastructure.
+
+### `cache_manager.py` - Centralised Cache Orchestration
+
+**Purpose:** Coordinate all caching operations with TTL strategies.
+
+**Responsibilities:**
+- XML code extraction caching
+- SNOMED lookup dictionary caching
+- Memory management with garbage collection
+- Cache clearing utilities
+
+**Key Functions:**
+- `cache_xml_code_extraction(xml_content, source_name)` - Cache pipeline output
+- `clear_cache_for_new_file()` - Clear file-specific caches
+- `get_memory_stats()` - Memory usage statistics
+
+**When to modify:** Cache strategies, TTL configuration, memory management.
+
+---
+
+### `lookup_manager.py` - Lookup Table Coordination
+
+**Purpose:** Coordinate loading encrypted parquet from cache or GitHub.
+
+**Responsibilities:**
+- Load from session state if available
+- Load from local .cache/ if exists
+- Generate from private repo if needed
+- Provide filtered lookup APIs
+
+**Key Functions:**
+- `load_lookup_table()` - Main loading entry point
+- `generate_encrypted_lookup()` - Generate from private repo
+- `get_lookup_for_guids(guids)` - Get filtered lookup subset
+- `is_lookup_loaded()` - Check if lookup available
+
+**When to modify:** Loading strategy, encryption changes.
+
+---
+
+### `lookup_cache.py` - Encrypted Parquet Operations
+
+**Purpose:** Handle encrypted parquet file operations.
+
+**Responsibilities:**
+- Fernet encryption/decryption using GZIP_TOKEN
+- PyArrow parquet reading
+- Local cache file management
+
+**Key Functions:**
+- `_encrypt_bytes(data)` - Encrypt with Fernet
+- `_decrypt_bytes(encrypted)` - Decrypt with Fernet
+- `load_filtered_lookup(guids)` - Load filtered subset
+- `build_lookup_dicts(df)` - Create lookup dictionaries
+
+**When to modify:** Encryption mechanism, parquet handling.
+
+---
+
+### `code_store.py` - Deduplicated Code Storage
+
+**Purpose:** Store codes once with source tracking across entities.
+
+**Responsibilities:**
+- Deduplicate by (code_value, valueSet_guid, code_system)
+- Track source entities per code
+- O(1) lookups using dictionary storage
+
+**Key Classes:**
+- `CodeEntry` - Single code with source tracking
+- `CodeStore` - Main storage class
 
 **Key Methods:**
-- `classify_report_type()` - Main classification logic
-- `is_actual_search()` - Search identification
-- `filter_searches_only()` - Search extraction with deduplication
+- `add_code(code_dict, entity_context)` - Add code with deduplication
+- `get_all_codes()` - Get all stored codes
+- `get_codes_for_entity(entity_id)` - Get codes for specific entity
 
-**When to modify:** New report type patterns, classification logic improvements.
+**When to modify:** Deduplication logic, source tracking.
 
-### `folder_manager.py` - Folder Structure Management
-**Purpose:** Manages folder hierarchy and navigation for organizing searches.
+---
 
-**When to modify:** Folder navigation issues, hierarchy display problems.
+### `xml_cache.py` - XML Parsing Cache
 
-### `search_manager.py` - Search Data Management
-**Purpose:** Manages search-related data operations and queries.
+**Purpose:** Cache parsed XML and derived UI rows.
 
-**When to modify:** Search data handling, filtering improvements.
+**When to modify:** Cache structure, invalidation logic.
 
-### `background_processor.py` - Background Processing
-**Purpose:** ProcessPoolExecutor-based background processing for heavy XML analysis tasks.
+---
 
-**Responsibilities:**
-- Concurrent processing with ProcessPoolExecutor
-- Task status management and progress tracking
-- Memory-efficient processing for large XML files
-- Thread-safe task execution and result handling
+## Terminology Server (`utils/terminology_server/`)
 
-**When to modify:** Heavy processing optimization, concurrency improvements.
+NHS England Terminology Server FHIR R4 integration.
 
-### `optimized_processor.py` - Processing Integration
-**Purpose:** Integrates background processing, progressive loading, and optimized caching with Streamlit patterns.
+### `client.py` - FHIR R4 API Client
+
+**Purpose:** Handle NHS Terminology Server communication.
 
 **Responsibilities:**
-- Background processor and progressive loader integration
-- Optimized caching with session state management
-- Threading and queue management for UI responsiveness
-- Performance monitoring and optimization coordination
-
-**When to modify:** Processing pipeline optimization, UI responsiveness improvements.
-
-### `session_state.py` - Centralized Session State Management
-**Purpose:** Canonical definitions for all session state keys and state management utilities with persistent SNOMED caching.
-
-**Responsibilities:**
-- Session state key definitions and patterns
-- State validation and cleanup utilities
-- Logical groupings for bulk operations
-- Dynamic key generation and management
-- Memory management with garbage collection
-- Debugging and monitoring utilities
-- Persistent SNOMED cache management with 60-minute TTL
+- OAuth2 authentication with thread-safe token management
+- SNOMED concept lookup and validation
+- Hierarchical code expansion using ECL
+- Retry logic and rate limiting
 
 **Key Classes:**
-- `SessionStateKeys` - Canonical key definitions including SNOMED cache keys
-- `SessionStateGroups` - Logical key groupings with cache preservation
+- `TerminologyServerConfig` - Configuration settings
+- `TokenManager` - Thread-safe token management
+- `ExpandedConcept` - Expanded concept data
+- `ExpansionResult` - Expansion operation result
 
-**SNOMED Cache Functions:**
-- `get_cached_snomed_mappings()` - Retrieve valid cached mappings
-- `update_snomed_cache()` - Add new mappings with timestamp
-- `clear_expired_snomed_cache()` - Automatic TTL-based cleanup
-- `is_snomed_cache_valid()` - Timestamp-based validation
-- `get_snomed_cache_ttl_minutes()` - TTL configuration (60 minutes)
+**When to modify:** API changes, authentication, error handling.
 
-**Cache Preservation Strategy:**
-- Cache keys preserved during all session state clearing operations
-- Lightweight cleanup (`clear_for_new_xml_selection()`) preserves cache
-- Comprehensive cleanup (`clear_for_new_xml()`) preserves cache
-- Cache survives file uploads, processing, and cancellations
+---
 
-**When to modify:** New session state patterns, state management optimization, debugging improvements, cache performance tuning.
+### `service.py` - Expansion Service Layer
 
-## Analysis and Visualization (`utils/analysis/`)
-
-### `analysis_orchestrator.py` - Central Analysis Coordination
-**Purpose:** Coordinates complete analysis pipeline and unifies results from specialised analyzers.
+**Purpose:** Business logic for code expansion operations.
 
 **Responsibilities:**
-- Workflow coordination: XMLElementClassifier → SearchAnalyzer → ReportAnalyzer
-- Results unification from specialised analyzers
-- Complexity metric integration
-- Session state preparation for UI compatibility
+- Expansion workflow orchestration
+- Result processing and validation
+- EMIS lookup integration
 
-**When to modify:** Analysis workflow changes, new analyzer integration.
+**When to modify:** Expansion logic, result processing.
 
-### `xml_element_classifier.py` - Initial Element Classification
-**Purpose:** Single XML parse that classifies all elements by type for efficient processing.
+---
 
-**Responsibilities:**
-- Single XML parse to eliminate redundant parsing
-- Element type classification (search/audit/list/aggregate)
-- Document metadata extraction
-- Folder structure extraction
-- Pre-filtering for specialised analyzers
+### `expansion_workflow.py` - Expansion Workflow
 
-**Returns:** `ClassifiedElements` object with grouped elements and shared metadata.
+**Purpose:** Orchestrate batch expansion with progress tracking.
 
-**When to modify:** New element types, XML structure changes, classification logic.
+**When to modify:** Workflow steps, progress tracking.
 
-### `xml_structure_analyzer.py` - Compatibility Interface
-**Purpose:** Maintains backward compatibility while using orchestrated architecture.
+---
 
-**Responsibilities:**
-- Legacy API compliance
-- Internal delegation to AnalysisOrchestrator
-- Result format conversion to legacy format
-- Zero breaking changes for existing interfaces
+## Exports (`utils/exports/`)
 
-**When to modify:** Interface compatibility issues or full migration planning.
-
-### `search_rule_analyzer.py` - Legacy Search Analysis
-**Purpose:** Legacy search rule analysis engine (pre-orchestrated architecture).
-
-**Responsibilities:**
-- Search rule parsing with modular XML parsers
-- Criteria relationships and folder structure
-- Report classification and dependency mapping
-- Backwards compatibility for legacy analysis patterns
-
-**When to modify:** Legacy compatibility issues or migration tasks.
-
-### `performance_optimizer.py` - Performance Monitoring
-**Purpose:** Cloud-compatible performance optimization and monitoring controls.
-
-**Responsibilities:**
-- Memory usage monitoring and optimization
-- Large file processing controls (chunking)
-- Performance metrics and feedback
-- Streamlit Cloud compatibility optimizations
-
-**When to modify:** Performance issues, cloud deployment optimization.
-
-### `search_analyzer.py` - Search Logic Analysis
-**Purpose:** Specialized analyzer for EMIS search population logic.
-
-**Responsibilities:**
-- Search rule parsing (population logic, operators, criteria)
-- Linked criteria analysis and temporal relationships
-- Population criteria (cross-search references)
-- Column filters and restriction logic
-- Dependency mapping and execution flow
-- Search complexity metrics calculation
-
-**Key Classes:**
-- `SearchAnalyzer` - Main analysis engine
-- `SearchReport` - Individual search structure
-- `SearchAnalysisResult` - Container for search results
-
-**When to modify:** Search rule features, population logic changes, search-specific analysis.
-
-### `search_rule_visualizer.py` - Search Rule Display
-**Purpose:** Interactive displays for search rules, criteria, and detailed analysis.
-
-**Responsibilities:**
-- Detailed rule and criteria displays with proper Include/Exclude logic
-- Linked criteria relationships
-- Search complexity analysis with unified pipeline integration
-- Search-specific export functionality
-- Filter hierarchy display (Filters → Additional Filters)
-
-**When to modify:** Search visualization improvements, rule display enhancements.
-
-### `report_analyzer.py` - Report Structure Analysis
-**Purpose:** Specialized analyzer for List, Audit, and Aggregate reports.
-
-**Responsibilities:**
-- List Report analysis (column structures, table definitions, sorting)
-- Audit Report analysis (custom aggregation, organizational grouping)
-- Aggregate Report analysis (statistical grouping, cross-tabulation)
-- Clinical code extraction from report filters
-- Enhanced metadata parsing (creation_time, author, population_references)
-- Report complexity metrics
-
-**Key Classes:**
-- `ReportAnalyzer` - Main analysis engine
-- `Report` - Individual report structure with metadata
-- `ReportAnalysisResult` - Container for report results
-
-**When to modify:** New report structures, report-specific features, enhanced parsing requirements.
-
-### `common_structures.py` - Shared Data Structures
-**Purpose:** Common data structures used across analyzers.
-
-**Key Structures:**
-- `CriteriaGroup` - Rule groups with AND/OR logic
-- `PopulationCriterion` - References to other reports
-- `ReportFolder` - Folder structure management
-- `CompleteAnalysisResult` - Combined analysis results
-
-**When to modify:** Changes to shared structures, new common patterns.
-
-### `linked_criteria_handler.py` - Linked Criteria Processing
-**Purpose:** Handles complex linked criteria relationships and temporal constraints.
-
-**Responsibilities:**
-- Cross-table relationship parsing and validation
-- Temporal constraint processing for linked criteria
-- Complex criterion relationship resolution
-- Integration with search analysis pipeline
-
-**When to modify:** Linked criteria logic changes, temporal constraint updates, cross-table relationship improvements.
-
-### Visualization Modules
-
-#### `report_structure_visualizer.py` - Report Structure Display
-**Purpose:** Interactive displays for report structure and dependencies.
-
-**Responsibilities:**
-- Folder structure visualization
-- Dependency tree analysis
-- Report type composition analysis
-- Cross-report relationship displays
-
-#### `shared_render_utils.py` - Common Visualization Utilities
-**Purpose:** Shared utility functions for visualization modules.
-
-**When to modify:** Common visualization patterns, shared formatting functions.
-
-## User Interface (`utils/ui/`)
-
-### `ui_tabs.py` - Main Results Interface Coordinator
-**Purpose:** Coordinates tab rendering and provides main results interface entry point.
-
-**Responsibilities:**
-- Tab routing and rendering coordination
-- Session state management for tab switching
-- Main results interface orchestration
-
-**When to modify:** Overall tab structure changes, main interface routing.
-
-### Modular Tab Structure (`utils/ui/tabs/`)
-
-#### `clinical_tabs.py` - Clinical Data Tab Rendering
-**Purpose:** Comprehensive clinical data tab rendering with unified pipeline integration.
-
-**Tab Structure:**
-- **Clinical Codes** - Standalone clinical codes with dual-mode deduplication
-- **Medications** - Medication codes with source tracking
-- **Refsets** - True refsets (EMIS-supported)  
-- **Pseudo-Refsets** - Pseudo-refsets with member code access
-- **Pseudo-Refset Members** - Individual pseudo-refset member codes
-- **Clinical Codes Main** - Aggregated clinical codes view
-
-**Key Features:**
-- Unified pipeline integration with caching for performance
-- Dual-mode deduplication (Unique Codes vs Per Source)
-- Source tracking with GUID mapping
-- Container information (Search Rule Main Criteria, Report Column Group, etc.)
-- Export functionality per section
-
-**When to modify:** Clinical code display, medication handling, refset functionality.
-
-#### `analysis_tabs.py` - Analysis Tab Rendering
-**Purpose:** Search analysis and structure visualization with unified pipeline integration.
-
-**Responsibilities:**
-- Search logic analysis display with consistent search counts
-- Folder structure visualization
-- Search dependencies and rule logic browser
-- Complexity analysis with unified metrics
-
-**When to modify:** Search analysis features, dependency visualization.
-
-#### `analytics_tab.py` - Analytics Display
-**Purpose:** Statistics and analytics visualization using unified pipeline data.
-
-**When to modify:** Statistics display, analytics features.
-
-#### `report_tabs.py` - Core Report Infrastructure
-**Purpose:** Shared report functionality and main browser interface.
-
-**Responsibilities:**
-- Universal report type browser with folder filtering and export functionality
-- Main reports tab with type filtering and progressive loading
-- Report visualization orchestration with type detection and routing
-- Search report details renderer for report criteria visualization
-- Detailed section rendering helper with caching
-- Import coordination for specialised report detail renderers
-
-**When to modify:** Core report infrastructure, shared browser functionality, routing logic.
-
-#### `list_report_tab.py` - List Reports Specialisation
-**Purpose:** Dedicated rendering for List Reports with column structure analysis.
-
-**Responsibilities:**
-- List Reports tab with metrics calculation and browser integration
-- Column group processing with progress tracking and caching
-- List report detail visualization with table definitions and sorting
-- Clinical code extraction from column filters and criteria
-- Healthcare context classification for column types
-
-**When to modify:** List report features, column analysis enhancements, table structure improvements.
-
-#### `audit_report_tab.py` - Audit Reports Specialisation  
-**Purpose:** Dedicated rendering for Audit Reports with organizational focus.
-
-**Responsibilities:**
-- Audit Reports tab with population reference metrics
-- Audit report detail visualization with organizational grouping
-- Member search analysis and additional criteria filtering
-- Enhanced metadata display including creation time and author
-- Quality monitoring and compliance tracking features
-
-**When to modify:** Audit report features, organizational analysis, compliance tracking.
-
-#### `aggregate_report_tab.py` - Aggregate Reports Specialisation
-**Purpose:** Dedicated rendering for Aggregate Reports with statistical analysis.
-
-**Responsibilities:**
-- Aggregate Reports tab with statistical metrics calculation
-- Aggregate report detail visualization with cross-tabulation analysis
-- Statistical grouping configuration and built-in filter analysis
-- Healthcare metrics and quality measurement display
-- Enterprise reporting capabilities
-
-**When to modify:** Statistical analysis features, cross-tabulation enhancements, enterprise patterns.
-
-#### `tab_helpers.py` - Shared Tab Utilities
-**Purpose:** Common functionality shared across all tab modules with centralized cache integration.
-
-**Core Functions:**
-- `is_data_processing_needed()` - Cache state validation
-- `cache_processed_data()` - Session state data caching
-- `paginate_reports()` - Report pagination with @st.cache_data (30-minute TTL, 1K entries)
-- `render_pagination_controls()` - Navigation controls for paginated content
-
-**Performance Utilities:**
-- `_get_report_size_category()` - Report size classification for performance optimization
-- `_monitor_memory_usage()` - Memory monitoring with garbage collection
-
-**SNOMED Lookup Functions:**
-- `_batch_lookup_snomed_for_ui()` - Batch SNOMED lookup for multiple GUIDs
-- `_lookup_snomed_for_ui()` - Single SNOMED lookup wrapper
-- `_convert_analysis_codes_to_translation_format()` - Code format conversion (uses XML descriptions, not cached descriptions)
-
-**Data Processing Helpers:**
-- `_extract_clinical_codes()` - Clinical code extraction with progress tracking
-- `_process_column_groups()` - Column group processing for reports
-- `_load_report_metadata()` - Report metadata loading with caching
-
-**Cache Integration:**
-- Imports cache_manager for unified caching patterns
-- Session state management for processed data
-- Performance optimization through pagination caching
-- Memory management utilities with automatic cleanup
-
-**When to modify:** Shared tab functionality, pagination improvements, cache integration updates, performance optimization.
-
-#### `base_tab.py` - Tab Base Classes
-**Purpose:** Base classes and common patterns for tab implementations.
-
-**When to modify:** Common tab patterns, base functionality.
-
-#### `common_imports.py` - Shared Imports
-**Purpose:** Common imports used across tab modules to reduce duplication.
-
-**When to modify:** Shared dependencies, import organization.
-
-#### `field_mapping.py` - Universal Field Mapping
-**Purpose:** Standardized field names and mapping functions for clinical codes.
-
-**Responsibilities:**
-- Canonical field name definitions (EMIS GUID, SNOMED Code, etc.)
-- Consistent field mapping across all application components
-- Translation between different data source formats
-- Field validation and standardization
-
-**When to modify:** New data sources, field name changes, standardization requirements.
-
-### Core UI Components
-
-#### `status_bar.py` - Application Status Display
-**Purpose:** Shows lookup table status and system health with cache-aware loading.
-
-**Responsibilities:**
-- Cache-first lookup table loading and status reporting
-- Version information display with load source attribution (cache/GitHub/API)
-- Token health monitoring and expiry warnings
-- Error state handling and fallback status
-- Integration with lookup.py cache-first loading strategy
-
-**When to modify:** Status display changes, new health checks, cache source reporting.
-
-#### `ui_helpers.py` - Reusable UI Components
-**Purpose:** Common UI functions used across the application.
-
-**When to modify:** UI consistency improvements, new display patterns.
-
-#### `rendering_utils.py` - Standard UI Components
-**Purpose:** Standardized Streamlit components for consistent UI.
-
-**When to modify:** UI standardization, new component patterns.
-
-#### `layout_utils.py` - Complex Layout Management
-**Purpose:** Advanced layout utilities for complex UI arrangements.
-
-**When to modify:** Complex UI layouts, navigation improvements.
-
-#### `progressive_loader.py` - Progressive Loading Components
-**Purpose:** Progressive loading and performance optimization for large datasets.
-
-**When to modify:** Loading performance, large dataset handling.
-
-#### `async_components.py` - Asynchronous UI Components
-**Purpose:** Asynchronous components for improved responsiveness.
-
-**When to modify:** Async functionality, performance improvements.
-
-#### `theme.py` - Centralized Theme Constants
-**Purpose:** Canonical definitions for colors, spacing, and styling throughout the application.
-
-**Responsibilities:**
-- Centralized color palette definitions (ThemeColors)
-- Consistent spacing and layout constants (ThemeSpacing)
-- Pre-built style patterns for common components
-- RAG (Red/Amber/Green) status styling
-- Theme configurations for specific UI components
-
-**Key Classes:**
-- `ThemeColors` - Medical-grade dark theme color palette
-- `ComponentThemes` - Theme configurations for specific components
-- Helper functions for styled info boxes and status messages
-
-**When to modify:** UI theming changes, new color requirements, style standardization.
-
-## Export Functionality (`utils/export_handlers/`)
+On-demand export builders.
 
 ### `ui_export_manager.py` - Export Coordination
-**Purpose:** Manages all export functionality with orchestrated analysis integration.
 
-**Responsibilities:**
-- Export routing between search and report handlers
-- Bulk export coordination
-- Clinical codes unification
-- Session state compatibility
+**Purpose:** Coordinate lazy export generation and download state.
 
-**When to modify:** Export UI improvements, new export options.
+**Key Functions:**
+- `_render_lazy_export()` - Render lazy export button with state management
 
-### `search_export.py` - Search-Specific Export
-**Purpose:** Exports search reports with detailed criteria analysis.
+**When to modify:** Export UI flow, state management.
 
-**Responsibilities:**
-- Search criteria export with rule breakdown
-- Clinical code extraction and SNOMED translation
-- Comprehensive rule analysis sheets
-- Parent/child search relationship handling
+---
 
-**When to modify:** Search-specific export requirements, criteria analysis changes.
+### Search Exports
 
-### `report_export.py` - Report Export Handler
-**Purpose:** Comprehensive export for all 4 EMIS report types.
+| Module | Purpose |
+|--------|---------|
+| `search_excel.py` | Excel exports with rule logic, criteria, codes |
+| `search_json.py` | JSON exports with structure and metadata |
+| `search_data_provider.py` | Data preparation for search exports |
 
-**Responsibilities:**
-- List Reports: Column structure analysis with healthcare context
-- Audit Reports: Enhanced metadata, member search names, clinical codes
-- Aggregate Reports: Statistical setup, grouping definitions, built-in filters
-- Type-specific Excel sheet generation
-- Clinical code extraction from report filters
+**When to modify:** Export format changes, new fields.
 
-**When to modify:** Healthcare domain expansions, new enterprise patterns.
+---
 
-### `rule_export.py` - Individual Rule Export
-**Purpose:** Exports single rules with their criteria.
+### Report Exports
 
-**When to modify:** Rule export format, individual rule analysis features.
+| Module | Purpose |
+|--------|---------|
+| `report_excel.py` | Excel exports for List/Audit/Aggregate reports |
+| `report_json.py` | JSON exports for reports |
+| `report_export_common.py` | Shared export utilities |
 
-### `clinical_code_export.py` - Clinical Code Export
-**Purpose:** Exports translated clinical codes and medications.
+**When to modify:** Export format changes, new report types.
 
-**Key Features:**
-- Conditional source tracking based on deduplication mode
-- Clinical codes table export with proper column headers
-- Success/failure status export
+---
 
-**When to modify:** Code export formats, new result categories.
+### Other Exports
 
-### `json_export_generator.py` - Search JSON Export
-**Purpose:** Generates structured JSON exports for search reports optimized for AI/LLM consumption.
+| Module | Purpose |
+|--------|---------|
+| `clinical_exports.py` | Clinical code CSV exports with deduplication |
+| `terminology_child_exports.py` | NHS expansion result exports with XML column |
+| `analytics_exports.py` | Analytics export handlers |
 
-**Responsibilities:**
-- Search criteria extraction with SNOMED translations
-- Structured JSON format for programmatic use
-- Clinical code deduplication and filtering logic export
-- Filter constraints with actual values (age constraints, date filtering)
-- Unified clinical data pipeline integration
+---
 
-**When to modify:** Search JSON structure changes, AI/LLM integration requirements.
+## System (`utils/system/`)
 
-### `report_json_export_generator.py` - Report JSON Export
-**Purpose:** Comprehensive JSON export for List, Audit, and Aggregate reports with complete metadata.
+Shared system utilities.
 
-**Responsibilities:**
-- List Reports: Column structure, criteria details, restriction parsing
-- Audit Reports: Embedded criteria logic, organizational grouping
-- Aggregate Reports: Cross-tabulation structure, statistical configuration
-- Clinical terminology extraction with SNOMED translations
-- Restriction handling (Latest N records, conditional logic)
-- Report dependencies and parent search references
+### `session_state.py` - Centralised Session State
 
-**When to modify:** Report JSON structure changes, new report patterns, restriction logic updates.
+**Purpose:** Define canonical session state keys and management utilities.
 
-### `terminology_export.py` - NHS Terminology Export
-**Purpose:** NHS terminology server export functionality with CSV and JSON formats.
+**Key Classes:**
+- `SessionStateKeys` - All session state key constants
+- `SessionStateGroups` - Logical key groupings
 
-**Responsibilities:**
-- NHS terminology server results export
-- Child code expansion result formatting
-- CSV exports with enhanced column ordering
-- JSON exports for hierarchical data
+**Key Functions:**
+- `clear_for_new_xml_selection()` - Clear when switching files
+- `clear_for_new_xml()` - Full reset for reprocess
+- `get_cached_snomed_mappings()` - Get 60-minute cached mappings
+- `update_snomed_cache(mappings)` - Update SNOMED cache
+- `clear_expired_snomed_cache()` - TTL-based cleanup
 
-**When to modify:** NHS terminology export formats, child code expansion exports.
+**When to modify:** New session keys, cleanup behaviour.
 
-## XML Parsing (`utils/xml_parsers/`)
+---
 
-### `namespace_handler.py` - Universal Namespace Handling
-**Purpose:** Centralized namespace handler for mixed namespaced/non-namespaced XML.
+### `error_handling.py` - Error Management
 
-**Key Features:**
-- Smart element finding: tries non-namespaced first, then namespaced
-- XPath support with automatic namespace conversion
-- Safe text extraction with defaults
+**Purpose:** Structured error classes and user-friendly display.
 
-**Core Pattern:**
+**Key Functions:**
+- `ErrorHandler` - Error handling utilities
+- `create_error_context()` - Build error context
+- `display_error_to_user()` - User-friendly error display
+- `streamlit_safe_execute()` - Safe execution wrapper
+
+**When to modify:** Error categories, display format.
+
+---
+
+### `debug_logger.py` - Debug Logging
+
+**Purpose:** Debug logging controls and diagnostics.
+
+**When to modify:** Logging configuration, debug features.
+
+---
+
+### `version.py` - Application Version
+
+**Purpose:** Version constants for the application.
+
+**When to modify:** Version updates.
+
+---
+
+## UI (`utils/ui/`)
+
+User interface composition and rendering.
+
+### `ui_tabs.py` - Main Results Interface
+
+**Purpose:** Coordinate tab rendering and routing.
+
+**Key Functions:**
+- `render_results_tabs()` - Render all result tabs
+
+**When to modify:** Tab structure, routing logic.
+
+---
+
+### `status_bar.py` - Sidebar Status Display
+
+**Purpose:** Render sidebar status, lookup info, memory display.
+
+**Key Functions:**
+- `render_status_bar()` - Main status bar rendering
+- `render_lookup_status()` - Lookup table status
+- `render_memory_panel()` - Memory usage display
+
+**When to modify:** Sidebar layout, status display.
+
+---
+
+### `theme.py` - Centralised Theme Constants
+
+**Purpose:** Define colours, spacing, and styling.
+
+**Key Classes:**
+- `ThemeColours` - Colour palette definitions
+
+**Key Functions:**
+- `info_box()`, `success_box()`, `warning_box()`, `error_box()` - Styled message boxes
+
+**When to modify:** UI theming, colour changes.
+
+---
+
+### `tab_helpers.py` - Shared Tab Utilities
+
+**Purpose:** Common functionality for tab modules.
+
+**Key Functions:**
+- Pagination helpers
+- SNOMED lookup wrappers
+- Data processing utilities
+
+**When to modify:** Shared tab functionality.
+
+---
+
+## UI Tabs (`utils/ui/tabs/`)
+
+Modular tab implementations organised by domain.
+
+| Directory | Purpose |
+|-----------|---------|
+| `clinical_codes/` | Clinical code tabs (summary, codes, medications, refsets, analytics) |
+| `xml_inspector/` | XML exploration (file browser, dependencies, raw viewer) |
+| `search_browser/` | Search analysis (overview, detail, criteria viewer) |
+| `report_viewer/` | Report viewing (list, audit, aggregate) |
+| `terminology_server/` | NHS integration (expansion, lookup) |
+| `debug/` | Debug features (memory diagnostics) |
+
+---
+
+## Data Contracts
+
+### Parsing Output
 ```python
-ns = NamespaceHandler()
-element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis:elementName>
+{
+    "parsed_document": ParsedDocument,
+    "entities": List[Dict],
+    "code_store": CodeStore,
+    "pattern_results": List[PatternResult]  # optional
+}
 ```
 
-**When to modify:** Core parsing logic, namespace changes.
-
-### `base_parser.py` - Enhanced Parsing Utilities with Defensive Programming
-**Purpose:** Base class providing comprehensive parsing methods with namespace support and structured error handling.
-
-**Key Features:**
-- All parsers inheriting from XMLParserBase get automatic NamespaceHandler access
-- Enhanced safe parsing methods with defensive programming (`safe_find_element`, `safe_get_text`)
-- Comprehensive XML structure validation with schema checking capabilities
-- Structured error handling with XMLParsingContext and ParseResult objects
-- Defensive null checking and validation throughout parsing pipeline
-
-**Resilience Enhancements:**
-- Safe parsing methods that prevent crashes with malformed XML
-- Comprehensive error context objects for detailed failure analysis
-- Structured error reporting replacing silent None returns
-- XML structure validation with assumption checking and requirement validation
-
-**When to modify:** Core parsing logic, parser optimisation, error handling improvements.
-
-### Specialized Parsers
-
-#### `criterion_parser.py` - Search Criteria Parsing with Enhanced Resilience
-**Purpose:** Parses individual search criteria and components with defensive programming and comprehensive error handling.
-
-**Resilience Enhancements:**
-- Defensive demographic detection with multiple fallback patterns for reliable classification
-- Robust range boundary parsing with comprehensive error handling
-- Enhanced null checking and validation to prevent crashes with malformed XML
-- Semantic value set deduplication with content-based comparison preventing duplicate clinical codes
-
-#### `restriction_parser.py` - Search Restriction Parsing with Error Handling
-**Purpose:** Parses search restrictions like 'Latest 1' with conditional logic and comprehensive error handling.
-
-**Parsing Improvements:**
-- Enhanced range parsing with multiple validation strategies
-- Robust restriction logic parsing with error context and recovery
-- Improved conditional logic handling for complex restriction patterns
-
-#### `value_set_parser.py` - Value Set Parsing with Semantic Deduplication
-**Purpose:** Parses clinical code value sets and code systems with enhanced validation and deduplication.
-
-**Enhanced Features:**
-- Semantic value set deduplication preventing duplicate clinical codes whilst preserving legitimate variations
-- Enhanced validation for value set completeness and structure consistency
-- Improved error handling for malformed value set scenarios with structured error reporting
-
-#### `linked_criteria_parser.py` - Linked Criteria Parsing
-**Purpose:** Parses complex linked criteria and relationships.
-
-#### `report_parser.py` - EMIS Report Type Parsing
-**Purpose:** Comprehensive parser for all 4 EMIS report types.
-
-**Responsibilities:**
-- Report type detection
-- List Report: Column group structure, table type classification, sort configuration
-- Audit Report: Multiple population references, custom aggregation
-- Aggregate Report: Statistical grouping and cross-tabulation
-- Enterprise reporting elements and healthcare domain integration
-
-**When to modify:** New report structures, enterprise patterns, healthcare workflows.
-
-#### `xml_utils.py` - Core XML Parsing and GUID Extraction
-**Purpose:** Core XML parsing utilities and EMIS GUID extraction functionality.
-
-**Responsibilities:**
-- GUID extraction from valueSet and libraryItem elements
-- Code system classification (clinical vs medication)
-- Pseudo-refset detection and handling
-- Source attribution for dual-mode deduplication
-- Universal namespace handling using NamespaceHandler
-
-**Key Functions:**
-- `parse_xml_for_emis_guids()` - Main GUID extraction with source tracking
-- `extract_codes_with_separate_parsers()` - Orchestrated XML processing
-
-**When to modify:** XML parsing logic changes, new EMIS XML formats, GUID extraction issues.
-
-## Shared Utilities (`utils/common/`)
-
-### `error_handling.py` - Enhanced Error Management with Structured Reporting
-**Purpose:** Centralized error handling with comprehensive categorisation and structured reporting systems.
-
-**Enhanced Features:**
-- Comprehensive error context objects for detailed failure analysis (`XMLParsingContext`, `ParseResult`)
-- Structured error reporting systems replacing silent failures with actionable information
-- Batch error aggregation for enterprise-scale processing (`BatchParsingReport`, `BatchErrorAggregator`)
-- Diagnostic logging with context-aware error reporting for troubleshooting
-
-**Error Reporting Architecture:**
-- `XMLParsingContext` - Detailed context for XML parsing failures with diagnostic information
-- `ParseResult` - Structured containers for parsing operations with success/failure tracking
-- `BatchParsingReport` - Aggregated error reporting for large-scale processing operations
-- `BatchErrorAggregator` - Error collection and summarisation for batch operations
-
-**Supporting Documentation:**
-- Detailed error handling patterns documented in `docs/architecture/error-handling.md`
-- Comprehensive error categorisation and recovery strategies
-
-### `ui_error_handling.py` - UI Error Display
-**Purpose:** User-friendly error display for Streamlit applications.
-
-### `export_utils.py` - Centralized Export Utilities
-**Purpose:** Common export functionality used across export handlers.
-
-### `dataframe_utils.py` - DataFrame Operations
-**Purpose:** Standardized pandas DataFrame operations and validation.
-
-## General Utilities (`utils/utils/`)
-
-### `lookup.py` - Lookup Table Management
-**Purpose:** Cache-first lookup table management with GitHub fallback for SNOMED code translation.
-
-**Responsibilities:**
-- Cache-first loading strategy (session state → local cache → GitHub API)
-- Fast lookup dictionary creation with @st.cache_resource
-- Lookup table loading with automatic session state persistence
-- Version information tracking and load source attribution
-- Integration with lookup_cache module for persistent caching
-
-**Key Functions:**
-- `load_lookup_table()` - Primary loader with cache-first approach
-- `get_cached_lookup_dictionaries()` - Cached dictionary access with 2-hour TTL
-- `create_lookup_dictionaries()` - Dictionary creation for O(1) lookups
-- Session state management for lookup persistence
-
-### `audit.py` - Processing Statistics and Validation
-**Purpose:** Creates comprehensive stats about translation success rates and processing time.
-
-### `text_utils.py` - Text Processing Utilities
-**Purpose:** Common text processing functions for consistent formatting.
-
-### `debug_logger.py` - Development and Troubleshooting
-**Purpose:** Logging and debugging tools for development and troubleshooting.
-
-### `export_debug.py` - Export System Debugging
-**Purpose:** Debugging utilities for export system testing and validation.
-
-**When to modify:** Export system debugging, development testing.
-
-### `github_loader.py` - External Data Loading
-**Purpose:** GitHub API client for lookup table loading with authentication and format detection.
-
-**Responsibilities:**
-- GitHub API authentication and token health monitoring
-- Automatic format detection (CSV/Parquet)
-- Network request optimization with fallback strategies
-- Version information extraction and validation
-- Error handling for authentication and network issues
-
-### `caching/lookup_cache.py` - Core Caching Engine
-**Purpose:** Provides cache-first lookup table access with multi-tier fallback strategy.
-
-**Responsibilities:**
-- Cache-first loading strategy (local cache → GitHub cache → API fallback)
-- Persistent cache file management with hash validation and encryption
-- Lookup record storage with complete metadata preservation
-- Cache health monitoring and automatic validation
-- Memory-efficient cache building and retrieval
-- Encrypted cache support using GZIP_TOKEN from Streamlit secrets
-
-**Key Functions:**
-- `get_cached_emis_lookup()` - Primary cache access with fallback strategy
-- `get_latest_cached_emis_lookup()` - Latest cache retrieval for session state
-- `build_emis_lookup_cache()` - Cache building with GitHub fallback
-- `_encrypt_data()` / `_decrypt_data()` - Cache encryption/decryption
-
-**When to modify:** Cache strategy changes, performance optimization, new fallback mechanisms.
-
-### `caching/cache_manager.py` - Centralized Caching Architecture  
-**Purpose:** Centralized cache management with type-aware strategies and proper capacity limits.
-
-**Responsibilities:**
-- SNOMED lookup dictionary caching (10K entries, 1-hour TTL)
-- Persistent SNOMED mapping cache integration (60-minute session state TTL)
-- Unified clinical data caching (5K entries, 1-hour TTL)
-- Report visualization caching (1K entries, 30-minute TTL) for List/Audit/Aggregate reports
-- UI component caching (200 entries, 10-minute TTL) for DataFrames and exports
-- XML code extraction caching (1K entries, 30-minute TTL)
-- Memory management utilities with garbage collection
-- Session state cleanup and monitoring
-
-**Key Cache Functions:**
-- `cache_snomed_lookup_dictionary()` - O(1) GUID→SNOMED lookups
-- `cache_unified_clinical_data()` - Processed clinical data with deduplication
-- `cache_list_report_visualization()` / `cache_audit_report_visualization()` / `cache_aggregate_report_visualization()` - Report-specific caching
-- `cache_xml_code_extraction()` - Expensive XML parsing results
-- `cleanup_dataframe_memory()` - Memory cleanup with gc.collect()
-
-**Memory Management:**
-- `clear_export_cache()` - Export data cleanup for memory efficiency
-- `manage_session_state_memory()` - Session state item limits (50 max items)
-- `get_memory_usage_stats()` - Memory monitoring and pressure detection
-
-**When to modify:** Cache performance tuning, new data types, memory optimization.
-
-### `caching/generate_github_cache.py` - Cache Generation Utility
-**Purpose:** Standalone script for generating cache files for GitHub distribution.
-
-**Responsibilities:**
-- Command-line cache generation for deployment
-- Lookup table loading and processing
-- Cache file creation with proper formatting
-- Output validation and size reporting
-
-**When to modify:** Deployment process changes, cache file format updates.
-
-### `terminology_server/nhs_terminology_client.py` - FHIR R4 API Client
-**Purpose:** Handles NHS England Terminology Server API communication with comprehensive error handling and thread safety.
-
-**Responsibilities:**
-- OAuth2 system-to-system authentication with secure credential management
-- FHIR R4 API request handling with structured error reporting and recovery guidance
-- Concept lookup and validation operations with user-friendly error messages
-- Child concept expansion using Expression Constraint Language (ECL)
-- Thread-safe operations with proper credential management across multiple workers
-- Comprehensive error handling distinguishing 401/404/422/500+ response types
-
-**Reliability Enhancements:**
-- `TerminologyServerError` exception class for NHS-specific error categorisation
-- User-friendly error message mapping for common failure scenarios
-- Specific recovery guidance for different error types (auth issues, code not found, server problems)
-- Error context with API response details and actionable next steps
-- Thread-safe token management for concurrent expansion operations
-
-**Threading Compatibility:**
-- `ThreadSafeTokenManager` for concurrent token management across multiple workers
-- Uncached method variants for worker thread execution without Streamlit conflicts
-- Explicit credential passing for worker thread authentication
-- Thread-safe API request handling with proper session management
-
-**Key Classes:**
-- `NHSTerminologyClient` - Main API client with enhanced error handling and threading support
-- `TerminologyServerError` - Structured error handling with user-friendly messages
-- `ThreadSafeTokenManager` - Thread-safe token management for concurrent operations
-- `ExpansionResult` - Result container for expansion operations with comprehensive error tracking
-- `ExpandedConcept` - Individual concept data structure with parent relationships
-
-**When to modify:** API specification changes, authentication updates, new FHIR operations, error handling improvements.
-
-### `terminology_server/rate_limiter.py` - Adaptive Rate Limiting
-**Purpose:** Intelligent rate limiting with dynamic adjustment and exponential backoff strategies.
-
-**Responsibilities:**
-- Dynamic rate adjustment based on NHS Terminology Server responses
-- Exponential backoff for 429/500+ error responses with jitter prevention
-- Rate limiting configuration with tunable parameters for different environments
-- Backoff strategy configuration to prevent thundering herd issues
-- Performance optimisation whilst maintaining server-friendly request patterns
-
-**Key Classes:**
-- `AdaptiveRateLimiter` - Main rate limiter with dynamic adjustment capabilities
-- Configurable backoff strategies with exponential growth and random jitter
-- Rate limiting thresholds tuned for NHS Terminology Server capacity
-
-**When to modify:** Rate limiting policies, server response patterns, performance optimisation requirements.
-
-### `terminology_server/progress_tracker.py` - Advanced Progress Tracking
-**Purpose:** Sophisticated progress tracking with adaptive time estimation for terminology expansion operations.
-
-**Responsibilities:**
-- Real-time progress tracking with completion percentage calculation
-- Adaptive time estimation using weighted recent performance samples
-- Performance statistics with items per second and average processing times
-- Progress UI updates with worker status and completion estimates
-- Time estimation accuracy improvements (100ms baseline vs previous 1-second overestimates)
-
-**Key Classes:**
-- `ProgressTracker` - Main progress tracking engine with real-time updates
-- `AdaptiveTimeEstimator` - Weighted performance sampling for accurate completion prediction
-- Progress statistics aggregation and performance monitoring
-
-**When to modify:** Progress tracking accuracy, time estimation algorithms, user feedback improvements.
-
-### `terminology_server/batch_processor.py` - Concurrent Processing Orchestration  
-**Purpose:** Manages concurrent terminology expansion with worker thread orchestration and credential management.
-
-**Responsibilities:**
-- Concurrent terminology expansion with proper thread management
-- Worker thread orchestration with explicit credential passing
-- Batch processing coordination for large terminology hierarchies
-- Thread-safe credential management across multiple workers
-- Memory-aware processing optimised for Streamlit Cloud constraints
-
-**Key Features:**
-- Concurrent worker management with proper credential propagation
-- Batch size optimisation for memory efficiency and performance
-- Worker thread error handling and recovery mechanisms
-- Performance monitoring and worker scaling coordination
-
-**When to modify:** Concurrency patterns, worker management, batch processing optimisation.
-
-### `terminology_server/debug_utilities.py` - Development and Troubleshooting
-**Purpose:** Debug utilities and diagnostic tools for terminology server integration development.
-
-**Responsibilities:**
-- NHS Terminology Server interaction debugging and logging
-- Credential validation and authentication troubleshooting
-- API response analysis and error diagnostic tools
-- Performance monitoring and bottleneck identification
-- Development workflow support and testing utilities
-
-**When to modify:** Development tooling, debugging capabilities, diagnostic requirements.
-
-### `terminology_server/expansion_service.py` - Service Layer for Code Expansion
-**Purpose:** Enhanced business logic layer for SNOMED code expansion operations with reliability improvements.
-
-**Responsibilities:**
-- High-level expansion workflow orchestration with error resilience
-- Integration with EMIS lookup tables for GUID mapping
-- Expansion result processing and validation with comprehensive error handling
-- Summary dataframe creation with comparison metrics and success tracking
-- Child code data enhancement with EMIS integration
-- UI-independent service layer architecture for clean separation of concerns
-
-**Service Architecture Enhancements:**
-- Enhanced `ExpansionService` with clean service layer architecture separating business logic from UI components
-- `CredentialManager` - Secure credential handling without UI coupling for better testability
-- Enhanced error handling with structured error reporting and recovery strategies
-- UI decoupling for improved testability and maintainability
-
-**Key Functions:**
-- `expand_codes_batch()` - Batch expansion with enhanced progress tracking and error handling
-- `create_expansion_summary_dataframe()` - Results table generation with comprehensive metrics
-- `enhance_child_codes_with_emis_data()` - EMIS GUID integration with error resilience
-
-**When to modify:** Expansion logic changes, EMIS integration updates, result processing requirements, service architecture improvements.
-
-### `terminology_server/expansion_ui.py` - User Interface Components
-**Purpose:** Streamlit UI components for terminology server integration with comprehensive reliability and performance improvements.
-
-**Responsibilities:**
-- Main expansion interface with adaptive worker scaling and sophisticated progress tracking
-- Session-based result caching to eliminate repeated API calls
-- Threading orchestrator with pure worker thread pattern for Streamlit compatibility
-- Results display with detailed metrics and EMIS vs terminology server comparison
-- Export functionality for multiple formats (CSV, JSON, XML)
-- Individual code lookup for testing and validation with enhanced error handling
-- Memory-aware processing optimised for Streamlit Cloud deployment constraints
-
-**Threading Performance Enhancements:**
-- Adaptive worker scaling: 8-20 concurrent workers based on workload size with intelligent scaling
-- Batched processing to prevent memory overflow in large expansions
-- Thread-safe credential management with explicit credential passing across workers
-- Real-time progress tracking with accurate time estimates and worker status display
-- Performance statistics with items per second and completion prediction accuracy
-
-**Advanced Progress Tracking:**
-- Sophisticated progress tracking with adaptive time estimation algorithms
-- Real-time worker status with completion percentage and time estimates
-- Performance feedback with responsive progress updates every 250ms
-- Accurate completion predictions replacing previous overestimates (100ms baseline vs 1-second)
-
-**Enhanced Caching System:**
-- Session-state expansion result caching with TTL management and immediate reuse
-- Cache hit/miss statistics display with transparent performance metrics
-- Memory-efficient caching for large terminology hierarchies
-- Persistent results across UI interactions, download operations, and session management
-
-**Reliability Improvements:**
-- Comprehensive error handling with user-friendly messages for common failure scenarios
-- Individual code lookup functionality with persistent caching across UI refreshes
-- Enhanced connection status monitoring and authentication validation
-- Graceful error recovery with specific guidance for different failure types
-
-**Export Formats:**
-- Summary CSV with expansion results, metrics, and success tracking
-- Child codes CSV with SNOMED codes and descriptions
-- EMIS import CSV with GUID mappings and integration data
-- Hierarchical JSON with parent-child relationships and metadata
-- XML output for direct EMIS query implementation
-
-**When to modify:** UI requirements changes, performance optimisation, new export formats, threading improvements, error handling enhancements.
-
-## Architecture Dependencies
-
-### Module Organization:
-```
-utils/
-├── analysis/           # Analysis and visualization logic
-├── common/             # Shared utilities and infrastructure
-├── core/               # Core business logic
-│   ├── session_state.py           # Centralized session state management
-│   └── (other core modules)
-├── export_handlers/    # Export functionality
-├── terminology_server/ # NHS Terminology Server integration
-├── ui/                 # User interface components
-│   ├── theme.py                   # Centralized theme constants
-│   └── tabs/           # Modular tab structure
-│       ├── clinical_tabs.py       # Clinical data rendering
-│       ├── analysis_tabs.py       # Search analysis rendering
-│       ├── analytics_tab.py       # Analytics display
-│       ├── report_tabs.py         # Core report infrastructure
-│       ├── list_report_tab.py     # List Reports specialisation
-│       ├── audit_report_tab.py    # Audit Reports specialisation
-│       ├── aggregate_report_tab.py # Aggregate Reports specialisation
-│       └── tab_helpers.py         # Shared utilities
-├── utils/              # General utilities and caching
-└── xml_parsers/        # Modular XML parsing
+### Cached XML Output
+```python
+{
+    "ui_rows": List[Dict],
+    "entities": List[Dict],
+    "folders": List[Dict],
+    "structure_data": Dict,
+    "code_store": CodeStore
+}
 ```
 
-### Dependency Rules:
-- **UI modules** depend on core, common, utils, and terminology_server modules
-- **Analysis modules** use xml_parsers, core, and ui modules
-- **Export handlers** use core, common, and utils modules
-- **Terminology server** uses utils (caching) and integrates with ui modules
-- **All modules** can use common utilities and error handling
+### Session Keys
+Use `SessionStateKeys` constants from `utils/system/session_state.py`.
 
-## Key Architectural Features
+---
 
-### Centralized Caching Architecture
-**Purpose:** Consistent data handling across all UI components with performance optimization.
+## Design Principles
 
-**Implementation:**
-- **CacheManager**: Centralized cache management with type-aware strategies and proper capacity limits
-- **Multi-tier Caching**: Session state → Streamlit cache → persistent cache → GitHub/API fallback
-- **Type-specific TTLs**: 1-hour for SNOMED/clinical data, 30-minute for reports, 10-minute for UI components
-- **Memory Management**: Automatic cleanup, garbage collection, and session state limits
-- **Performance Monitoring**: Cache hit/miss tracking and memory pressure detection
-- **Persistent SNOMED Cache**: 60-minute session state cache for EMIS GUID → SNOMED mappings across XML uploads
+- **Single-responsibility modules**: Each module does one thing well
+- **Session-key centralisation**: All keys defined in `SessionStateKeys`
+- **Lazy export generation**: Exports built only when requested
+- **Cache-aware processing**: Avoid repeated parse/transform work
+- **Explicit compatibility layers**: Full DataFrame access where still needed
 
-### Dual-Mode Deduplication System
-**Purpose:** Allows users to toggle between unique codes vs per-source views.
+---
 
-**Implementation:**
-- **Parser Level**: Source GUID attribution in xml_utils.py
-- **Translation Level**: Mode-specific deduplication in translator.py
-- **UI Level**: Inline toggles on applicable tabs
-- **Export Level**: Conditional source tracking in export handlers
+## Quick Reference
 
-### Universal Namespace Handling
-**Achievement:** Centralized namespace handling eliminating mixed namespace issues.
+| Task | Location |
+|------|----------|
+| New export format | `utils/exports/` |
+| UI display issues | `utils/ui/` |
+| Classification problems | `utils/parsing/element_classifier.py` |
+| Search rule logic | `utils/parsing/node_parsers/search_parser.py` |
+| Translation issues | `utils/metadata/snomed_translation.py` |
+| Lookup table problems | `utils/caching/lookup_manager.py` |
+| Cache performance | `utils/caching/cache_manager.py` |
+| NHS Terminology Server | `utils/terminology_server/` |
+| Session state | `utils/system/session_state.py` |
+| Theme and styling | `utils/ui/theme.py` |
+| Error handling | `utils/system/error_handling.py` |
+| New XML patterns | `utils/pattern_plugins/` |
 
-**Implementation:**
-- **NamespaceHandler**: Universal handler for both namespaced and non-namespaced elements
-- **XMLParserBase**: Automatic NamespaceHandler access for all parsers
-- **Consistent Patterns**: All XML parsing uses unified `ns.find()` methods
+---
 
-### Orchestrated Analysis Pipeline
-**Purpose:** Efficient analysis with single XML parse and specialised analyzers.
+## Related Documentation
 
-**Flow:**
-1. **XMLElementClassifier**: Single parse + element classification
-2. **SearchAnalyzer**: Search population logic analysis
-3. **ReportAnalyzer**: Report structure analysis + clinical codes
-4. **AnalysisOrchestrator**: Results unification
+- **[Project Structure](../project-structure.md)** - Repository layout
+- **[Test Suite Reference](testing.md)** - Test coverage and patterns
+- **[Session State Management](session-state-management.md)** - State handling
+- **[Namespace Handling](namespace-handling.md)** - XML namespace utilities
+- **[Flags Technical Guide](../flags-and-plugins/flags.md)** - Flag system
+- **[Plugin Development Guide](../flags-and-plugins/plugins.md)** - Pattern plugins
 
-## Quick Reference for Common Tasks
+---
 
-**New export format:** `utils/export_handlers/`
-**UI display issues:** `utils/ui/` or visualization modules
-**Classification problems:** `utils/core/report_classifier.py`
-**Search rule logic:** `utils/analysis/search_analyzer.py`
-**Translation issues:** `utils/core/translator.py` or `xml_parsers/xml_utils.py`
-**Lookup table problems:** `utils/utils/lookup.py` or `utils/caching/lookup_cache.py`
-**Cache performance:** `utils/utils/caching/cache_manager.py`
-**Memory issues:** Check memory management in `cache_manager.py` or session state cleanup
-**NHS Terminology Server:** `utils/terminology_server/`
-**SNOMED code expansion:** `utils/terminology_server/expansion_service.py`
-**NHS API rate limiting:** `utils/terminology_server/rate_limiter.py`
-**Progress tracking accuracy:** `utils/terminology_server/progress_tracker.py`
-**Concurrent terminology expansion:** `utils/terminology_server/batch_processor.py`
-**NHS integration debugging:** `utils/terminology_server/debug_utilities.py`
-**Performance optimisation:** Centralized caching in `cache_manager.py`, pagination in `tab_helpers.py`
-**Main app workflow:** `streamlit_app.py`
-**Session state management:** `utils/core/session_state.py`
-**Theme and styling:** `utils/ui/theme.py`
-**Error handling and resilience:** `utils/common/error_handling.py`, `docs/architecture/error-handling.md`
-**XML parsing resilience:** `utils/xml_parsers/` with enhanced defensive programming
-**Namespace issues:** `utils/xml_parsers/namespace_handler.py`
-**XML parsing errors:** Check structured error reporting in enhanced parsers
+*Last Updated: 3rd February 2026*
+*Application Version: 3.0.0*
