@@ -47,4 +47,5 @@ retired_code.md
 nul
 
 # Export files (temporary)
-exports/
+/exports/
+utils/exports/export_cache/
