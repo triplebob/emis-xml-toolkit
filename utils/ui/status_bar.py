@@ -229,25 +229,6 @@ def _get_cached_version_info(version_info_dict):
 
 def render_status_bar():
     """Render the status bar in the sidebar with lookup table information."""
-    # Apply custom styling for sidebar elements
-    from .theme import apply_custom_styling
-    apply_custom_styling()
-    
-    st.markdown("""
-        <style>
-            section[data-testid="stSidebar"] {
-                width: 255px !important;
-                min-width: 255px !important;
-            }
-            /* Ensure main content shrinks accordingly */
-            section[data-testid="stSidebar"] > div:first-child {
-                width: 255px !important;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-    
     with st.sidebar:
         st.header("🗃️ Lookup Table Status")
         

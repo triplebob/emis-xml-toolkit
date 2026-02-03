@@ -123,6 +123,40 @@ def apply_custom_styling():
         font-size: 0.9rem !important;
     }
 
+    section[data-testid="stSidebar"] {
+        width: 255px !important;
+        min-width: 255px !important;
+    }
+
+    section[data-testid="stSidebar"] > div:first-child {
+        width: 255px !important;
+    }
+
+    /* Remove Streamlit sidebar header area (logo spacer + collapse control) */
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        padding-top: 0.6rem !important;
+        margin-top: 0 !important;
+    }
+
+    /* Remove main app toolbar/header chrome and reclaim top spacing */
+    header[data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] .main .block-container {
+        padding-top: 0.6rem !important;
+    }
+
     /* Style expander headers to match sidebar colour */
     details[data-testid="stExpander"] summary {
         background-color: #2D2D2D !important;
