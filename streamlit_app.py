@@ -750,7 +750,7 @@ def main():
         <p style="font-size: 0.9em; opacity: 0.8;">
             Unauthorised copying, distribution, or commercial use prohibited. |
             By using this application you agree to the
-            <a href='https://github.com/triplebob/clinxml-legal/blob/main/EULA-clinxml.md' style="color: inherit;">>ClinXML™ EULA</a>.
+            <a href='https://github.com/triplebob/clinxml-legal/blob/main/EULA-clinxml.md' style="color: inherit;">ClinXML™ EULA</a>.
         </p>
         </div>""",
         unsafe_allow_html=True,
