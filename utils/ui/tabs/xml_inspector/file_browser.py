@@ -1,6 +1,10 @@
 import streamlit as st
 from typing import Dict, Any, List
 from ...theme import info_box
+from ....system.session_state import SessionStateKeys
+from ....exports import (
+    render_explorer_tree_export_controls,
+)
 
 
 def render_file_browser(folder_tree: Dict[str, Any]):
@@ -15,7 +19,19 @@ def render_file_browser(folder_tree: Dict[str, Any]):
             st.markdown(info_box("No folders found in this XML."), unsafe_allow_html=True)
             return
 
-        _render_ascii_tree(roots)
+        lines = _render_ascii_tree(roots)
+        if not lines:
+            return
+
+        xml_filename = st.session_state.get(SessionStateKeys.XML_FILENAME, "clinxml")
+        render_explorer_tree_export_controls(
+            lines=lines,
+            xml_filename=str(xml_filename),
+            tree_label="file_browser_tree",
+            tree_display_name="File Browser Tree",
+            expander_label="📥 Export File Browser Tree",
+            state_prefix="file_browser_tree",
+        )
 
     file_browser_fragment()
 
@@ -72,7 +88,7 @@ def _count_items_recursive(node: Dict[str, Any]) -> Dict[str, int]:
     return counts
 
 
-def _render_ascii_tree(roots: List[Dict[str, Any]]):
+def _render_ascii_tree(roots: List[Dict[str, Any]]) -> List[str]:
     def _plural(count: int, singular: str) -> str:
         return f"{count} {singular}" if count == 1 else f"{count} {singular}s"
 
@@ -149,3 +165,4 @@ def _render_ascii_tree(roots: List[Dict[str, Any]]):
 
     if lines:
         st.code("\n".join(lines))
+    return lines

@@ -119,4 +119,4 @@ When adding terminology features:
 ---
 
 *Last Updated: 2nd February 2026*  
-*Application Version: 3.0.0*
+*Application Version: 3.0.1*

@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from .client import NHSTerminologyClient, TerminologyServerConfig, ExpansionResult, ExpandedConcept
+from ..system.debug_output import emit_debug
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class ExpansionCache:
                 # Remove oldest entry
                 oldest_key = min(store, key=lambda k: store[k].cached_at)
                 del store[oldest_key]
-                logger.debug(f"Removed oldest cache entry to maintain size limit")
+                emit_debug("terminology_service", "Removed oldest cache entry to maintain size limit")
 
             # Serialise children
             children_serialised = [asdict(c) for c in result.children]

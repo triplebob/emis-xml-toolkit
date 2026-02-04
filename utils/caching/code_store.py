@@ -5,11 +5,20 @@ Codes are stored once and referenced by multiple entities.
 
 import hashlib
 import json
-import logging
 from typing import Dict, Any, List, Tuple, Optional, Set
 from dataclasses import dataclass, field
 
-logger = logging.getLogger(__name__)
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover - optional in non-UI contexts
+    st = None
+
+try:
+    from ..system.session_state import SessionStateKeys
+except Exception:  # pragma: no cover - fallback for isolated imports
+    SessionStateKeys = None
+
+from ..system.debug_output import emit_debug
 
 # Type alias for code keys
 CodeKey = Tuple[str, str, str]  # (code_value, valueSet_guid, code_system)
@@ -88,9 +97,52 @@ class CodeStore:
         codes_for_entity = store.get_codes_for_entity(entity_id)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, enable_debug: Optional[bool] = None) -> None:
         self._codes: Dict[CodeKey, CodeEntry] = {}
         self._entity_index: Dict[str, List[CodeKey]] = {}  # entity_id -> [keys]
+        self._enable_debug: Optional[bool] = enable_debug
+        self._skip_drop_details: List[Dict[str, Any]] = []
+        self._skip_drop_overflow: int = 0
+        self._max_skip_drop_details: int = 50
+        self._decision_stats: Dict[str, int] = {
+            "new_codes_added": 0,
+            "references_added": 0,
+            "duplicate_references_skipped": 0,
+            "missing_reference_keys": 0,
+            "pseudo_member_updates": 0,
+        }
+
+    def _debug_enabled(self) -> bool:
+        """Resolve debug mode from explicit setting or global Streamlit toggle."""
+        if self._enable_debug is not None:
+            return bool(self._enable_debug)
+
+        if st is None or SessionStateKeys is None:
+            return False
+
+        try:
+            return bool(st.session_state.get(SessionStateKeys.DEBUG_MODE, False))
+        except Exception:
+            return False
+
+    def _debug_log(self, message: str, **payload: Any) -> None:
+        """Emit structured debug logs when global debug mode is enabled."""
+        if not self._debug_enabled():
+            return
+
+        if payload:
+            emit_debug("code_store", f"{message} | {json.dumps(payload, default=str, sort_keys=True)}")
+        else:
+            emit_debug("code_store", message)
+
+    def _record_skip_or_drop(self, reason: str, **payload: Any) -> None:
+        """Capture bounded details for skipped/dropped events for end-of-run reporting."""
+        detail = {"reason": reason}
+        detail.update(payload)
+        if len(self._skip_drop_details) < self._max_skip_drop_details:
+            self._skip_drop_details.append(detail)
+        else:
+            self._skip_drop_overflow += 1
 
     def make_key(self, code_value: str, valueSet_guid: str, code_system: str) -> CodeKey:
         """Generate unique key for a code."""
@@ -128,6 +180,7 @@ class CodeStore:
 
         # Check for duplicate using cached set (O(1))
         if source_key in entry._source_keys:
+            self._decision_stats["duplicate_references_skipped"] += 1
             return False
 
         # Build reference dict
@@ -142,6 +195,7 @@ class CodeStore:
         # Add reference and update cache
         entry.source_entities.append(source_ref)
         entry._source_keys.add(source_key)
+        self._decision_stats["references_added"] += 1
         return True
 
     def add_or_ref(
@@ -167,6 +221,7 @@ class CodeStore:
         if key not in self._codes:
             # First time seeing this code - create entry
             self._codes[key] = CodeEntry.from_valueset_dict(code_dict)
+            self._decision_stats["new_codes_added"] += 1
 
         # Add source reference (handles duplicate detection internally)
         ref_added = self._add_source_reference(
@@ -196,6 +251,13 @@ class CodeStore:
         Returns True if reference was added, False if code doesn't exist or duplicate.
         """
         if key not in self._codes:
+            self._decision_stats["missing_reference_keys"] += 1
+            self._record_skip_or_drop(
+                "missing_reference_key",
+                key=key,
+                entity_id=entity_id,
+                entity_type=entity_type,
+            )
             return False
 
         ref_added = self._add_source_reference(
@@ -229,6 +291,7 @@ class CodeStore:
 
         entry = self._codes[key]
         entry.is_pseudo_member = True
+        self._decision_stats["pseudo_member_updates"] += 1
 
         # Update valueSet_description if existing is a fallback label and the incoming one is meaningful
         if valueSet_description and valueSet_description != "No embedded ValueSet name":
@@ -236,6 +299,29 @@ class CodeStore:
                 entry.valueSet_description = valueSet_description
 
         return True
+
+    def emit_debug_summary(self) -> None:
+        """Emit end-of-run summary and skipped/dropped details when debug mode is enabled."""
+        if not self._debug_enabled():
+            return
+
+        stats = self.get_stats()
+        self._debug_log(
+            "summary",
+            unique_codes=stats["unique_codes"],
+            total_references=stats["total_references"],
+            entities_tracked=stats["entities_tracked"],
+            new_codes_added=stats["new_codes_added"],
+            references_added=stats["references_added"],
+            duplicate_references_skipped=stats["duplicate_references_skipped"],
+            missing_reference_keys=stats["missing_reference_keys"],
+            pseudo_member_updates=stats["pseudo_member_updates"],
+            skipped_dropped_detail_count=len(self._skip_drop_details),
+            skipped_dropped_detail_overflow=self._skip_drop_overflow,
+        )
+
+        for detail in self._skip_drop_details:
+            self._debug_log("skipped/dropped detail", **detail)
 
     def get_code(self, key: CodeKey) -> Optional[Dict[str, Any]]:
         """Get full code data by key."""
@@ -253,8 +339,10 @@ class CodeStore:
 
     def get_stats(self) -> Dict[str, int]:
         """Get store statistics."""
-        return {
+        stats = {
             "unique_codes": len(self._codes),
             "total_references": sum(len(e.source_entities) for e in self._codes.values()),
             "entities_tracked": len(self._entity_index),
         }
+        stats.update(self._decision_stats)
+        return stats

@@ -3,10 +3,23 @@ Population reference pattern detectors.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+)
 
 
-@register_pattern("population_references")
+@register_pattern(
+    PluginMetadata(
+        id="population_references",
+        version="1.0.0",
+        description="Detects population criterion references by GUID",
+        priority=PluginPriority.NORMAL,
+        tags=["population", "reference"],
+    )
+)
 def detect_population_references(ctx: PatternContext):
     ns = ctx.namespaces
     pop_refs = ctx.element.findall(".//populationCriterion", ns) + ctx.element.findall(".//emis:populationCriterion", ns)

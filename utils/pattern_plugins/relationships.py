@@ -3,10 +3,26 @@ Linked criteria / relationship pattern detectors.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+    extract_range_value_flags,
+)
 
 
-@register_pattern("linked_relationship")
+@register_pattern(
+    PluginMetadata(
+        id="linked_relationship",
+        version="1.0.0",
+        description="Detects linked criteria relationships between columns",
+        priority=PluginPriority.NORMAL,
+        tags=["relationship", "linked-criteria"],
+    )
+)
 def detect_linked_relationship(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None
@@ -40,13 +56,10 @@ def detect_linked_relationship(ctx: PatternContext):
         flags["child_column_display_name"] = child_display.text.strip()
 
     if range_value is not None:
-        # Reuse temporal range detection structure if present
-        from .temporal import detect_temporal_range
-        temp_result = detect_temporal_range(
-            type("Ctx", (), {"element": relationship, "namespaces": ns})  # lightweight context
-        )
-        if temp_result:
-            flags.update(temp_result.flags)
+        # Use shared helper to extract temporal range data
+        range_flags = extract_range_value_flags(relationship, ns)
+        if range_flags:
+            flags.update(range_flags)
 
     return PatternResult(
         id="linked_relationship",

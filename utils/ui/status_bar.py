@@ -306,16 +306,13 @@ def render_status_bar():
             # Changelog section - Direct in-app display
             with st.sidebar.expander(f"🎯 What's New: v{__version__}", expanded=False):
                 st.markdown(f"""
-                        **Complete Architecture Rebuild & Encrypted Lookup System:**
-                        - Compatibility codebase replaced with a modern `utils/` architecture featuring clean module boundaries, single‑responsibility design, and consistent imports.
-                        - Plugin-based parsing pipeline with module auto-loading, structured pattern handlers, and central flag registry for extensible XML processing.
-                        - Encrypted parquet lookup system with filtered lookup APIs, Fernet encryption, and automatic cache generation from the private lookup repo.
-                        - CodeStore introduces key-based deduplication and full source tracking across searches and reports.
-                        - NHS Terminology Server refactor adds lazy hierarchy expansion, standalone SNOMED lookup, improved credential handling, and adaptive rate limiting.
-                        - XML Explorer reimagined with hierarchical navigation, dependency visualisation, raw XML viewer, and performance‑optimised lazy loading.
-                        - Export system rebuilt with lazy generation, context‑sensitive filenames, automatic cache invalidation, and unified naming conventions.
-                        - System-wide performance upgrades include TTL/max-entry cache controls, explicit cache cleanup, GC optimisation, and real-time memory monitoring.
-    """)
+                                **Security & UI Enhancements:**
+                                - Security patch applied with upgraded `cryptography` and resolved all Github Dependabot alerts.
+                                - Explorer exports extended with lazy TXT and styled SVG tree output, and XML viewer improved with syntax‑aligned line numbers.
+                                - Terminology Server error handling upgraded with structured categories, SNOMED validation, and clearer user‑facing messages.
+                                - EMIS GUID matching accelerated via filtered PyArrow queries and cached batch lookup.
+                                - Plugin registry now version‑aware with compatibility checks for safer plugin development.
+                """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
 
 

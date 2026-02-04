@@ -5,6 +5,62 @@
 
 ---
 
+## v3.0.1 - Security & UI Enhancements (3rd February 2026)
+
+### **Security Patch**
+
+- **`cryptography` upgraded** from constrained legacy range to `>=42.0.2`
+- **Dependabot alerts resolved** for vulnerable versions in `requirements.txt`
+- **Risk reduction** for TLS/RSA exchange and PKCS12 parsing vulnerability paths reported upstream
+
+### **XML Explorer Improvements**
+
+- **Line numbers in RAW XML viewer**: Syntax-highlighted XML now displays line numbers
+- **Non-selectable gutter**: Line numbers excluded when copying code
+- **Table-based rendering**: Ensures alignment between line numbers and code content
+
+### **XML Explorer Export Enhancements**
+
+- **New explorer export module**: Added `utils/exports/explorer_exports.py` for shared tree export logic
+- **XML Explorer tabs exports**: Added lazy on-demand TXT and SVG export with immediate cleanup after download
+- **Styled SVG output**: Exported tree SVG now preserves connector and node colour mapping for readability
+
+### **Debug Output Streamlining**
+
+- **CodeStore summary-only logging**: Replaced per-code debug spam with a single end-of-run summary and skipped/dropped detail events only
+- **CodeStore cache invalidation hooks**: Added source-hash tracking and automatic stale cache invalidation when XML source data changes
+- **Export lifecycle logging only**: `clinical_exports` debug output now logs only export creation and export garbage collection events
+
+### **NHS Terminology Server Error Handling**
+
+- **Structured error categories**: New `ErrorCategory` enum classifies errors (auth failure, invalid code, not found, no matches, rate limited, server error, connection error, timeout)
+- **FHIR OperationOutcome parsing**: 422 responses now parsed to extract meaningful error details
+- **SNOMED code validation**: Format validation before API calls (numeric, 6-18 digits)
+- **User-friendly messages**: Clear error descriptions with actionable suggestions for each error type
+- **Improved UI feedback**: Appropriate warning/error styling based on error severity
+
+### **Terminology Server Lookup Performance**
+
+- **Fixed slow EMIS GUID matching**: Replaced full DataFrame iteration with filtered PyArrow queries
+- **New `lookup_snomed_to_emis()` function**: Batch lookup SNOMED → EMIS with TTL cache (5 min, 10k max entries)
+- **Eliminated redundant API call**: Display name now passed through to expansion, saving one lookup per code
+- **On-demand lookups**: Child codes queried after expansion completes, not pre-loaded
+- **Memory efficiency**: No longer loads entire lookup table into memory for terminology server features
+
+### **Plugin Versioning Enhancements**
+
+- **Plugin versioning support**: Added version-aware plugin registry behaviour for safer plugin evolution
+- **Compatibility checks**: Improved plugin loading/selection logic to respect declared plugin versions
+- **Versioning test coverage**: Added targeted tests for registry versioning paths to lock in expected behaviour
+
+### **Debug & Memory UI Refinements**
+
+- **Debug tab**: Added debug-related tab to allow management overview of current plugins, enable/disable plugins and review load order
+- **Metric card consistency**: Standardised key debug/memory metrics into framed card-style layouts
+- **Memory diagnostics layout**: Reworked memory/lookup/GC sections for clearer at-a-glance operational status
+
+---
+
 ## v3.0.0 - Complete Architecture Rebuild & Encrypted Parquet (February 2026)
 
 Version 3.0 represents a complete ground-up rebuild of ClinXML, delivering improvements to memory efficiency, code organisation, and extensibility. 
@@ -259,6 +315,6 @@ The parsing system has been rebuilt around a plugin-based architecture, enabling
 
 ---
 
-*Last Updated: 2nd February 2026*
-*Application Version: 3.0.0*
+*Last Updated: 4th February 2026*
+*Application Version: 3.0.1*
 *Live at: https://clinxml.streamlit.app/*

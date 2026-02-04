@@ -149,7 +149,7 @@ def _render_fragment_fragment(xml_content: str, selection: Dict[str, Any]):
         st.markdown(f'<div class="xml-info-item"><strong>{name_label}:</strong>&nbsp;&nbsp;<span class="xml-value">{name}</span></div>', unsafe_allow_html=True)
     with col_toggle:
         strip_ns = not st.checkbox(
-            "Toggle Namespacing",
+            "Show Namespaces",
             value=False,
             help="Include namespace prefixes (e.g., ns0) when displaying the selected element",
         )
@@ -179,17 +179,18 @@ def _prettify_xml(fragment: str, strip_namespaces: bool = True) -> str:
         return fragment
 
 
-def _render_pretty_xml(pretty: str):
+def _render_pretty_xml(pretty: str, show_line_numbers: bool = True):
     """
     Render XML with highlight.js from CDN. Falls back to st.code if anything fails.
     """
     try:
         escaped = escape(pretty)
+        show_lines_js = "true" if show_line_numbers else "false"
+
         html_block = f"""
         <!DOCTYPE html>
         <html>
         <head>
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
             <style>
             body {{
                 margin: 0;
@@ -206,38 +207,85 @@ def _render_pretty_xml(pretty: str):
                 overflow: auto;
                 background-color: #1E1E1E;
             }}
-            pre.xml-viewer {{
-                margin: 0;
-                padding: 12px;
-                background-color: #1E1E1E !important;
+            /* Hidden pre for highlight.js processing */
+            #source-code {{
+                position: absolute;
+                left: -9999px;
             }}
-            pre.xml-viewer code {{
+            /* Table-based line display */
+            .code-table {{
+                border-collapse: collapse;
                 font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 15px;
                 line-height: 1.6;
+                margin: 12px;
+            }}
+            .code-table td {{
+                padding: 0;
+                vertical-align: top;
+            }}
+            .code-table .line-num {{
+                width: 3.5em;
+                padding-right: 1em;
+                text-align: right;
+                color: #6e7681;
+                border-right: 1px solid #404040;
+                user-select: none;
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+            }}
+            .code-table .line-code {{
+                padding-left: 1em;
                 white-space: pre;
-                display: block;
+                color: #D4D4D4;
             }}
-            .hljs {{
-                background-color: #1E1E1E !important;
-                color: #D4D4D4 !important;
-            }}
+            /* VS2015 dark theme syntax colors */
+            .hljs-comment {{ color: #6A9955; font-style: italic; }}
+            .hljs-tag {{ color: #808080; }}
+            .hljs-name {{ color: #569CD6; }}
+            .hljs-attr {{ color: #9CDCFE; }}
+            .hljs-string {{ color: #CE9178; }}
+            .hljs-keyword {{ color: #569CD6; }}
+            .hljs-literal {{ color: #569CD6; }}
+            .hljs-number {{ color: #B5CEA8; }}
+            .hljs-built_in {{ color: #4EC9B0; }}
+            .hljs-symbol {{ color: #569CD6; }}
+            .hljs-meta {{ color: #9B9B9B; }}
             </style>
         </head>
         <body>
             <div class="xml-container">
-                <pre class="xml-viewer"><code class="language-xml">{escaped}</code></pre>
+                <pre id="source-code"><code id="code-block" class="language-xml">{escaped}</code></pre>
+                <table class="code-table" id="code-table"></table>
             </div>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
             <script>
-                // Wait for highlight.js to load, then highlight
-                if (typeof hljs !== 'undefined') {{
-                    hljs.highlightAll();
-                }} else {{
-                    window.addEventListener('load', function() {{
-                        hljs.highlightAll();
-                    }});
+                function buildCodeTable() {{
+                    var codeBlock = document.getElementById('code-block');
+                    var table = document.getElementById('code-table');
+                    var html = codeBlock.innerHTML;
+                    var lines = html.split('\\n');
+                    var showLines = {show_lines_js};
+
+                    var tableHtml = '';
+                    for (var i = 0; i < lines.length; i++) {{
+                        var lineNum = showLines ? '<td class="line-num">' + (i + 1) + '</td>' : '';
+                        tableHtml += '<tr>' + lineNum + '<td class="line-code">' + lines[i] + '</td></tr>';
+                    }}
+                    table.innerHTML = tableHtml;
                 }}
+
+                // Wait for highlight.js to load
+                function init() {{
+                    if (typeof hljs !== 'undefined') {{
+                        hljs.highlightElement(document.getElementById('code-block'));
+                        buildCodeTable();
+                    }} else {{
+                        setTimeout(init, 50);
+                    }}
+                }}
+                init();
             </script>
         </body>
         </html>

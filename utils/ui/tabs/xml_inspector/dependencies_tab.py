@@ -1,6 +1,10 @@
 import streamlit as st
 from typing import List, Dict, Any, Set, Tuple
 from ...theme import info_box
+from ....system.session_state import SessionStateKeys
+from ....exports import (
+    render_explorer_tree_export_controls,
+)
 
 
 def render_dependencies_tab(nodes: List[Dict[str, Any]], deps: Dict[str, List[str]], dependents: Dict[str, List[str]], id_to_name: Dict[str, str]):
@@ -22,7 +26,18 @@ def render_dependencies_tab(nodes: List[Dict[str, Any]], deps: Dict[str, List[st
             node_map[nid] = node
 
         st.markdown("🔗 Report dependency relationships:")
-        _render_dependency_ascii(node_map, deps, dependents)
+        lines = _render_dependency_ascii(node_map, deps, dependents)
+
+        if lines:
+            xml_filename = st.session_state.get(SessionStateKeys.XML_FILENAME, "clinxml")
+            render_explorer_tree_export_controls(
+                lines=lines,
+                xml_filename=str(xml_filename),
+                tree_label="dependency_tree",
+                tree_display_name="Dependency Tree",
+                expander_label="📥 Export Dependency Tree",
+                state_prefix="dependency_tree",
+            )
 
     dependencies_fragment()
 
@@ -111,7 +126,11 @@ def _build_dependency_tree(node_map: Dict[str, Dict[str, Any]], deps: Dict[str, 
     return tree
 
 
-def _render_dependency_ascii(node_map: Dict[str, Dict[str, Any]], deps: Dict[str, List[str]], dependents: Dict[str, List[str]]):
+def _build_dependency_ascii_lines(
+    node_map: Dict[str, Dict[str, Any]],
+    deps: Dict[str, List[str]],
+    dependents: Dict[str, List[str]],
+) -> List[str]:
     tree = _build_dependency_tree(node_map, deps, dependents)
 
     def _label(nid: str) -> str:
@@ -186,5 +205,11 @@ def _render_dependency_ascii(node_map: Dict[str, Dict[str, Any]], deps: Dict[str
         for label in labels:
             lines.append(f"- {label}")
 
+    return lines
+
+
+def _render_dependency_ascii(node_map: Dict[str, Dict[str, Any]], deps: Dict[str, List[str]], dependents: Dict[str, List[str]]) -> List[str]:
+    lines = _build_dependency_ascii_lines(node_map, deps, dependents)
     if lines:
         st.code("\n".join(lines))
+    return lines

@@ -3,10 +3,24 @@ Enterprise/QOF/contract pattern detectors.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+)
 
 
-@register_pattern("enterprise_metadata")
+@register_pattern(
+    PluginMetadata(
+        id="enterprise_metadata",
+        version="1.0.0",
+        description="Detects enterprise reporting level and organisation associations",
+        priority=PluginPriority.LOW,
+        tags=["enterprise", "reporting", "organisation"],
+    )
+)
 def detect_enterprise_metadata(ctx: PatternContext):
     ns = ctx.namespaces
     enterprise_level = find_first(
@@ -52,7 +66,15 @@ def detect_enterprise_metadata(ctx: PatternContext):
     )
 
 
-@register_pattern("qof_contract")
+@register_pattern(
+    PluginMetadata(
+        id="qof_contract",
+        version="1.0.0",
+        description="Detects QOF/QMAS indicators and contract targets",
+        priority=PluginPriority.LOW,
+        tags=["qof", "contract", "qmas"],
+    )
+)
 def detect_qof_contract(ctx: PatternContext):
     ns = ctx.namespaces
     qmas = find_first(ctx.element, ns, ".//qmasIndicator", ".//emis:qmasIndicator")

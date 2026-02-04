@@ -47,13 +47,13 @@ def render_results_tabs(_results=None):
         # Show clinical + XML browser + search browser + code lookup; reports remain disabled
         # Add Memory tab in debug mode
         if debug_mode:
-            main_tab1, main_tab_xml, main_tab2, main_tab_reports, main_tab_lookup, main_tab_memory = st.tabs([
+            main_tab1, main_tab_xml, main_tab2, main_tab_reports, main_tab_lookup, main_tab_debug = st.tabs([
                 "🏥 Clinical Codes",
                 "🗂 XML Explorer",
                 "🔍 Searches",
                 "📊 Reports",
                 "🔬 Code Lookup",
-                "🧠 Memory"
+                "⚙️ Debug"
             ])
         else:
             main_tab1, main_tab_xml, main_tab2, main_tab_reports, main_tab_lookup = st.tabs([
@@ -81,14 +81,14 @@ def render_results_tabs(_results=None):
             render_individual_code_lookup()
 
         if debug_mode:
-            with main_tab_memory:
-                from .tabs.debug import render_memory_diagnostics_tab
-                render_memory_diagnostics_tab()
+            with main_tab_debug:
+                from .tabs.debug import render_debug_tab
+                render_debug_tab()
 
     else:
-        # No XML loaded - show welcome tab + Code Lookup (+ Memory in debug mode)
+        # No XML loaded - show welcome tab + Code Lookup (+ Debug in debug mode)
         if debug_mode:
-            welcome_tab, lookup_tab, memory_tab = st.tabs(["📋 ClinXML", "🔬 Code Lookup", "🧠 Memory"])
+            welcome_tab, lookup_tab, debug_tab = st.tabs(["📋 ClinXML", "🔬 Code Lookup", "⚙️ Debug"])
         else:
             welcome_tab, lookup_tab = st.tabs(["📋 ClinXML", "🔬 Code Lookup"])
 
@@ -114,9 +114,9 @@ def render_results_tabs(_results=None):
             render_individual_code_lookup()
 
         if debug_mode:
-            with memory_tab:
-                from .tabs.debug import render_memory_diagnostics_tab
-                render_memory_diagnostics_tab()
+            with debug_tab:
+                from .tabs.debug import render_debug_tab
+                render_debug_tab()
 
 
 def render_clinical_codes_main_tab():

@@ -1,5 +1,7 @@
 # Security Policy
 
+![Security](https://img.shields.io/badge/Vulnerability%20Reporting-Private%20%2F%20Secure-4c1)
+
 ## Reporting a Vulnerability
 If you believe you have found a security vulnerability in ClinXML, please report it **privately** using GitHub’s built‑in *Private Vulnerability Reporting* feature.
 

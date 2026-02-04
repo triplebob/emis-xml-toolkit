@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from utils.caching.code_store import CodeStore
 
@@ -83,6 +84,23 @@ class TestCodeStore(unittest.TestCase):
         self.assertIsNotNone(code)
         self.assertTrue(code["is_pseudo_member"])
         self.assertEqual(code["valueSet_description"], "Preferred Name")
+
+    def test_debug_logging_uses_global_decisions_when_enabled(self):
+        store = CodeStore(enable_debug=True)
+        with patch("utils.caching.code_store.emit_debug") as debug_mock:
+            key = store.add_or_ref(self.code_dict, "ENTITY-1", "criterion", criterion_context={"criterion": "1"})
+            # Duplicate add to trigger duplicate reference path
+            store.add_or_ref(self.code_dict, "ENTITY-1", "criterion", criterion_context={"criterion": "1"})
+            # Missing key path
+            missing_key = store.make_key("missing", "VS-X", "SNOMED_CONCEPT")
+            store.add_reference(missing_key, "ENTITY-9", "criterion")
+            # Pseudo-member update path
+            store.update_pseudo_member_context(key, "Preferred Name")
+            store.emit_debug_summary()
+
+            logged_messages = [call.args[1] for call in debug_mock.call_args_list]
+            self.assertTrue(any(msg.startswith("summary |") for msg in logged_messages))
+            self.assertTrue(any(msg.startswith("skipped/dropped detail |") for msg in logged_messages))
 
 
 if __name__ == "__main__":

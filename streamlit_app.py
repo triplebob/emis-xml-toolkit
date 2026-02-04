@@ -1,5 +1,7 @@
 import streamlit as st
 import chardet
+import base64
+from pathlib import Path
 from utils.ui import render_status_bar, render_results_tabs, apply_custom_styling, render_performance_controls, display_performance_metrics
 from utils.metadata.snomed_translation import translate_emis_to_snomed
 from utils.system.session_state import (
@@ -26,26 +28,40 @@ from utils.system.error_handling import (
 
 
 # Simple file session tracking functions
-def generate_file_hash(filename: str, filesize: int) -> str:
-    """Generate hash based on filename and filesize."""
+def generate_file_hash(filename: str, filesize: int, content_bytes: bytes = b"") -> str:
+    """
+    Generate a stable file hash.
+    Uses file content when available; falls back to filename/filesize identity.
+    """
+    if content_bytes:
+        return hashlib.md5(content_bytes).hexdigest()
     file_identity = f"{filename}_{filesize}"
-    return hashlib.md5(file_identity.encode()).hexdigest()[:16]
+    return hashlib.md5(file_identity.encode()).hexdigest()
 
 
-def is_reprocessing_same_file(filename: str, filesize: int) -> bool:
+def is_reprocessing_same_file(file_hash: str) -> bool:
     """Check if this is reprocessing the same file with existing results."""
-    new_hash = generate_file_hash(filename, filesize)
     current_hash = st.session_state.get('current_file_hash')
     processed_hash = st.session_state.get('last_processed_hash')
     has_results = SessionStateKeys.PIPELINE_CODES in st.session_state
     
-    return (new_hash == current_hash == processed_hash and has_results)
+    return (file_hash == current_hash == processed_hash and has_results)
 
 
-def mark_file_processed(filename: str, filesize: int):
+def mark_file_processed(file_hash: str):
     """Mark current file as processed."""
-    file_hash = generate_file_hash(filename, filesize)
     st.session_state['last_processed_hash'] = file_hash
+
+
+def _svg_file_to_data_uri(file_path: str) -> str:
+    """Return base64 data URI for an SVG file, or empty string if unavailable."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            svg_content = f.read()
+        svg_b64 = base64.b64encode(svg_content.encode("utf-8")).decode("utf-8")
+        return f"data:image/svg+xml;base64,{svg_b64}"
+    except OSError:
+        return ""
 import time
 import psutil
 import os
@@ -119,15 +135,9 @@ def main():
         render_debug_controls()
 
         # Logo at bottom of sidebar
-        import pathlib
-        import base64
-        logo_path = pathlib.Path("static/logo.svg")
+        logo_path = Path("static/logo.svg")
         if logo_path.exists():
-            with open(logo_path, "r", encoding="utf-8") as f:
-                svg_content = f.read()
-            # Encode SVG as base64 data URI
-            svg_b64 = base64.b64encode(svg_content.encode("utf-8")).decode("utf-8")
-            logo_uri = f"data:image/svg+xml;base64,{svg_b64}"
+            logo_uri = _svg_file_to_data_uri(str(logo_path))
 
             st.sidebar.markdown(
                 f"""
@@ -153,7 +163,15 @@ def main():
     
     with col1:
         # Clean header without button
-        st.image("static/clinxml.svg", width=620)
+        header_logo_path = Path("static/clinxml.svg")
+        header_logo_uri = _svg_file_to_data_uri(str(header_logo_path))
+        if header_logo_uri:
+            st.markdown(
+                f'<img src="{header_logo_uri}" style="width:620px; max-width:100%; height:auto;" />',
+                unsafe_allow_html=True,
+            )
+        elif header_logo_path.exists():
+            st.image(str(header_logo_path), width=620)
         st.caption("*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Comprehensive EMIS XML analysis and clinical code extraction for NHS healthcare teams*")
         
         # Dynamic MKB version text
@@ -223,7 +241,7 @@ def main():
                 pass
             
             # Check whether this is a different file
-            new_hash = generate_file_hash(uploaded_xml.name, uploaded_xml.size)
+            new_hash = generate_file_hash(uploaded_xml.name, uploaded_xml.size, xml_bytes)
             current_hash = st.session_state.get('current_file_hash')
             
             if new_hash != current_hash:
@@ -253,7 +271,7 @@ def main():
             # Show process button or cancel button based on state
             if not st.session_state.get(SessionStateKeys.IS_PROCESSING, False):
                 # Check if this is reprocessing the same file
-                is_reprocessing = is_reprocessing_same_file(uploaded_xml.name, uploaded_xml.size)
+                is_reprocessing = is_reprocessing_same_file(new_hash)
                 
                 if is_reprocessing:
                     button_text = "🔄 Reprocess XML File"
@@ -448,11 +466,6 @@ def main():
                                 # Use structured UI error display
                                 display_error_to_user(validation_error, show_technical_details=True)
                                 return
-                        else:
-                            # Normal processing path with clinical codes
-                            if debug_logger:
-                                debug_logger.log_xml_parsing_result(emis_guids)
-                        
                         # Only do clinical code processing if we have EMIS GUIDs
                         if emis_guids:
                             # Get lookup DataFrame for translation

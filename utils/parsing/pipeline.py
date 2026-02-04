@@ -71,6 +71,7 @@ def parse_xml(xml_content: str, source_name: Optional[str] = None, run_patterns:
 
     # Include code store in output (already populated during parsing)
     output["code_store"] = code_store
+    code_store.emit_debug_summary()
 
     if run_patterns:
         output["pattern_results"] = results

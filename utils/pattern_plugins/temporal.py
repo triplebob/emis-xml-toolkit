@@ -3,10 +3,26 @@ Temporal pattern detectors based on documented EMIS XML patterns.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+    extract_range_value_flags,
+)
 
 
-@register_pattern("temporal_single_value")
+@register_pattern(
+    PluginMetadata(
+        id="temporal_single_value",
+        version="1.0.0",
+        description="Detects single-value temporal filters (Last/This/Next periods)",
+        priority=PluginPriority.NORMAL,
+        tags=["temporal", "date-filter"],
+    )
+)
 def detect_temporal_single_value(ctx: PatternContext):
     """
     Detects named temporal variables and numeric offsets in singleValue constructs.
@@ -50,75 +66,25 @@ def detect_temporal_single_value(ctx: PatternContext):
     )
 
 
-@register_pattern("temporal_range")
+@register_pattern(
+    PluginMetadata(
+        id="temporal_range",
+        version="1.0.0",
+        description="Detects range-based temporal filters (rangeFrom/rangeTo)",
+        priority=PluginPriority.NORMAL,
+        tags=["temporal", "date-filter", "range"],
+    )
+)
 def detect_temporal_range(ctx: PatternContext):
     """
     Detects rangeValue temporal filters with rangeFrom/rangeTo, including variable-based values.
     """
     if tag_local(ctx.element) != "criterion":
         return None
-    ns = ctx.namespaces
-    range_value = find_first(ctx.element, ns, ".//rangeValue", ".//emis:rangeValue")
-    if range_value is None:
+
+    flags = extract_range_value_flags(ctx.element, ctx.namespaces)
+    if flags is None:
         return None
-
-    def _child_text(elem, tag):
-        if elem is None:
-            return ""
-        node = find_first(elem, ns, tag, f"emis:{tag}")
-        return node.text.strip() if node is not None and node.text else ""
-
-    def _extract_boundary(node_name: str):
-        node = find_first(range_value, ns, f".//{node_name}", f".//emis:{node_name}")
-        if node is None:
-            return None
-
-        value_block = find_first(node, ns, "value", "emis:value")
-        if value_block is None:
-            value_block = find_first(node, ns, ".//value", ".//emis:value")
-
-        value_text = _child_text(value_block, "value") or ((value_block.text or "").strip() if value_block is not None else "")
-        unit_text = _child_text(value_block, "unit") or _child_text(node, "unit")
-        relation_text = _child_text(value_block, "relation") or _child_text(node, "relation")
-        operator_text = _child_text(node, "operator")
-
-        return {
-            "value": value_text,
-            "unit": unit_text,
-            "relation": relation_text,
-            "operator": operator_text,
-        }
-
-    range_from = _extract_boundary("rangeFrom")
-    range_to = _extract_boundary("rangeTo")
-
-    if not range_from and not range_to:
-        return None
-
-    flags = {
-        "has_temporal_filter": True,
-    }
-    relative_to = range_value.get("relativeTo") or range_value.get("relative_to")
-    if relative_to:
-        flags["relative_to"] = relative_to
-    if range_from:
-        flags.update(
-            {
-                "range_from_value": range_from["value"],
-                "range_from_unit": range_from["unit"],
-                "range_from_relation": range_from["relation"] or "RELATIVE",
-                "range_from_operator": range_from["operator"] or "GTEQ",
-            }
-        )
-    if range_to:
-        flags.update(
-            {
-                "range_to_value": range_to["value"],
-                "range_to_unit": range_to["unit"],
-                "range_to_relation": range_to["relation"] or "RELATIVE",
-                "range_to_operator": range_to["operator"] or "LTEQ",
-            }
-        )
 
     return PatternResult(
         id="temporal_range",

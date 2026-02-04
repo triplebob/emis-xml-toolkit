@@ -9,6 +9,7 @@ import gc
 from typing import Dict, Any, List, Tuple, Optional
 from collections import defaultdict
 from ....system.session_state import SessionStateKeys
+from ...theme import success_box, ThemeSpacing
 
 
 def _get_deep_size(obj: Any, seen: set = None, max_depth: int = 10) -> int:
@@ -86,8 +87,8 @@ def _analyse_code_entry_structure(codes: List[Dict]) -> Dict[str, Any]:
         "total_codes": len(codes),
         "sample_keys": list(codes[0].keys()) if codes else [],
         "field_sizes": {},
-        "has_original_fields": False,
-        "original_fields_overhead": 0,
+        "has_debug_fields": False,
+        "debug_fields_overhead": 0,
     }
 
     # Analyse field sizes across sample
@@ -98,18 +99,18 @@ def _analyse_code_entry_structure(codes: List[Dict]) -> Dict[str, Any]:
         for key, value in code.items():
             field_totals[key] += _get_deep_size(value, max_depth=3)
 
-        if "_original_fields" in code:
-            analysis["has_original_fields"] = True
+        if "debug_fields" in code:
+            analysis["has_debug_fields"] = True
 
     # Average per field
     analysis["field_sizes"] = {
         k: v // sample_size for k, v in sorted(field_totals.items(), key=lambda x: -x[1])
     }
 
-    # Calculate _original_fields overhead
-    if analysis["has_original_fields"]:
-        overhead_per_code = field_totals.get("_original_fields", 0) // sample_size
-        analysis["original_fields_overhead"] = overhead_per_code * len(codes)
+    # Calculate debug_fields overhead
+    if analysis["has_debug_fields"]:
+        overhead_per_code = field_totals.get("debug_fields", 0) // sample_size
+        analysis["debug_fields_overhead"] = overhead_per_code * len(codes)
 
     return analysis
 
@@ -224,190 +225,214 @@ def _get_gc_stats() -> Dict[str, Any]:
     return stats
 
 
-def render_memory_diagnostics_tab():
-    """Render the comprehensive memory diagnostics tab."""
+def render_memory_content():
+    """Render the memory diagnostics content."""
     st.subheader("Memory Diagnostics")
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 1: Process Memory Overview
     # ─────────────────────────────────────────────────────────────
-    st.markdown("### Process Memory")
+    with st.expander("Process Memory", expanded=True):
+        try:
+            import psutil
+            process = psutil.Process()
+            mem_info = process.memory_info()
 
-    try:
-        import psutil
-        process = psutil.Process()
-        mem_info = process.memory_info()
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                with st.container(border=True):
+                    st.metric("RSS (Resident)", _format_bytes(mem_info.rss),
+                             help="Physical memory used by process")
+            with col2:
+                with st.container(border=True):
+                    st.metric("VMS (Virtual)", _format_bytes(mem_info.vms),
+                             help="Total virtual memory allocated")
+            with col3:
+                # Memory percent
+                with st.container(border=True):
+                    mem_pct = process.memory_percent()
+                    st.metric("% System RAM", f"{mem_pct:.1f}%")
+            with col4:
+                with st.container(border=True):
+                    gc_counts = gc.get_count()
+                    st.metric("GC Generations", f"{gc_counts[0]}/{gc_counts[1]}/{gc_counts[2]}",
+                             help="Objects in GC generation 0/1/2")
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("RSS (Resident)", _format_bytes(mem_info.rss),
-                     help="Physical memory used by process")
-        with col2:
-            st.metric("VMS (Virtual)", _format_bytes(mem_info.vms),
-                     help="Total virtual memory allocated")
-        with col3:
-            # Memory percent
-            mem_pct = process.memory_percent()
-            st.metric("% System RAM", f"{mem_pct:.1f}%")
-        with col4:
-            gc_counts = gc.get_count()
-            st.metric("GC Generations", f"{gc_counts[0]}/{gc_counts[1]}/{gc_counts[2]}",
-                     help="Objects in GC generation 0/1/2")
+            # Additional memory info if available
+            if hasattr(mem_info, 'uss'):
+                st.caption(f"USS (Unique Set): {_format_bytes(mem_info.uss)} | "
+                          f"Shared: {_format_bytes(mem_info.shared if hasattr(mem_info, 'shared') else 0)}")
 
-        # Additional memory info if available
-        if hasattr(mem_info, 'uss'):
-            st.caption(f"USS (Unique Set): {_format_bytes(mem_info.uss)} | "
-                      f"Shared: {_format_bytes(mem_info.shared if hasattr(mem_info, 'shared') else 0)}")
-
-    except ImportError:
-        st.warning("Install psutil for detailed process memory stats: `pip install psutil`")
-    except Exception as e:
-        st.error(f"Error getting memory info: {e}")
+        except ImportError:
+            st.warning("Install psutil for detailed process memory stats: `pip install psutil`")
+        except Exception as e:
+            st.error(f"Error getting memory info: {e}")
 
     st.divider()
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 2: Session State Breakdown
     # ─────────────────────────────────────────────────────────────
-    st.markdown("### Session State Breakdown")
+    with st.expander("Session State Breakdown", expanded=True):
+        sizes = _get_session_state_sizes()
+        total_size = sum(s[1] for s in sizes)
 
-    sizes = _get_session_state_sizes()
-    total_size = sum(s[1] for s in sizes)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            with st.container(border=True):
+                st.metric("Total Size", _format_bytes(total_size))
+        with col2:
+            with st.container(border=True):
+                st.metric("Keys", len(sizes))
+        with col3:
+            with st.container(border=True):
+                top_5_pct = sum(s[1] for s in sizes[:5]) / total_size * 100 if total_size > 0 else 0
+                st.metric("Top 5 Keys %", f"{top_5_pct:.1f}%")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Size", _format_bytes(total_size))
-    with col2:
-        st.metric("Keys", len(sizes))
-    with col3:
-        top_5_pct = sum(s[1] for s in sizes[:5]) / total_size * 100 if total_size > 0 else 0
-        st.metric("Top 5 Keys %", f"{top_5_pct:.1f}%")
+        # Top consumers table
+        st.markdown("#### Top 25 Session State Keys")
 
-    # Top consumers table
-    st.markdown("#### Top 25 Session State Keys")
+        if sizes:
+            display_data = []
+            for key, size, type_name, count in sizes[:25]:
+                pct = (size / total_size * 100) if total_size > 0 else 0
+                display_data.append({
+                    "Key": key[:45] + "..." if len(key) > 45 else key,
+                    "Size": _format_bytes(size),
+                    "Type": type_name,
+                    "Items": str(count) if count >= 0 else "-",
+                    "%": f"{pct:.1f}%",
+                })
 
-    if sizes:
-        display_data = []
-        for key, size, type_name, count in sizes[:25]:
-            pct = (size / total_size * 100) if total_size > 0 else 0
-            display_data.append({
-                "Key": key[:45] + "..." if len(key) > 45 else key,
-                "Size": _format_bytes(size),
-                "Type": type_name,
-                "Items": str(count) if count >= 0 else "-",
-                "%": f"{pct:.1f}%",
-            })
-
-        st.dataframe(display_data, hide_index=True, width="stretch")
+            st.dataframe(display_data, hide_index=True, width="stretch")
 
     st.divider()
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 3: Pipeline Code Analysis
     # ─────────────────────────────────────────────────────────────
-    st.markdown("### Pipeline Codes Analysis")
+    with st.expander("Pipeline Codes Analysis", expanded=True):
+        codes = st.session_state.get(SessionStateKeys.PIPELINE_CODES, [])
 
-    codes = st.session_state.get(SessionStateKeys.PIPELINE_CODES, [])
+        if codes and isinstance(codes, list):
+            analysis = _analyse_code_entry_structure(codes)
 
-    if codes and isinstance(codes, list):
-        analysis = _analyse_code_entry_structure(codes)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                with st.container(border=True):
+                    st.metric("Total Codes", analysis.get("total_codes", 0))
+                    st.markdown('<span class="metric-spacer">&nbsp;</span>', unsafe_allow_html=True)
+            with col2:
+                with st.container(border=True):
+                    st.metric("Fields per Code", len(analysis.get("sample_keys", [])))
+                    st.markdown('<span class="metric-spacer">&nbsp;</span>', unsafe_allow_html=True)
+            with col3:
+                with st.container(border=True):
+                    if analysis.get("has_debug_fields"):
+                        st.metric(
+                            "Debug Fields",
+                            "PRESENT",
+                            delta=f"+{_format_bytes(analysis.get('debug_fields_overhead', 0))} overhead",
+                            delta_color="inverse",
+                        )
+                    else:
+                        st.metric("Debug Fields", "Not Present", delta="Memory optimised", delta_color="normal")
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Codes", analysis.get("total_codes", 0))
-        with col2:
-            st.metric("Fields per Code", len(analysis.get("sample_keys", [])))
-        with col3:
-            if analysis.get("has_original_fields"):
-                st.metric("Debug Fields", "PRESENT",
-                         delta=f"+{_format_bytes(analysis.get('original_fields_overhead', 0))} overhead",
-                         delta_color="inverse")
-            else:
-                st.metric("Debug Fields", "Not Present", delta="Memory optimised", delta_color="normal")
+            # Field size breakdown
+            if analysis.get("field_sizes"):
+                st.markdown("#### Average Size per Field (per code entry)")
 
-        # Field size breakdown
-        if analysis.get("field_sizes"):
-            st.markdown("#### Average Size per Field (per code entry)")
+                field_data = []
+                for field, avg_size in list(analysis["field_sizes"].items())[:20]:
+                    total_est = avg_size * analysis["total_codes"]
+                    field_data.append({
+                        "Field": field[:40] + "..." if len(field) > 40 else field,
+                        "Avg Size": _format_bytes(avg_size),
+                        "Est. Total": _format_bytes(total_est),
+                    })
 
-            field_data = []
-            for field, avg_size in list(analysis["field_sizes"].items())[:20]:
-                total_est = avg_size * analysis["total_codes"]
-                field_data.append({
-                    "Field": field[:40] + "..." if len(field) > 40 else field,
-                    "Avg Size": _format_bytes(avg_size),
-                    "Est. Total": _format_bytes(total_est),
-                })
+                st.dataframe(field_data, hide_index=True, width="stretch")
 
-            st.dataframe(field_data, hide_index=True, width="stretch")
-
-            if analysis.get("has_original_fields"):
-                st.warning(
-                    f"**_original_fields is adding ~{_format_bytes(analysis.get('original_fields_overhead', 0))} overhead!**\n\n"
-                    "This was populated because debug mode was ON when the file was processed. "
-                    "To reduce memory: turn OFF debug mode, then reprocess the XML file."
-                )
-    else:
-        st.info("No pipeline codes loaded")
+        else:
+            st.info("No pipeline codes loaded")
 
     st.divider()
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 4: Lookup Table Analysis
     # ─────────────────────────────────────────────────────────────
-    st.markdown("### Lookup Table Analysis")
+    with st.expander("Lookup Table Analysis", expanded=True):
+        from ....caching.lookup_manager import is_lookup_loaded, get_lookup_statistics
+        if is_lookup_loaded():
+            stats = get_lookup_statistics()
+            encrypted_bytes = st.session_state.get(SessionStateKeys.LOOKUP_ENCRYPTED_BYTES)
+            enc_size = len(encrypted_bytes) if encrypted_bytes else 0
 
-    from ....caching.lookup_manager import is_lookup_loaded, get_lookup_statistics
-    if is_lookup_loaded():
-        stats = get_lookup_statistics()
-        encrypted_bytes = st.session_state.get(SessionStateKeys.LOOKUP_ENCRYPTED_BYTES)
-        enc_size = len(encrypted_bytes) if encrypted_bytes else 0
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                with st.container(border=True):
+                    st.metric("Total Records", f"{stats.get('total_count', 0):,}")
+            with col2:
+                with st.container(border=True):
+                    st.metric("Clinical Codes", f"{stats.get('clinical_count', 0):,}")
+            with col3:
+                with st.container(border=True):
+                    st.metric("Encrypted Size", _format_bytes(enc_size))
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Records", f"{stats.get('total_count', 0):,}")
-        with col2:
-            st.metric("Clinical Codes", f"{stats.get('clinical_count', 0):,}")
-        with col3:
-            st.metric("Encrypted Size", _format_bytes(enc_size))
-
-        with st.expander("Lookup Statistics"):
-            st.write(f"**Medication Codes:** {stats.get('medication_count', 0):,}")
-            st.write(f"**Other Codes:** {stats.get('other_count', 0):,}")
-            st.write(f"**Load Source:** {stats.get('load_source', 'Unknown')}")
-            st.write(f"**EMIS Version:** {stats.get('emis_version', 'Unknown')}")
-            st.write(f"**Extract Date:** {stats.get('extract_date', 'Unknown')}")
-    else:
-        st.info("No lookup table loaded")
+            s_col1, s_col2, s_col3 = st.columns(3)
+            with s_col1:
+                with st.container(border=True):
+                    st.metric("Medication Codes", f"{stats.get('medication_count', 0):,}")
+            with s_col2:
+                with st.container(border=True):
+                    st.metric("Load Source", str(stats.get("load_source", "Unknown")))
+            with s_col3:
+                with st.container(border=True):
+                    st.metric("EMIS Version", str(stats.get("emis_version", "Unknown")))
+            st.markdown(
+                success_box(
+                    f"Extract Date: {stats.get('extract_date', 'Unknown')}",
+                    margin_bottom=ThemeSpacing.MARGIN_EXTENDED,
+                ),
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+        else:
+            st.info("No lookup table loaded")
 
     st.divider()
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 5: Streamlit Caches
     # ─────────────────────────────────────────────────────────────
-    st.markdown("### Streamlit Caches")
+    with st.expander("Streamlit Caches", expanded=True):
+        cache_stats = _get_streamlit_cache_stats()
 
-    cache_stats = _get_streamlit_cache_stats()
+        cache_data = []
+        for cache in cache_stats:
+            cache_data.append({
+                "Function": cache["name"],
+                "Module": cache["module"].split(".")[-1],
+                "Status": cache["status"],
+            })
 
-    cache_data = []
-    for cache in cache_stats:
-        cache_data.append({
-            "Function": cache["name"],
-            "Module": cache["module"].split(".")[-1],
-            "Status": cache["status"],
-        })
-
-    st.dataframe(cache_data, hide_index=True, width="stretch")
+        st.dataframe(cache_data, hide_index=True, width="stretch")
 
     st.divider()
 
     # ─────────────────────────────────────────────────────────────
     # SECTION 6: Garbage Collector Stats
     # ─────────────────────────────────────────────────────────────
-    with st.expander("Garbage Collector Details"):
+    with st.expander("Garbage Collector Details", expanded=True):
         gc_stats = _get_gc_stats()
 
-        st.markdown(f"**Objects tracked:** {gc_stats['objects_tracked']:,}")
-        st.markdown(f"**GC Thresholds:** {gc_stats['threshold']}")
+        m_col1, m_col2 = st.columns(2)
+        with m_col1:
+            with st.container(border=True):
+                st.metric("Objects tracked", f"{gc_stats['objects_tracked']:,}")
+        with m_col2:
+            with st.container(border=True):
+                st.metric("GC Thresholds", str(gc_stats["threshold"]))
 
         col1, col2 = st.columns(2)
 

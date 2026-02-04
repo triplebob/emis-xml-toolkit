@@ -24,7 +24,10 @@ from .client import (
     NHSTerminologyClient,
     TerminologyServerConfig,
     ExpansionResult,
-    ExpandedConcept
+    ExpandedConcept,
+    ErrorCategory,
+    TerminologyError,
+    ERROR_MESSAGES,
 )
 from .service import (
     ExpansionService,
@@ -53,6 +56,9 @@ __all__ = [
     "TerminologyServerConfig",
     "ExpansionResult",
     "ExpandedConcept",
+    "ErrorCategory",
+    "TerminologyError",
+    "ERROR_MESSAGES",
     # Service
     "ExpansionService",
     "ExpansionConfig",

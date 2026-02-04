@@ -5,6 +5,7 @@ import streamlit as st
 from datetime import datetime
 from pathlib import Path
 from ..system.session_state import SessionStateKeys
+from ..system.debug_output import emit_debug
 
 
 def _count_mapping(df: pd.DataFrame):
@@ -57,13 +58,13 @@ def _cleanup_export_files():
                 file_path.unlink()
                 files_deleted += 1
                 if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                    print(f"DEBUG: Deleted export file: {file_path.name}")
+                    emit_debug("clinical_exports", f"Export garbage collected: {file_path.name}")
             except Exception as e:
                 if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                    print(f"DEBUG: Failed to delete {file_path.name}: {e}")
+                    emit_debug("clinical_exports", f"Export garbage collection failed: {file_path.name} ({e})")
         
         if files_deleted > 0 and st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-            print(f"DEBUG: Bulk cleanup completed - {files_deleted} export files deleted")
+            emit_debug("clinical_exports", f"Export garbage collection completed: {files_deleted} file(s)")
 
 
 def _purge_on_session_change():
@@ -76,19 +77,12 @@ def _purge_on_session_change():
     last_file = st.session_state.get("last_file_for_export", "")
     
     if current_file != last_file:
-        if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-            print(f"DEBUG: Session file change detected: {last_file} -> {current_file}")
         _cleanup_export_files()
         st.session_state.last_file_for_export = current_file
         # Reset all export states
-        states_cleared = 0
         for key in list(st.session_state.keys()):
             if key.startswith("export_") and key.endswith("_ready"):
                 del st.session_state[key]
-                states_cleared += 1
-        
-        if states_cleared > 0 and st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-            print(f"DEBUG: Cleared {states_cleared} export states")
 
 
 def render_export_controls(
@@ -178,17 +172,15 @@ def render_export_controls(
                 try:
                     Path(stored_path).unlink()
                     if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                        print(f"DEBUG: Download completed, file deleted: {filename}")
+                        emit_debug("clinical_exports", f"Export garbage collected: {filename}")
                 except Exception as e:
                     if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                        print(f"DEBUG: Failed to delete downloaded file {filename}: {e}")
+                        emit_debug("clinical_exports", f"Export garbage collection failed: {filename} ({e})")
                 # Reset state to generate mode
                 if file_ready_key in st.session_state:
                     del st.session_state[file_ready_key]
                 if file_path_key in st.session_state:
                     del st.session_state[file_path_key]
-                if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                    print(f"DEBUG: Export state reset for {key_prefix}")
                 st.rerun()
         
         else:
@@ -210,10 +202,8 @@ def render_export_controls(
                 
                 # Remove debug-only columns before export
                 filtered_for_export = filtered.copy()
-                if '_original_fields' in filtered_for_export.columns:
-                    filtered_for_export = filtered_for_export.drop(columns=['_original_fields'])
-                    if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-                        print(f"DEBUG: Removed '_original_fields' column from export")
+                if 'debug_fields' in filtered_for_export.columns:
+                    filtered_for_export = filtered_for_export.drop(columns=['debug_fields'])
                 
                 # Generate CSV with metadata
                 csv_content = _generate_csv_with_metadata(filtered_for_export, original_filename)
@@ -224,7 +214,10 @@ def render_export_controls(
                 
                 if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
                     file_size_kb = len(csv_content.encode('utf-8')) / 1024
-                    print(f"DEBUG: Export file generated: {filename} ({file_size_kb:.1f}KB, {len(filtered_for_export)} rows)")
+                    emit_debug(
+                        "clinical_exports",
+                        f"Export created: {filename} ({file_size_kb:.1f}KB, {len(filtered_for_export)} rows)"
+                    )
                 
                 # Update state
                 st.session_state[file_ready_key] = True

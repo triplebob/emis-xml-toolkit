@@ -3,10 +3,25 @@ Medication pattern detectors (code systems and MHRA alert contexts).
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("medication_code_system")
+@register_pattern(
+    PluginMetadata(
+        id="medication_code_system",
+        version="1.0.0",
+        description="Identifies medication code systems (SCT_CONST, SCT_DRGGRP, etc.)",
+        priority=PluginPriority.HIGH,
+        tags=["medication", "code-system", "classification"],
+    )
+)
 def detect_medication_code_system(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

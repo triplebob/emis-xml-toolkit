@@ -22,7 +22,7 @@ def serialise_codes_for_ui(flattened: List[Dict[str, Any]], include_debug_fields
 
     Args:
         flattened: List of code entries from the parsing pipeline
-        include_debug_fields: If True, include _original_fields for debugging (memory intensive)
+        include_debug_fields: If True, include debug_fields for debugging (memory intensive)
     """
     rows: List[Dict[str, Any]] = []
     for entry in flattened:
@@ -147,7 +147,7 @@ def serialise_codes_for_ui(flattened: List[Dict[str, Any]], include_debug_fields
                 "_computed_mapping_found": row.get("Mapping Found"),
                 "_computed_is_emisinternal": bool(entry.get("is_emisinternal", False)),
             })
-            row["_original_fields"] = debug_fields
+            row["debug_fields"] = debug_fields
         rows.append(row)
 
     # Order rows so the most complete version of a code appears first for downstream deduplication

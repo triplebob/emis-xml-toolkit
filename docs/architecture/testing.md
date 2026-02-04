@@ -6,7 +6,7 @@ The test suite validates core functionality across parsing, metadata, exports, a
 
 **Test Location:** `tests/`
 
-**Total Tests:** 51
+**Total Tests:** 54
 
 **Framework:** Python `unittest`
 
@@ -45,7 +45,7 @@ python -m pytest tests/ -v
 | File | Tests | Purpose |
 |------|-------|---------|
 | `test_builtin_plugins.py` | 6 | Built-in plugin pattern detection |
-| `test_code_store.py` | 4 | CodeStore deduplication and reference tracking |
+| `test_code_store.py` | 5 | CodeStore deduplication, reference tracking, and debug logging |
 | `test_exports.py` | 5 | Clinical, search, and report export generation |
 | `test_flags_and_plugins.py` | 5 | Flag validation and plugin registry contracts |
 | `test_namespace_utils.py` | 6 | Namespace helper functions |
@@ -56,6 +56,7 @@ python -m pytest tests/ -v
 | `test_session_state.py` | 6 | Session state keys and cache utilities |
 | `test_snomed_translation.py` | 3 | SNOMED translation and deduplication |
 | `test_structure_parser.py` | 2 | Structure parsing and folder tree enrichment |
+| `test_value_set_resolver.py` | 3 | Value set resolver CodeStore invalidation |
 
 ---
 
@@ -64,7 +65,7 @@ python -m pytest tests/ -v
 <details>
 <summary><strong>test_builtin_plugins.py</strong> - Plugin Pattern Detection</summary>
 
-Tests all 14 built-in plugins against sample XML snippets.
+Tests all 14 built-in plugin modules (18 detectors) against sample XML snippets.
 
 **Test Class:** `TestBuiltinPlugins`
 
@@ -322,6 +323,22 @@ Tests structure parsing and folder tree enrichment.
 
 </details>
 
+<details>
+<summary><strong>test_value_set_resolver.py</strong> - CodeStore Invalidation</summary>
+
+Tests CodeStore cache invalidation based on content hash tracking.
+
+**Test Class:** `TestValueSetResolverCodeStoreInvalidation`
+
+**Coverage:**
+- `_get_code_store` returns store when source hash matches
+- `_get_code_store` invalidates store on hash mismatch
+- `_get_code_store` invalidates when source hash is missing
+
+**Mocking:** Uses `@patch("streamlit.session_state", new_callable=dict)`
+
+</details>
+
 ---
 
 ## Test Patterns and Conventions
@@ -481,4 +498,4 @@ python -m unittest tests.test_builtin_plugins tests.test_flags_and_plugins -v
 ---
 
 *Last Updated: 3rd February 2026*
-*Application Version: 3.0.0*
+*Application Version: 3.0.1*

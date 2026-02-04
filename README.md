@@ -5,6 +5,7 @@
 ![Proprietary](https://img.shields.io/badge/License-All%20Rights%20Reserved-B30000.svg)
 ![ClinXML Legal](https://img.shields.io/badge/Legal-ClinXML%20Compliant-7A1CAC.svg)
 ![EULA](https://img.shields.io/badge/EULA-ClinXML%20Toolkit-1E81B0.svg)
+![Security](https://img.shields.io/badge/Vulnerability%20Reporting-Private%20%2F%20Secure-4c1)
 
 
 ```
@@ -421,5 +422,5 @@ Users accept full responsibility for any decisions made using this toolkit.
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: [3.0.0](changelog.md) - [View Release Notes](changelog.md)*
+*Last Updated: 4th February 2026*
+*Application Version: [3.0.1](changelog.md) - [View Release Notes](changelog.md)*

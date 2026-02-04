@@ -73,6 +73,7 @@ This module defines canonical keys, grouped key sets, lifecycle clear/reset help
 | `PIPELINE_FOLDERS` | Parsed folder structure |
 | `XML_STRUCTURE_DATA` | XML structure analysis data |
 | `CODE_STORE` | CodeStore instance |
+| `CODE_STORE_SOURCE_HASH` | Content hash for CodeStore invalidation |
 
 </details>
 
@@ -326,5 +327,5 @@ else:
 
 ---
 
-*Last Updated: 2nd February 2026*
-*Application Version: 3.0.0*
+*Last Updated: 3rd February 2026*
+*Application Version: 3.0.1*

@@ -10,7 +10,7 @@ import streamlit as st
 import pandas as pd
 
 from ...theme import ThemeColours, success_box, warning_box, error_box
-from ....caching.lookup_cache import get_cached_emis_lookup
+from ....caching.lookup_cache import lookup_snomed_to_emis
 from ....system.session_state import SessionStateKeys
 from ....terminology_server import expand_single_code, get_expansion_service, lookup_concept_display
 from ....exports import (
@@ -97,23 +97,28 @@ def render_individual_code_lookup():
                         client_secret=client_secret,
                     )
                     if lookup_error:
-                        if "Resource not found" in lookup_error:
-                            message = f"⚠️ No match found for code {snomed_code.strip()}"
+                        # Determine appropriate message and box type based on error
+                        error_lower = lookup_error.lower()
+                        if any(phrase in error_lower for phrase in ["not found", "no match", "invalid"]):
+                            message = f"⚠️ Code '{snomed_code.strip()}': {lookup_error}"
+                            st.markdown(warning_box(message), unsafe_allow_html=True)
+                        elif "auth" in error_lower or "credential" in error_lower:
+                            st.markdown(error_box(f"❌ {lookup_error}"), unsafe_allow_html=True)
+                        elif "connect" in error_lower or "timeout" in error_lower:
+                            st.markdown(error_box(f"❌ {lookup_error}"), unsafe_allow_html=True)
                         else:
-                            message = f"⚠️ {lookup_error}"
-                        st.markdown(
-                            warning_box(message),
-                            unsafe_allow_html=True
-                        )
+                            st.markdown(warning_box(f"⚠️ {lookup_error}"), unsafe_allow_html=True)
                         st.session_state.pop(lookup_state_key, None)
                         return
 
+                    # Pass display_name to avoid redundant API lookup
                     result, error = expand_single_code(
                         snomed_code.strip(),
                         include_inactive=include_inactive,
                         use_cache=use_cache,
                         client_id=client_id,
                         client_secret=client_secret,
+                        source_display=display_name,
                     )
 
                     if error:
@@ -125,33 +130,31 @@ def render_individual_code_lookup():
                         return
 
                     if result and not result.error:
-                        from ....caching.lookup_manager import is_lookup_loaded
-                        snomed_code_col = st.session_state.get(SessionStateKeys.SNOMED_CODE_COL, "SNOMED Code")
-                        emis_guid_col = st.session_state.get(SessionStateKeys.EMIS_GUID_COL, "EMIS GUID")
-                        version_info = st.session_state.get(SessionStateKeys.LOOKUP_VERSION_INFO, {})
-                        emis_lookup = {}
-                        if is_lookup_loaded():
-                            cached_data = get_cached_emis_lookup(
-                                None,  # No longer needed - reads from session state
-                                snomed_code_col=snomed_code_col,
-                                emis_guid_col=emis_guid_col,
-                                version_info=version_info
-                            )
-                            if cached_data:
-                                emis_lookup = cached_data.get("lookup_mapping", {}) or {}
+                        # Collect all child SNOMED codes for batch lookup
+                        child_codes = [str(c.code).strip() for c in (result.children or [])]
 
+                        # Batch lookup SNOMED → EMIS (uses TTL cache internally)
+                        snomed_code_col = st.session_state.get(SessionStateKeys.SNOMED_CODE_COL, "SNOMED_Code")
+                        emis_guid_col = st.session_state.get(SessionStateKeys.EMIS_GUID_COL, "EMIS_GUID")
+                        emis_lookup = lookup_snomed_to_emis(
+                            child_codes,
+                            snomed_code_col=snomed_code_col,
+                            emis_guid_col=emis_guid_col,
+                        )
+
+                        # Build child data rows
                         child_data = []
-                        if result.children:
-                            for c in result.children:
-                                emis_guid = emis_lookup.get(str(c.code).strip()) or "Not in EMIS lookup table"
-                                child_data.append({
-                                    "Parent Code": snomed_code.strip(),
-                                    "Parent Display": display_name or result.source_display,
-                                    "Child Code": c.code,
-                                    "Child Display": c.display,
-                                    "EMIS GUID": emis_guid,
-                                    "Inactive": bool(c.inactive),
-                                })
+                        for c in (result.children or []):
+                            code_str = str(c.code).strip()
+                            emis_guid = emis_lookup.get(code_str) or "Not in EMIS lookup table"
+                            child_data.append({
+                                "Parent Code": snomed_code.strip(),
+                                "Parent Display": display_name or result.source_display,
+                                "Child Code": c.code,
+                                "Child Display": c.display,
+                                "EMIS GUID": emis_guid,
+                                "Inactive": bool(c.inactive),
+                            })
 
                         st.session_state[lookup_state_key] = {
                             "parent_code": snomed_code.strip(),

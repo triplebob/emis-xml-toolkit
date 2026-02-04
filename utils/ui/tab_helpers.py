@@ -619,20 +619,20 @@ def _determine_proper_container_type(code):
     Implements EMIS XML patterns from docs/emis-xml-patterns.md
     """
     # Check if this is from a report
-    source_type = code.get('source_type') or code.get('_original_fields', {}).get('source_type', '')
+    source_type = code.get('source_type') or code.get('debug_fields', {}).get('source_type', '')
     
     if source_type == 'report':
         # Report codes - use column group name or logical table
-        column_group = code.get('column_group_name') or code.get('_original_fields', {}).get('column_group_name')
+        column_group = code.get('column_group_name') or code.get('debug_fields', {}).get('column_group_name')
         if column_group:
             return f"Report Column Group: {column_group}"
         
-        logical_table = code.get('logical_table') or code.get('_original_fields', {}).get('logical_table')
+        logical_table = code.get('logical_table') or code.get('debug_fields', {}).get('logical_table')
         if logical_table:
             return f"Report Table: {logical_table}"
         
         # Check if from column group
-        if code.get('from_column_group') or code.get('_original_fields', {}).get('from_column_group'):
+        if code.get('from_column_group') or code.get('debug_fields', {}).get('from_column_group'):
             return "Report Column Filter"
         
         return "Report Column"
@@ -640,44 +640,44 @@ def _determine_proper_container_type(code):
     # Search codes - determine container type based on EMIS XML patterns
     existing_container = (code.get('source_container') or 
                          code.get('Source Container') or 
-                         code.get('_original_fields', {}).get('source_container'))
+                         code.get('debug_fields', {}).get('source_container'))
     
     if existing_container and existing_container != '':
         return existing_container
     
     # Advanced container detection based on EMIS XML patterns
     # Check for Base Criteria Group patterns
-    original_fields = code.get('_original_fields', {})
+    debug_fields = code.get('debug_fields', {})
     
     # Look for nested criteria patterns (Base Criteria Groups)
-    if ('baseCriteriaGroup' in str(original_fields) or 
+    if ('baseCriteriaGroup' in str(debug_fields) or 
         'nested' in existing_container.lower() if existing_container else False):
         return "Search Rule Base Criteria Group"
     
     # Look for linked criteria patterns  
     if ('linked' in existing_container.lower() if existing_container else False or
-        'linkedCriteria' in str(original_fields)):
+        'linkedCriteria' in str(debug_fields)):
         return "Search Rule Linked Criteria"
     
     # Look for population reference patterns
     if ('population' in existing_container.lower() if existing_container else False or
-        'populationCriterion' in str(original_fields)):
+        'populationCriterion' in str(debug_fields)):
         return "Search Rule Population Reference"
     
     # Look for test attribute patterns
     if ('test' in existing_container.lower() if existing_container else False or
-        'testAttribute' in str(original_fields) or
-        'NUMERIC_VALUE' in str(original_fields)):
+        'testAttribute' in str(debug_fields) or
+        'NUMERIC_VALUE' in str(debug_fields)):
         return "Search Rule Test Attribute"
     
     # Look for restriction patterns  
     if ('restriction' in existing_container.lower() if existing_container else False or
-        'dateRestriction' in str(original_fields) or
-        'latestRecords' in str(original_fields)):
+        'dateRestriction' in str(debug_fields) or
+        'latestRecords' in str(debug_fields)):
         return "Search Rule Restriction"
     
     # Check table type for more specific categorization
-    table_type = original_fields.get('table') or original_fields.get('logical_table', '')
+    table_type = debug_fields.get('table') or debug_fields.get('logical_table', '')
     if table_type:
         table_containers = {
             'EVENTS': 'Search Rule Clinical Events',

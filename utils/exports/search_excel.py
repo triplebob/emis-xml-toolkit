@@ -4,6 +4,7 @@ Generates comprehensive Excel workbooks with Overview, Rule Logic, and Rule Code
 """
 
 from io import BytesIO
+import re
 from typing import Dict, List, Any
 import streamlit as st
 from openpyxl import Workbook
@@ -41,6 +42,22 @@ CENTRE_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=T
 LEFT_ALIGNMENT = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 
+EMOJI_PATTERN = re.compile(
+    "["
+    "\u2600-\u26FF"  # misc symbols
+    "\u2700-\u27BF"  # dingbats
+    "\U0001F1E6-\U0001F1FF"  # flags
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport & map symbols
+    "\U0001F900-\U0001FAFF"  # supplemental symbols and pictographs
+    "\uFE0F"  # variation selector
+    "\u200D"  # zero width joiner
+    "]+",
+    flags=re.UNICODE,
+)
+
+
 def _apply_header_style(ws, row_num: int):
     """Apply header styling to a row."""
     for cell in ws[row_num]:
@@ -51,20 +68,7 @@ def _apply_header_style(ws, row_num: int):
 
 def _strip_emojis(text: str) -> str:
     """Remove emojis and other pictographs from text."""
-    import re
-    # Remove emojis and other unicode symbols
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map symbols
-        "\U0001F1E0-\U0001F1FF"  # flags
-        "\U00002702-\U000027B0"  # dingbats
-        "\U000024C2-\U0001F251"
-        "]+",
-        flags=re.UNICODE
-    )
-    return emoji_pattern.sub('', text).strip()
+    return EMOJI_PATTERN.sub("", text).strip()
 
 
 def _auto_size_columns(ws, max_width: int = 60):

@@ -5,6 +5,8 @@
 This guide explains the pattern-plugin system used by ClinXML v3:
 
 - What plugins do and how they work
+- Plugin metadata, versioning, and priority ordering
+- Runtime enable/disable and the Debug UI
 - Where they run in the parsing pipeline
 - Current plugin inventory and emitted flags
 - How to create new plugins safely
@@ -101,6 +103,61 @@ def find_first(elem: ET.Element, namespaces: Optional[Dict[str, str]], *queries:
 
 </details>
 
+<details>
+<summary><strong>PluginMetadata</strong> - Plugin registration metadata</summary>
+
+Defined in `utils/pattern_plugins/base.py`:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | `str` | (required) | Unique plugin identifier |
+| `version` | `str` | `"1.0.0"` | Semantic version string |
+| `description` | `str` | `""` | Human-readable description |
+| `author` | `str` | `""` | Plugin author |
+| `priority` | `int` | `100` | Execution priority (lower runs first) |
+| `min_app_version` | `str` | `"3.0.1"` | Minimum ClinXML version required |
+| `tags` | `List[str]` | `[]` | Categorisation tags |
+
+```python
+@dataclass
+class PluginMetadata:
+    id: str
+    version: str = "1.0.0"
+    description: str = ""
+    author: str = ""
+    priority: int = PluginPriority.DEFAULT
+    min_app_version: str = "3.0.1"
+    tags: List[str] = field(default_factory=list)
+```
+
+</details>
+
+<details>
+<summary><strong>PluginPriority</strong> - Standard priority tiers</summary>
+
+Defined in `utils/pattern_plugins/base.py`:
+
+| Constant | Value | Use Case |
+|----------|-------|----------|
+| `CRITICAL` | 10 | Must run first (e.g., classification affecting others) |
+| `HIGH` | 30 | Core structural patterns |
+| `NORMAL` | 50 | Standard pattern detection |
+| `DEFAULT` | 100 | Unspecified priority (backwards compatibility) |
+| `LOW` | 150 | Supplementary patterns |
+
+```python
+class PluginPriority:
+    CRITICAL = 10
+    HIGH = 30
+    NORMAL = 50
+    DEFAULT = 100
+    LOW = 150
+```
+
+**Note:** Lower values execute first. Plugins with the same priority are sorted alphabetically by ID.
+
+</details>
+
 ### Detector Signature
 
 A detector is `Callable[[PatternContext], Optional[PatternResult]]`.
@@ -111,16 +168,23 @@ Return `None` when no match is found.
 
 ## Registration and Loading
 
-**Decorator:** `@register_pattern("pattern_id")`
+**Decorator:** `@register_pattern(id_or_metadata)`
+
+The decorator accepts either:
+- A string ID (backwards compatible, uses default metadata)
+- A `PluginMetadata` instance (full control over version, priority, description, etc.)
 
 **Registry:** Global `pattern_registry` in `utils/pattern_plugins/registry.py`
 
 **Behaviour:**
 - Duplicate pattern IDs raise `ValueError`
+- Malformed `min_app_version` raises `ValueError` (fail closed)
+- Incompatible versions (app version < min_app_version) raise `ValueError`
 - `load_all_modules("utils.pattern_plugins")` imports all plugin modules once per process
+- Plugins execute in priority order (lower values first)
 
 <details>
-<summary><strong>Example: Plugin Registration</strong></summary>
+<summary><strong>Example: Simple Registration (backwards compatible)</strong></summary>
 
 ```python
 from .registry import register_pattern
@@ -128,13 +192,10 @@ from .base import PatternContext, PatternResult, find_first, tag_local
 
 @register_pattern("my_pattern_id")
 def detect_my_pattern(ctx: PatternContext):
-    # Guard: only process criterion elements
     if tag_local(ctx.element) != "criterion":
         return None
 
     ns = ctx.namespaces
-
-    # Match logic using find_first (handles namespace fallback safely)
     hit = find_first(ctx.element, ns, ".//targetTag", ".//emis:targetTag")
     if hit is None:
         return None
@@ -142,9 +203,49 @@ def detect_my_pattern(ctx: PatternContext):
     return PatternResult(
         id="my_pattern_id",
         description="Found target pattern",
-        flags={
-            "my_flag": True,
-        },
+        flags={"my_flag": True},
+        confidence="medium",
+    )
+```
+
+</details>
+
+<details>
+<summary><strong>Example: Full Metadata Registration (recommended)</strong></summary>
+
+```python
+from .registry import register_pattern
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
+
+@register_pattern(
+    PluginMetadata(
+        id="my_pattern_id",
+        version="1.0.0",
+        description="Detects target patterns in criterion elements",
+        priority=PluginPriority.NORMAL,
+        tags=["example", "target"],
+    )
+)
+def detect_my_pattern(ctx: PatternContext):
+    if tag_local(ctx.element) != "criterion":
+        return None
+
+    ns = ctx.namespaces
+    hit = find_first(ctx.element, ns, ".//targetTag", ".//emis:targetTag")
+    if hit is None:
+        return None
+
+    return PatternResult(
+        id="my_pattern_id",
+        description="Found target pattern",
+        flags={"my_flag": True},
         confidence="medium",
     )
 ```
@@ -172,159 +273,229 @@ Plugins run in three parser stages:
 
 ---
 
+## Runtime Enable/Disable
+
+Plugins can be toggled at runtime without restarting the application.
+
+**Registry methods:**
+- `pattern_registry.enable_plugin(plugin_id)` - Enable a plugin
+- `pattern_registry.disable_plugin(plugin_id)` - Disable a plugin
+- `pattern_registry.get_plugin_status()` - Get all plugin states
+
+**Persistence:** Plugin states are persisted in Streamlit session state, surviving page reruns.
+
+**Effect:** Disabled plugins are skipped during `run_all()` execution but remain registered.
+
+---
+
+## Debug UI: Plugin Manager
+
+When debug mode is enabled, the **Debug** tab provides a **Plugins** subtab with:
+
+- Summary metrics (total/enabled/disabled counts)
+- Plugin list sorted by execution priority
+- Colour-coded priority labels (CRITICAL=red, HIGH=amber, NORMAL=green, DEFAULT=grey, LOW=blue)
+- Enable/disable toggles per plugin
+- "Reset All to Defaults" button
+- Execution order preview
+
+**Location:** `utils/ui/tabs/debug/plugins_tab.py`
+
+**Access:** Enable debug mode in the sidebar, then navigate to **Debug → Plugins**
+
+---
+
 ## Current Plugin Inventory
 
-<details>
-<summary><strong>column_filters.py</strong></summary>
+Plugins are listed by execution priority (lower values run first).
 
-| Property | Value |
-|----------|-------|
-| Pattern ID | `column_filters` |
-| Purpose | Parse `columnValue` filter blocks, including range/single-value structures |
-| Primary flags | `column_filters` |
-
-</details>
+### HIGH Priority (30)
 
 <details>
-<summary><strong>demographics.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern IDs | `demographics_lsoa`, `demographics_geo` |
-| Purpose | Detect LSOA/geographic demographics criteria |
-| Primary flags | `is_patient_demographics`, `demographics_type`, `demographics_confidence` |
-
-</details>
-
-<details>
-<summary><strong>emisinternal.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern ID | `emisinternal_classification` |
-| Purpose | Extract EMISINTERNAL filter value sets with context |
-| Primary flags | `has_emisinternal_filters`, `emisinternal_values`, `emisinternal_entries`, `emisinternal_all_values` |
-
-</details>
-
-<details>
-<summary><strong>enterprise.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern IDs | `enterprise_metadata`, `qof_contract` |
-| Purpose | Detect enterprise and contract/QOF metadata |
-| Primary flags | `enterprise_reporting_level`, `version_independent_guid`, `organisation_associations`, `qmas_indicator`, `contract_information_needed`, `contract_target` |
-
-</details>
-
-<details>
-<summary><strong>logic.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern ID | `logic_negation_and_actions` |
-| Purpose | Detect negation/operators/actions in criteria |
-| Primary flags | `negation`, `member_operator`, `action_if_true`, `action_if_false` |
-
-</details>
-
-<details>
-<summary><strong>medication.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern ID | `medication_code_system` |
-| Purpose | Identify medication code systems and subtype label |
-| Primary flags | `is_medication_code`, `code_system`, `medication_type_flag` |
-
-</details>
-
-<details>
-<summary><strong>parameters.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern ID | `parameters` |
-| Purpose | Detect parameter usage and scope |
-| Primary flags | `has_parameter`, `parameter_names`, `has_global_parameters`, `has_local_parameters` |
-
-</details>
-
-<details>
-<summary><strong>population.py</strong></summary>
-
-| Property | Value |
-|----------|-------|
-| Pattern ID | `population_references` |
-| Purpose | Collect `populationCriterion` report GUID references |
-| Primary flags | `population_reference_guid` |
-
-</details>
-
-<details>
-<summary><strong>refsets.py</strong></summary>
+<summary><strong>refsets.py</strong> — refset_detection</summary>
 
 | Property | Value |
 |----------|-------|
 | Pattern ID | `refset_detection` |
-| Purpose | Detect refset/pseudo-refset structures |
+| Priority | HIGH (30) |
+| Description | Detects SNOMED refsets and pseudo-refsets in value sets |
+| Tags | `refset`, `snomed`, `classification` |
 | Primary flags | `is_refset`, `is_pseudo_refset`, `is_pseudo_member` |
 
 </details>
 
 <details>
-<summary><strong>relationships.py</strong></summary>
+<summary><strong>medication.py</strong> — medication_code_system</summary>
 
 | Property | Value |
 |----------|-------|
-| Pattern ID | `linked_relationship` |
-| Purpose | Detect linked-criteria relationship type and columns |
-| Primary flags | `relationship_type`, `parent_column`, `child_column` |
+| Pattern ID | `medication_code_system` |
+| Priority | HIGH (30) |
+| Description | Identifies medication code systems (SCT_CONST, SCT_DRGGRP, etc.) |
+| Tags | `medication`, `code-system`, `classification` |
+| Primary flags | `is_medication_code`, `code_system`, `medication_type_flag` |
 
 </details>
 
 <details>
-<summary><strong>restrictions.py</strong></summary>
+<summary><strong>emisinternal.py</strong> — emisinternal_classification</summary>
 
 | Property | Value |
 |----------|-------|
-| Pattern IDs | `restriction_latest_earliest`, `restriction_test_attribute` |
-| Purpose | Detect restriction blocks (latest/earliest and test-attribute) |
-| Primary flags | `has_restriction`, `restriction_type`, `record_count`, `ordering_direction`, `ordering_column`, `has_test_conditions`, `test_condition_column`, `test_condition_operator` |
+| Pattern ID | `emisinternal_classification` |
+| Priority | HIGH (30) |
+| Description | Detects EMISINTERNAL code system filters and classifications |
+| Tags | `emisinternal`, `classification`, `filtering` |
+| Primary flags | `has_emisinternal_filters`, `emisinternal_values`, `emisinternal_entries`, `emisinternal_all_values` |
 
 </details>
 
+### Priority 40
+
 <details>
-<summary><strong>source_containers.py</strong></summary>
+<summary><strong>value_sets.py</strong> — value_set_properties, value_set_description_handling</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern IDs | `value_set_properties`, `value_set_description_handling` |
+| Priority | 40 |
+| Description | Detects value set properties and description handling patterns |
+| Tags | `value-set`, `library`, `inactive`, `description` |
+| Primary flags | `is_library_item`, `inactive`, `has_explicit_valueset_description`, `use_guid_as_valueset_description`, `has_individual_code_display_names` |
+
+</details>
+
+### NORMAL Priority (50)
+
+<details>
+<summary><strong>source_containers.py</strong> — container_heuristics</summary>
 
 | Property | Value |
 |----------|-------|
 | Pattern ID | `container_heuristics` |
-| Purpose | Infer `container_type` from criterion/report structure |
+| Priority | NORMAL (50) |
+| Description | Assigns container type based on criterion structure patterns |
+| Tags | `container`, `structure` |
 | Primary flags | `container_type` |
 
 </details>
 
 <details>
-<summary><strong>temporal.py</strong></summary>
+<summary><strong>restrictions.py</strong> — restriction_latest_earliest, restriction_test_attribute</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern IDs | `restriction_latest_earliest`, `restriction_test_attribute` |
+| Priority | NORMAL (50) |
+| Description | Detects latest/earliest and test attribute restrictions |
+| Tags | `restriction`, `ordering`, `test-attribute` |
+| Primary flags | `has_restriction`, `restriction_type`, `record_count`, `ordering_direction`, `ordering_column`, `has_test_conditions`, `test_condition_column`, `test_condition_operator` |
+
+</details>
+
+<details>
+<summary><strong>temporal.py</strong> — temporal_single_value, temporal_range</summary>
 
 | Property | Value |
 |----------|-------|
 | Pattern IDs | `temporal_single_value`, `temporal_range` |
-| Purpose | Detect temporal filters in single-value and range forms |
+| Priority | NORMAL (50) |
+| Description | Detects temporal filters (single-value and range-based) |
+| Tags | `temporal`, `date-filter`, `range` |
 | Primary flags | `has_temporal_filter`, `temporal_variable_value`, `temporal_unit`, `temporal_relation`, `relative_to`, `range_from_*`, `range_to_*` |
 
 </details>
 
 <details>
-<summary><strong>value_sets.py</strong></summary>
+<summary><strong>demographics.py</strong> — demographics_lsoa</summary>
 
 | Property | Value |
 |----------|-------|
-| Pattern IDs | `value_set_properties`, `value_set_description_handling` |
-| Purpose | Detect library/inactive and description-shape patterns |
-| Primary flags | `is_library_item`, `inactive`, `has_explicit_valueset_description`, `use_guid_as_valueset_description`, `has_individual_code_display_names` |
+| Pattern ID | `demographics_lsoa` |
+| Priority | NORMAL (50) |
+| Description | Detects LSOA and geographic demographics columns |
+| Tags | `demographics`, `lsoa`, `geographic` |
+| Primary flags | `is_patient_demographics`, `demographics_type`, `demographics_confidence` |
+
+</details>
+
+<details>
+<summary><strong>relationships.py</strong> — linked_relationship</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern ID | `linked_relationship` |
+| Priority | NORMAL (50) |
+| Description | Detects linked criteria relationships between columns |
+| Tags | `relationship`, `linked-criteria` |
+| Primary flags | `relationship_type`, `parent_column`, `child_column` |
+
+</details>
+
+<details>
+<summary><strong>logic.py</strong> — logic_negation_and_actions</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern ID | `logic_negation_and_actions` |
+| Priority | NORMAL (50) |
+| Description | Detects negation, member operators, and action conditions |
+| Tags | `logic`, `negation`, `actions` |
+| Primary flags | `negation`, `member_operator`, `action_if_true`, `action_if_false` |
+
+</details>
+
+<details>
+<summary><strong>population.py</strong> — population_references</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern ID | `population_references` |
+| Priority | NORMAL (50) |
+| Description | Detects population criterion references by GUID |
+| Tags | `population`, `reference` |
+| Primary flags | `population_reference_guid` |
+
+</details>
+
+<details>
+<summary><strong>parameters.py</strong> — parameters</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern ID | `parameters` |
+| Priority | NORMAL (50) |
+| Description | Detects parameter usage (global and local) in criteria |
+| Tags | `parameter`, `variable` |
+| Primary flags | `has_parameter`, `parameter_names`, `has_global_parameters`, `has_local_parameters` |
+
+</details>
+
+### LOW Priority (150)
+
+<details>
+<summary><strong>enterprise.py</strong> — enterprise_metadata, qof_contract</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern IDs | `enterprise_metadata`, `qof_contract` |
+| Priority | LOW (150) |
+| Description | Detects enterprise reporting and QOF/contract metadata |
+| Tags | `enterprise`, `reporting`, `organisation`, `qof`, `contract`, `qmas` |
+| Primary flags | `enterprise_reporting_level`, `version_independent_guid`, `organisation_associations`, `qmas_indicator`, `contract_information_needed`, `contract_target` |
+
+</details>
+
+<details>
+<summary><strong>column_filters.py</strong> — column_filters</summary>
+
+| Property | Value |
+|----------|-------|
+| Pattern ID | `column_filters` |
+| Priority | LOW (150) |
+| Description | Extracts column filters with range/value set metadata |
+| Tags | `column`, `filter`, `range` |
+| Primary flags | `column_filters` |
 
 </details>
 
@@ -346,7 +517,7 @@ Plugin flags pass through `validate_flags(...)` in `map_element_flags(...)`.
 ## Creating a New Plugin
 
 <details>
-<summary><strong>Minimal Template</strong></summary>
+<summary><strong>Recommended Template (with metadata)</strong></summary>
 
 ```python
 """
@@ -356,10 +527,25 @@ Detects [describe what it detects] in EMIS XML.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("my_new_pattern")
+@register_pattern(
+    PluginMetadata(
+        id="my_new_pattern",
+        version="1.0.0",
+        description="Detects [what] in criterion elements",
+        priority=PluginPriority.NORMAL,
+        tags=["category", "subcategory"],
+    )
+)
 def detect_my_new_pattern(ctx: PatternContext):
     """Detect my new pattern in XML elements."""
     # Guard: only process criterion elements
@@ -393,12 +579,28 @@ def detect_my_new_pattern(ctx: PatternContext):
 <summary><strong>Implementation Checklist</strong></summary>
 
 1. **Add the plugin file** under `utils/pattern_plugins/`
-2. **Register detector(s)** with unique IDs using `@register_pattern`
+2. **Register detector(s)** with `PluginMetadata` including:
+   - Unique ID
+   - Meaningful description (shown in Debug UI)
+   - Appropriate priority tier
+   - Relevant tags
 3. **Add any new flag keys** to `FLAG_DEFINITIONS` in `utils/metadata/flag_registry.py`
 4. **Ensure value types** satisfy validators
 5. **Confirm parser-stage behaviour** where the plugin should apply
 6. **Add tests** for positive and negative cases
 7. **Update docs** (`flags.md` and this file)
+
+</details>
+
+<details>
+<summary><strong>Priority Selection Guide</strong></summary>
+
+| Choose | When |
+|--------|------|
+| `CRITICAL` (10) | Plugin must run before all others (rare) |
+| `HIGH` (30) | Affects classification used by other plugins |
+| `NORMAL` (50) | Standard pattern detection (most plugins) |
+| `LOW` (150) | Supplementary metadata, can run last |
 
 </details>
 
@@ -421,6 +623,8 @@ def detect_my_new_pattern(ctx: PatternContext):
 - Plugin match and non-match cases
 - Validation pass/fail behaviour for emitted flags
 - Downstream usage (at least one consumer path)
+- Metadata registration (if using `PluginMetadata`)
+- Priority ordering (if priority affects behaviour)
 
 **Useful existing parser tests:**
 
@@ -432,6 +636,7 @@ def detect_my_new_pattern(ctx: PatternContext):
 | `tests/test_builtin_plugins.py` | Built-in plugin regression tests |
 | `tests/test_flags_and_plugins.py` | Registry and validation contracts |
 | `tests/test_plugin_harness.py` | Standalone plugin smoke tests |
+| `tests/test_plugin_registry_versioning.py` | Metadata, priority, versioning, enable/disable |
 | `tests/test_namespace_utils.py` | Namespace helper behaviour |
 | `tests/test_exports.py` | Export path integration checks |
 | `tests/test_snomed_translation.py` | SNOMED translation behaviour |
@@ -447,6 +652,9 @@ def detect_my_new_pattern(ctx: PatternContext):
 | Using `elem.find(...) or elem.find(...)` pattern | ElementTree deprecation warnings; use `find_first` instead |
 | Adding expensive traversal logic without guards | Performance degradation |
 | Duplicating parser-owned logic | Inconsistent results |
+| Malformed `min_app_version` (e.g., "vX.Y.Z") | Plugin registration fails |
+| Missing description in metadata | "No description" shown in Debug UI |
+| Wrong priority causing order issues | Dependent patterns may not see expected state |
 
 ---
 
@@ -459,5 +667,5 @@ def detect_my_new_pattern(ctx: PatternContext):
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.0*
+*Last Updated: 4th February 2026*
+*Application Version: 3.1.0*

@@ -9,6 +9,12 @@ from .terminology_child_exports import (
     build_child_code_export_filename,
     build_child_code_export_csv,
 )
+from .explorer_exports import (
+    build_explorer_export_filenames,
+    build_explorer_tree_text,
+    build_explorer_tree_svg,
+    render_explorer_tree_export_controls,
+)
 from .ui_export_manager import UIExportManager
 
 __all__ = [
@@ -20,5 +26,9 @@ __all__ = [
     "get_child_code_export_preview",
     "build_child_code_export_filename",
     "build_child_code_export_csv",
+    "build_explorer_export_filenames",
+    "build_explorer_tree_text",
+    "build_explorer_tree_svg",
+    "render_explorer_tree_export_controls",
     "UIExportManager",
 ]

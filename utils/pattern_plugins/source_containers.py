@@ -6,11 +6,19 @@ container rules can be extended modularly.
 """
 
 import xml.etree.ElementTree as ET
+from typing import Dict, List
+
 from .registry import register_pattern
-from .base import PatternResult, PatternContext, find_first
+from .base import (
+    PatternResult,
+    PatternContext,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+)
 
 
-def _has_child(elem: ET.Element, names: list[str], namespaces: dict[str, str]) -> bool:
+def _has_child(elem: ET.Element, names: List[str], namespaces: Dict[str, str]) -> bool:
     for name in names:
         if elem.find(name, namespaces) is not None or elem.find(f"emis:{name}", namespaces) is not None:
             return True
@@ -22,7 +30,15 @@ def _tag_lower(elem: ET.Element) -> str:
     return elem.tag.split("}")[-1].lower()
 
 
-@register_pattern("container_heuristics")
+@register_pattern(
+    PluginMetadata(
+        id="container_heuristics",
+        version="1.0.0",
+        description="Assigns container type based on criterion structure patterns",
+        priority=PluginPriority.NORMAL,
+        tags=["container", "structure"],
+    )
+)
 def container_heuristics(ctx: PatternContext):
     """
     Assign container_type flag based on criterion/report patterns.

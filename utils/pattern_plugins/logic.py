@@ -3,10 +3,25 @@ Logic/negation pattern detectors.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("logic_negation_and_actions")
+@register_pattern(
+    PluginMetadata(
+        id="logic_negation_and_actions",
+        version="1.0.0",
+        description="Detects negation, member operators, and action conditions",
+        priority=PluginPriority.NORMAL,
+        tags=["logic", "negation", "actions"],
+    )
+)
 def detect_logic_and_actions(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

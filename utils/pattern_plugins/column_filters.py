@@ -6,7 +6,13 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+)
 
 
 def _text(node: ET.Element, tag: str, namespaces: Dict[str, str]) -> str:
@@ -153,7 +159,15 @@ def _parse_value_sets(cv: ET.Element, namespaces: Dict[str, str]) -> List[Dict[s
     return value_sets
 
 
-@register_pattern("column_filters")
+@register_pattern(
+    PluginMetadata(
+        id="column_filters",
+        version="1.0.0",
+        description="Extracts column filters with range/value set metadata",
+        priority=PluginPriority.LOW,
+        tags=["column", "filter", "range"],
+    )
+)
 def detect_column_filters(ctx: PatternContext):
     """
     Extract column filters from columnValue/filterAttribute blocks.

@@ -3,10 +3,25 @@ Refset and pseudo-refset pattern detectors.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("refset_detection")
+@register_pattern(
+    PluginMetadata(
+        id="refset_detection",
+        version="1.0.0",
+        description="Detects SNOMED refsets and pseudo-refsets in value sets",
+        priority=PluginPriority.HIGH,
+        tags=["refset", "snomed", "classification"],
+    )
+)
 def detect_refset(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

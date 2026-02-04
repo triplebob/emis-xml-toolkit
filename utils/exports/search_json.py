@@ -4,6 +4,7 @@ Generates comprehensive JSON representations of search structures.
 """
 
 import json
+import re
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import streamlit as st
@@ -26,21 +27,25 @@ from ..metadata.value_set_resolver import resolve_value_sets
 from ..system.session_state import SessionStateKeys
 
 
+EMOJI_PATTERN = re.compile(
+    "["
+    "\u2600-\u26FF"  # misc symbols
+    "\u2700-\u27BF"  # dingbats
+    "\U0001F1E6-\U0001F1FF"  # flags
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport & map symbols
+    "\U0001F900-\U0001FAFF"  # supplemental symbols and pictographs
+    "\uFE0F"  # variation selector
+    "\u200D"  # zero width joiner
+    "]+",
+    flags=re.UNICODE,
+)
+
+
 def _strip_emojis(text: str) -> str:
     """Remove emojis and other pictographs from text."""
-    import re
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map symbols
-        "\U0001F1E0-\U0001F1FF"  # flags
-        "\U00002702-\U000027B0"  # dingbats
-        "\U000024C2-\U0001F251"
-        "]+",
-        flags=re.UNICODE
-    )
-    return emoji_pattern.sub('', text).strip()
+    return EMOJI_PATTERN.sub("", text).strip()
 
 
 def _get_version() -> str:

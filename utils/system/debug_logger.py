@@ -33,19 +33,24 @@ class EMISDebugLogger:
         self.enable_debug = enable_debug
         self.logger = logging.getLogger('emis_translator')
         
-        if self.enable_debug and not self.logger.handlers:
+        if self.enable_debug:
             # Configure logger
             self.logger.setLevel(logging.DEBUG)
+            self.logger.propagate = False
             
             # Create formatter
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                '[%(levelname)s][%(name)s] %(message)s'
             )
             
+            # Keep a single managed handler so formatting stays consistent.
+            self.logger.handlers.clear()
+
             # Create console handler
-            console_handler = logging.StreamHandler()
+            console_handler = logging.StreamHandler(sys.stderr)
             console_handler.setLevel(logging.DEBUG)
             console_handler.setFormatter(formatter)
+            console_handler._clinxml_debug_handler = True  # type: ignore[attr-defined]
             
             self.logger.addHandler(console_handler)
     
@@ -583,14 +588,16 @@ def add_performance_logging(func):
         logger = get_debug_logger()
         
         start_time = datetime.now()
-        logger.logger.debug(f"Starting {func.__name__}")
+        if logger.enable_debug:
+            logger.logger.debug(f"Starting {func.__name__}")
         
         try:
             result = func(*args, **kwargs)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            logger.logger.debug(f"Completed {func.__name__} in {duration:.3f}s")
+            if logger.enable_debug:
+                logger.logger.debug(f"Completed {func.__name__} in {duration:.3f}s")
             return result
             
         except Exception as e:

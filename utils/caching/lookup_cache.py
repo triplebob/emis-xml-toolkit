@@ -205,6 +205,162 @@ def get_parquet_metadata(encrypted_bytes: bytes) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# SNOMED → EMIS GUID lookup with TTL cache (for terminology server)
+# ---------------------------------------------------------------------------
+
+# In-memory cache for SNOMED → EMIS lookups with TTL
+_snomed_emis_cache: Dict[str, Dict[str, Any]] = {}
+_snomed_cache_expiry: Dict[str, float] = {}
+_SNOMED_CACHE_TTL_SECONDS = 300  # 5 minute TTL
+_SNOMED_CACHE_MAX_ENTRIES = 10000  # Max cached entries before GC
+
+
+def _gc_snomed_cache():
+    """Remove expired entries and enforce max size."""
+    import time
+    now = time.time()
+
+    # Remove expired
+    expired = [k for k, exp in _snomed_cache_expiry.items() if now > exp]
+    for k in expired:
+        _snomed_emis_cache.pop(k, None)
+        _snomed_cache_expiry.pop(k, None)
+
+    # Enforce max size (remove oldest)
+    if len(_snomed_emis_cache) > _SNOMED_CACHE_MAX_ENTRIES:
+        sorted_keys = sorted(_snomed_cache_expiry.keys(), key=lambda k: _snomed_cache_expiry[k])
+        to_remove = sorted_keys[:len(sorted_keys) // 2]  # Remove oldest half
+        for k in to_remove:
+            _snomed_emis_cache.pop(k, None)
+            _snomed_cache_expiry.pop(k, None)
+
+
+def lookup_snomed_to_emis(
+    snomed_codes: List[str],
+    snomed_code_col: str = "SNOMED_Code",
+    emis_guid_col: str = "EMIS_GUID",
+) -> Dict[str, str]:
+    """
+    Lookup SNOMED codes → EMIS GUIDs using filtered parquet query.
+
+    Uses TTL cache to avoid repeated decryption/filtering.
+    Only queries parquet for cache misses.
+
+    Args:
+        snomed_codes: List of SNOMED codes to lookup
+        snomed_code_col: Name of SNOMED code column
+        emis_guid_col: Name of EMIS GUID column
+
+    Returns:
+        Dict mapping SNOMED code → EMIS GUID (only matched codes included)
+    """
+    import time
+    import pyarrow as pa
+
+    if not snomed_codes:
+        return {}
+
+    # Normalise input codes (handle float/scientific notation)
+    codes_to_lookup = set()
+    for code in snomed_codes:
+        if code is None:
+            continue
+        # Handle float (avoids scientific notation for large codes)
+        if isinstance(code, float):
+            code_str = str(int(code))
+        else:
+            code_str = str(code).strip()
+            # Handle scientific notation strings
+            if 'e' in code_str.lower():
+                try:
+                    code_str = str(int(float(code_str)))
+                except (ValueError, OverflowError):
+                    continue
+            # Remove .0 suffix if present
+            elif code_str.endswith(".0"):
+                code_str = code_str[:-2]
+        if code_str and code_str != "nan":
+            codes_to_lookup.add(code_str)
+
+    if not codes_to_lookup:
+        return {}
+
+    # Check cache first
+    now = time.time()
+    results = {}
+    cache_misses = set()
+
+    for code in codes_to_lookup:
+        if code in _snomed_emis_cache and _snomed_cache_expiry.get(code, 0) > now:
+            results[code] = _snomed_emis_cache[code]
+        else:
+            cache_misses.add(code)
+
+    if not cache_misses:
+        return results
+
+    # Query parquet for cache misses
+    from ..system.session_state import SessionStateKeys
+    encrypted_bytes = st.session_state.get(SessionStateKeys.LOOKUP_ENCRYPTED_BYTES)
+    if encrypted_bytes is None:
+        return results
+
+    try:
+        parquet_bytes = _decrypt_bytes(encrypted_bytes)
+
+        # Read parquet with PyArrow
+        table = pq.read_table(io.BytesIO(parquet_bytes))
+
+        # Get column arrays (return empty if columns missing)
+        if snomed_code_col not in table.column_names or emis_guid_col not in table.column_names:
+            return results
+
+        snomed_col = table.column(snomed_code_col)
+        emis_col = table.column(emis_guid_col)
+
+        # Build lookup from parquet (vectorised, no iterrows)
+        snomed_values = snomed_col.to_pylist()
+        emis_values = emis_col.to_pylist()
+
+        # Create mapping for requested codes only
+        cache_time = now + _SNOMED_CACHE_TTL_SECONDS
+
+        for snomed_raw, emis_guid in zip(snomed_values, emis_values):
+            # Handle float/scientific notation for large SNOMED codes
+            if snomed_raw is None:
+                snomed_str = ""
+            elif isinstance(snomed_raw, float):
+                # Convert float to int string (avoids scientific notation)
+                snomed_str = str(int(snomed_raw))
+            else:
+                snomed_str = str(snomed_raw).strip()
+                if snomed_str.endswith(".0"):
+                    snomed_str = snomed_str[:-2]
+
+            if snomed_str in cache_misses:
+                emis_str = str(emis_guid).strip() if emis_guid else ""
+                if emis_str and emis_str != "nan":
+                    results[snomed_str] = emis_str
+                    _snomed_emis_cache[snomed_str] = emis_str
+                    _snomed_cache_expiry[snomed_str] = cache_time
+
+        # Periodic GC
+        if len(_snomed_emis_cache) > _SNOMED_CACHE_MAX_ENTRIES // 2:
+            _gc_snomed_cache()
+
+    except Exception as e:
+        print(f"[ERROR] SNOMED lookup failed: {e}")
+
+    return results
+
+
+def clear_snomed_emis_cache():
+    """Clear the SNOMED → EMIS lookup cache."""
+    _snomed_emis_cache.clear()
+    _snomed_cache_expiry.clear()
+
+
+# ---------------------------------------------------------------------------
 # Cache generation for GitHub deployment
 # ---------------------------------------------------------------------------
 

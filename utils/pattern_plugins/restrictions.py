@@ -3,10 +3,25 @@ Restriction pattern detectors for latest/earliest/test-attribute patterns.
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("restriction_latest_earliest")
+@register_pattern(
+    PluginMetadata(
+        id="restriction_latest_earliest",
+        version="1.0.0",
+        description="Detects latest/earliest record restrictions with ordering",
+        priority=PluginPriority.NORMAL,
+        tags=["restriction", "ordering"],
+    )
+)
 def detect_latest_earliest(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None
@@ -42,7 +57,15 @@ def detect_latest_earliest(ctx: PatternContext):
     )
 
 
-@register_pattern("restriction_test_attribute")
+@register_pattern(
+    PluginMetadata(
+        id="restriction_test_attribute",
+        version="1.0.0",
+        description="Detects test attribute restrictions with column conditions",
+        priority=PluginPriority.NORMAL,
+        tags=["restriction", "test-attribute"],
+    )
+)
 def detect_test_attribute(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

@@ -7,6 +7,7 @@ Defines canonical session state keys plus cleanup and SNOMED cache helpers.
 import gc
 from typing import Dict, Optional
 import streamlit as st
+from .debug_output import emit_debug
 
 
 class SessionStateKeys:
@@ -91,6 +92,7 @@ class SessionStateKeys:
     PIPELINE_FOLDERS = "pipeline_folders"
     XML_STRUCTURE_DATA = "xml_structure_data"
     CODE_STORE = "code_store"
+    CODE_STORE_SOURCE_HASH = "code_store_source_hash"
 
     # Error handling
     PENDING_ERRORS = "pending_errors"
@@ -121,6 +123,7 @@ class SessionStateGroups:
         SessionStateKeys.PIPELINE_FOLDERS,
         SessionStateKeys.XML_STRUCTURE_DATA,
         SessionStateKeys.CODE_STORE,
+        SessionStateKeys.CODE_STORE_SOURCE_HASH,
         "unified_clinical_data_cache",
         "expansion_results_data",
     ]
@@ -326,6 +329,7 @@ def clear_for_new_xml_selection() -> None:
         SessionStateKeys.PIPELINE_CODES,
         SessionStateKeys.PIPELINE_ENTITIES,
         SessionStateKeys.CODE_STORE,
+        SessionStateKeys.CODE_STORE_SOURCE_HASH,
         SessionStateKeys.UPLOADED_FILE,
         SessionStateKeys.LOOKUP_ENCRYPTED_BYTES,
         SessionStateKeys.EMIS_GUID_COL,
@@ -358,6 +362,7 @@ def clear_for_new_xml() -> None:
         SessionStateKeys.PIPELINE_FOLDERS,
         SessionStateKeys.XML_STRUCTURE_DATA,
         SessionStateKeys.CODE_STORE,
+        SessionStateKeys.CODE_STORE_SOURCE_HASH,
         "unified_clinical_data_cache",
         SessionStateKeys.LOOKUP_ENCRYPTED_BYTES,
         SessionStateKeys.EMIS_GUID_COL,
@@ -431,8 +436,9 @@ def is_snomed_cache_valid() -> bool:
         is_valid = age_minutes < ttl_minutes
 
         if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-            print(
-                f"[SNOMED CACHE] Age: {age_minutes:.1f}min, TTL: {ttl_minutes}min, Valid: {is_valid}"
+            emit_debug(
+                "snomed_cache",
+                f"Age: {age_minutes:.1f}min, TTL: {ttl_minutes}min, Valid: {is_valid}"
             )
 
         return is_valid
@@ -448,7 +454,7 @@ def get_cached_snomed_mappings() -> Dict[str, str]:
     cache = st.session_state.get(SessionStateKeys.MATCHED_EMIS_SNOMED_CACHE, {})
 
     if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-        print(f"[SNOMED CACHE] Retrieved {len(cache)} cached mappings")
+        emit_debug("snomed_cache", f"Retrieved {len(cache)} cached mappings")
 
     return cache
 
@@ -464,8 +470,9 @@ def update_snomed_cache(new_mappings: Dict[str, str]) -> None:
     st.session_state[SessionStateKeys.MATCHED_EMIS_SNOMED_TIMESTAMP] = datetime.now().isoformat()
 
     if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-        print(
-            f"[SNOMED CACHE] Updated with {len(new_mappings)} additional mappings, total: {len(existing_cache)}"
+        emit_debug(
+            "snomed_cache",
+            f"Updated with {len(new_mappings)} additional mappings, total: {len(existing_cache)}"
         )
 
 
@@ -478,6 +485,6 @@ def clear_expired_snomed_cache() -> bool:
             del st.session_state[SessionStateKeys.MATCHED_EMIS_SNOMED_TIMESTAMP]
 
         if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
-            print("[SNOMED CACHE] Expired cache cleared")
+            emit_debug("snomed_cache", "Expired cache cleared")
         return True
     return False

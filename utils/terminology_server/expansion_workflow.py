@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Any, Callable, Tuple
 
 from .service import ExpansionConfig, get_expansion_service
 from .client import ExpansionResult
-from ..caching.lookup_cache import get_cached_emis_lookup
+from ..caching.lookup_cache import lookup_snomed_to_emis
 
 
 @dataclass
@@ -64,8 +64,24 @@ def _is_snomed_entry(entry: Dict[str, Any]) -> bool:
 
 
 def _normalise_snomed_code(entry: Dict[str, Any]) -> str:
+    """Normalise SNOMED code, handling float/scientific notation."""
     raw = entry.get("SNOMED Code", "") or entry.get("snomed_code", "")
-    return str(raw).strip()
+    if raw is None or raw == "":
+        return ""
+    # Handle float (avoids scientific notation for large codes)
+    if isinstance(raw, float):
+        return str(int(raw))
+    code_str = str(raw).strip()
+    # Handle scientific notation strings
+    if 'e' in code_str.lower():
+        try:
+            return str(int(float(code_str)))
+        except (ValueError, OverflowError):
+            return code_str
+    # Handle .0 suffix
+    if code_str.endswith(".0"):
+        return code_str[:-2]
+    return code_str
 
 
 def prepare_expansion_selection(
@@ -180,34 +196,7 @@ def run_expansion(
             error=credential_error,
         )
 
-    try:
-        cached_data = get_cached_emis_lookup(lookup_df, snomed_code_col, emis_guid_col, version_info)
-    except Exception as exc:
-        return ExpansionRunResult(
-            expansion_results={},
-            processed_children=[],
-            summary_rows=[],
-            total_child_codes=0,
-            successful_expansions=0,
-            include_inactive=include_inactive,
-            lookup_stats={},
-            error=f"EMIS lookup cache not available: {exc}",
-        )
-    if cached_data is None:
-        return ExpansionRunResult(
-            expansion_results={},
-            processed_children=[],
-            summary_rows=[],
-            total_child_codes=0,
-            successful_expansions=0,
-            include_inactive=include_inactive,
-            lookup_stats={},
-            error="EMIS lookup cache not available.",
-        )
-
-    emis_lookup = cached_data.get("lookup_mapping", {}) or {}
-    lookup_records = cached_data.get("lookup_records", {}) or {}
-
+    # Collect codes to expand
     codes = []
     for entry in selection.expandable_codes:
         snomed_code = _normalise_snomed_code(entry)
@@ -221,10 +210,27 @@ def run_expansion(
         max_workers=max_workers
     )
 
+    # Run expansion first
     results = service.expand_codes_batch(codes, config, progress_callback)
 
+    # Collect all child codes from expansion results
+    all_child_codes = set()
+    for result in results.values():
+        if not result.error:
+            for child in result.children:
+                all_child_codes.add(str(child.code).strip())
+
+    # Batch lookup SNOMED → EMIS for all child codes (uses TTL cache)
+    emis_lookup = {}
+    if all_child_codes:
+        emis_lookup = lookup_snomed_to_emis(
+            list(all_child_codes),
+            snomed_code_col=snomed_code_col or "SNOMED_Code",
+            emis_guid_col=emis_guid_col or "EMIS_GUID",
+        )
+
     processed_children = _build_child_rows(results, selection.code_sources, emis_lookup)
-    summary_rows = build_expansion_summary_rows(results, selection.expandable_codes, lookup_records)
+    summary_rows = build_expansion_summary_rows(results, selection.expandable_codes, None)
 
     successful_expansions = sum(1 for result in results.values() if not result.error)
     lookup_stats = _build_lookup_stats(processed_children)
@@ -546,8 +552,19 @@ def expand_single_code(
     use_cache: bool = True,
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
+    source_display: Optional[str] = None,
 ) -> Tuple[Optional[ExpansionResult], Optional[str]]:
-    """Expand a single SNOMED code using the shared service."""
+    """
+    Expand a single SNOMED code using the shared service.
+
+    Args:
+        snomed_code: SNOMED CT code to expand
+        include_inactive: Include inactive concepts
+        use_cache: Use cached results if available
+        client_id: NHS Terminology Server client ID
+        client_secret: NHS Terminology Server client secret
+        source_display: Pre-fetched display name (avoids redundant API lookup)
+    """
     snomed_code = (snomed_code or "").strip()
     if not snomed_code:
         return None, "SNOMED code is required."
@@ -556,6 +573,16 @@ def expand_single_code(
     if credential_error:
         return None, credential_error
 
+    # If display name provided, call client directly to avoid redundant lookup
+    if source_display and service.client:
+        result = service.client.expand_concept(
+            snomed_code,
+            include_inactive=include_inactive,
+            source_display=source_display
+        )
+        return result, None
+
+    # Otherwise use batch service (which handles caching)
     config = ExpansionConfig(
         include_inactive=include_inactive,
         use_cache=use_cache,

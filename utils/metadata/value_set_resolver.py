@@ -6,13 +6,48 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from ..system.session_state import SessionStateKeys
+from ..system.debug_output import emit_debug
 from ..caching.code_store import CodeStore
+
+
+def _active_source_hash() -> str:
+    return (
+        st.session_state.get("last_processed_hash")
+        or st.session_state.get("current_file_hash")
+        or ""
+    )
+
+
+def _invalidate_stale_code_store(reason: str) -> None:
+    if st.session_state.get(SessionStateKeys.DEBUG_MODE, False):
+        emit_debug("value_set_resolver", f"Invalidating stale code store ({reason})")
+    st.session_state.pop(SessionStateKeys.CODE_STORE, None)
+    st.session_state.pop(SessionStateKeys.CODE_STORE_SOURCE_HASH, None)
 
 
 def _get_code_store(code_store: Optional[CodeStore] = None) -> Optional[CodeStore]:
     if code_store is not None:
         return code_store
-    return st.session_state.get(SessionStateKeys.CODE_STORE)
+    store = st.session_state.get(SessionStateKeys.CODE_STORE)
+    if store is None:
+        return None
+
+    active_hash = _active_source_hash()
+    source_hash = st.session_state.get(SessionStateKeys.CODE_STORE_SOURCE_HASH, "")
+
+    # No active file context: return best-effort store.
+    if not active_hash:
+        return store
+
+    # Missing or mismatched source hash indicates stale cross-file cache.
+    if not source_hash:
+        _invalidate_stale_code_store("missing_source_hash")
+        return None
+    if source_hash != active_hash:
+        _invalidate_stale_code_store("source_hash_mismatch")
+        return None
+
+    return store
 
 
 def resolve_value_set_keys(

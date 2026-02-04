@@ -6,7 +6,14 @@ import xml.etree.ElementTree as ET
 from typing import List
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
 def _child_text(elem: ET.Element, tag: str, namespaces) -> str:
@@ -35,7 +42,15 @@ def _find_parameters(elem: ET.Element, namespaces) -> List[str]:
     return names, has_global, has_local
 
 
-@register_pattern("parameters")
+@register_pattern(
+    PluginMetadata(
+        id="parameters",
+        version="1.0.0",
+        description="Detects parameter usage (global and local) in criteria",
+        priority=PluginPriority.NORMAL,
+        tags=["parameter", "variable"],
+    )
+)
 def detect_parameters(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

@@ -58,7 +58,7 @@ def render_refsets_tab(results=None):
             
             # Add debug column if debug mode is enabled
             if debug_mode:
-                desired_columns.append('_original_fields')
+                desired_columns.append('debug_fields')
             
             # Select only the desired columns that exist in the DataFrame
             available_columns = [col for col in desired_columns if col in df.columns]

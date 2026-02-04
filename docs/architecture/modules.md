@@ -475,6 +475,7 @@ On-demand export builders.
 | `clinical_exports.py` | Clinical code CSV exports with deduplication |
 | `terminology_child_exports.py` | NHS expansion result exports with XML column |
 | `analytics_exports.py` | Analytics export handlers |
+| `explorer_exports.py` | XML Explorer tree exports (TXT/SVG) with lazy generation |
 
 ---
 
@@ -512,6 +513,22 @@ Shared system utilities.
 - `streamlit_safe_execute()` - Safe execution wrapper
 
 **When to modify:** Error categories, display format.
+
+---
+
+### `debug_output.py` - Unified Console Debug Output
+
+**Purpose:** Consistent runtime logging to stderr with unified format.
+
+**Key Functions:**
+- `is_debug_enabled()` - Check global debug toggle
+- `emit_console(level, source, message)` - Emit formatted log line
+- `emit_debug(source, message)` - Emit debug-level message
+- `emit_error(source, message)` - Emit error-level message
+
+**Output Format:** `[LEVEL][SOURCE] message`
+
+**When to modify:** Log format changes, new log levels.
 
 ---
 
@@ -670,4 +687,4 @@ Use `SessionStateKeys` constants from `utils/system/session_state.py`.
 ---
 
 *Last Updated: 3rd February 2026*
-*Application Version: 3.0.0*
+*Application Version: 3.0.1*

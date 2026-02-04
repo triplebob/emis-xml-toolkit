@@ -14,12 +14,157 @@ import json
 import time
 import threading
 import logging
+import re
+from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorCategory(Enum):
+    """Categorises NHS Terminology Server errors for user-friendly messaging"""
+    NONE = "none"
+    AUTH_FAILURE = "auth_failure"
+    INVALID_CODE_FORMAT = "invalid_code_format"
+    CODE_NOT_FOUND = "code_not_found"
+    NO_MATCHES = "no_matches"
+    RATE_LIMITED = "rate_limited"
+    SERVER_ERROR = "server_error"
+    CONNECTION_ERROR = "connection_error"
+    TIMEOUT = "timeout"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class TerminologyError:
+    """Structured error with category and user-friendly message"""
+    category: ErrorCategory
+    message: str
+    suggestion: str = ""
+    technical_detail: str = ""
+
+    def __str__(self) -> str:
+        return self.message
+
+
+ERROR_MESSAGES = {
+    ErrorCategory.AUTH_FAILURE: TerminologyError(
+        category=ErrorCategory.AUTH_FAILURE,
+        message="Authentication failed",
+        suggestion="Check NHS Terminology Server credentials in secrets configuration"
+    ),
+    ErrorCategory.INVALID_CODE_FORMAT: TerminologyError(
+        category=ErrorCategory.INVALID_CODE_FORMAT,
+        message="Invalid SNOMED code format",
+        suggestion="SNOMED codes should be numeric (e.g., 73211009)"
+    ),
+    ErrorCategory.CODE_NOT_FOUND: TerminologyError(
+        category=ErrorCategory.CODE_NOT_FOUND,
+        message="Code not found in SNOMED CT",
+        suggestion="Verify the code exists in the current SNOMED CT release"
+    ),
+    ErrorCategory.NO_MATCHES: TerminologyError(
+        category=ErrorCategory.NO_MATCHES,
+        message="No matching concepts found",
+        suggestion="The code may be a leaf concept with no children"
+    ),
+    ErrorCategory.RATE_LIMITED: TerminologyError(
+        category=ErrorCategory.RATE_LIMITED,
+        message="Rate limit exceeded",
+        suggestion="Please wait a moment before trying again"
+    ),
+    ErrorCategory.SERVER_ERROR: TerminologyError(
+        category=ErrorCategory.SERVER_ERROR,
+        message="NHS Terminology Server error",
+        suggestion="The server may be temporarily unavailable - try again later"
+    ),
+    ErrorCategory.CONNECTION_ERROR: TerminologyError(
+        category=ErrorCategory.CONNECTION_ERROR,
+        message="Cannot connect to NHS Terminology Server",
+        suggestion="Check your internet connection"
+    ),
+    ErrorCategory.TIMEOUT: TerminologyError(
+        category=ErrorCategory.TIMEOUT,
+        message="Request timed out",
+        suggestion="The server may be busy - try again"
+    ),
+}
+
+
+def _parse_fhir_error(response_text: str) -> Tuple[ErrorCategory, str]:
+    """
+    Parse FHIR OperationOutcome to extract error details
+
+    Returns:
+        (ErrorCategory, detail_message)
+    """
+    try:
+        data = json.loads(response_text)
+
+        if data.get("resourceType") == "OperationOutcome":
+            issues = data.get("issue", [])
+            for issue in issues:
+                diagnostics = issue.get("diagnostics", "").lower()
+                details_text = issue.get("details", {}).get("text", "").lower()
+                combined = f"{diagnostics} {details_text}"
+
+                # Check for "no matches" patterns
+                if any(phrase in combined for phrase in [
+                    "no match", "no results", "empty expansion",
+                    "valueset contains 0 codes", "0 concepts"
+                ]):
+                    return ErrorCategory.NO_MATCHES, issue.get("diagnostics", "No matches found")
+
+                # Check for invalid code format
+                if any(phrase in combined for phrase in [
+                    "invalid code", "invalid snomed", "malformed",
+                    "not a valid", "syntax error", "parse error"
+                ]):
+                    return ErrorCategory.INVALID_CODE_FORMAT, issue.get("diagnostics", "Invalid code format")
+
+                # Check for code not found
+                if any(phrase in combined for phrase in [
+                    "not found", "unknown code", "concept not found",
+                    "does not exist"
+                ]):
+                    return ErrorCategory.CODE_NOT_FOUND, issue.get("diagnostics", "Code not found")
+
+            # Return first issue diagnostics if no pattern matched
+            if issues:
+                return ErrorCategory.UNKNOWN, issues[0].get("diagnostics", response_text[:200])
+
+    except (json.JSONDecodeError, KeyError, TypeError):
+        pass
+
+    return ErrorCategory.UNKNOWN, response_text[:200] if response_text else "Unknown error"
+
+
+def _validate_snomed_code(code: str) -> Optional[str]:
+    """
+    Validate SNOMED code format
+
+    Returns:
+        Error message if invalid, None if valid
+    """
+    if not code or not code.strip():
+        return "Code cannot be empty"
+
+    code = code.strip()
+
+    # SNOMED codes should be numeric and typically 6-18 digits
+    if not code.isdigit():
+        return f"Invalid code format: '{code}' should contain only numbers"
+
+    if len(code) < 6:
+        return f"Code '{code}' is too short (SNOMED codes are typically 6-18 digits)"
+
+    if len(code) > 18:
+        return f"Code '{code}' is too long (SNOMED codes are typically 6-18 digits)"
+
+    return None
 
 
 @dataclass
@@ -188,7 +333,8 @@ class NHSTerminologyClient:
         # Get valid authentication token
         token = self.token_manager.get_valid_token()
         if not token:
-            return None, "Failed to obtain authentication token"
+            err = ERROR_MESSAGES[ErrorCategory.AUTH_FAILURE]
+            return None, f"{err.message}. {err.suggestion}"
 
         headers = {
             'Authorization': f'Bearer {token}',
@@ -226,12 +372,24 @@ class NHSTerminologyClient:
                 return None, "Authentication failed after retries"
 
             elif response.status_code == 404:
-                return None, f"Resource not found: {endpoint}"
+                err = ERROR_MESSAGES[ErrorCategory.CODE_NOT_FOUND]
+                return None, f"{err.message}. {err.suggestion}"
 
             elif response.status_code == 422:
-                # Unprocessable entity - invalid parameters
-                error_detail = response.text[:200] if response.text else "Invalid request"
-                return None, f"Invalid request parameters: {error_detail}"
+                # Parse FHIR OperationOutcome for detailed error
+                category, detail = _parse_fhir_error(response.text)
+
+                if category == ErrorCategory.NO_MATCHES:
+                    err = ERROR_MESSAGES[ErrorCategory.NO_MATCHES]
+                    return None, f"{err.message}. {err.suggestion}"
+                elif category == ErrorCategory.INVALID_CODE_FORMAT:
+                    err = ERROR_MESSAGES[ErrorCategory.INVALID_CODE_FORMAT]
+                    return None, f"{err.message}. {err.suggestion}"
+                elif category == ErrorCategory.CODE_NOT_FOUND:
+                    err = ERROR_MESSAGES[ErrorCategory.CODE_NOT_FOUND]
+                    return None, f"{err.message}. {err.suggestion}"
+                else:
+                    return None, f"Request failed: {detail}"
 
             elif response.status_code == 429:
                 # Rate limited
@@ -241,7 +399,8 @@ class NHSTerminologyClient:
                     time.sleep(wait_time)
                     return self._make_request(endpoint, params, retry_count + 1)
 
-                return None, "Rate limit exceeded"
+                err = ERROR_MESSAGES[ErrorCategory.RATE_LIMITED]
+                return None, f"{err.message}. {err.suggestion}"
 
             elif response.status_code >= 500:
                 # Server error - retry
@@ -251,7 +410,8 @@ class NHSTerminologyClient:
                     time.sleep(wait_time)
                     return self._make_request(endpoint, params, retry_count + 1)
 
-                return None, f"Server error: {response.status_code}"
+                err = ERROR_MESSAGES[ErrorCategory.SERVER_ERROR]
+                return None, f"{err.message} (HTTP {response.status_code}). {err.suggestion}"
 
             else:
                 return None, f"Unexpected response status: {response.status_code}"
@@ -261,10 +421,12 @@ class NHSTerminologyClient:
                 logger.warning(f"Request timeout, retrying (attempt {retry_count + 1})")
                 time.sleep(1)
                 return self._make_request(endpoint, params, retry_count + 1)
-            return None, "Request timeout"
+            err = ERROR_MESSAGES[ErrorCategory.TIMEOUT]
+            return None, f"{err.message}. {err.suggestion}"
 
         except requests.exceptions.ConnectionError:
-            return None, "Connection error - cannot reach NHS Terminology Server"
+            err = ERROR_MESSAGES[ErrorCategory.CONNECTION_ERROR]
+            return None, f"{err.message}. {err.suggestion}"
 
         except Exception as e:
             logger.error(f"Unexpected error in request: {str(e)}")
@@ -273,7 +435,8 @@ class NHSTerminologyClient:
     def expand_concept(
         self,
         code: str,
-        include_inactive: bool = False
+        include_inactive: bool = False,
+        source_display: Optional[str] = None
     ) -> ExpansionResult:
         """
         Expand a SNOMED concept to retrieve all child concepts
@@ -281,15 +444,46 @@ class NHSTerminologyClient:
         Args:
             code: SNOMED CT concept code
             include_inactive: Include inactive/deprecated concepts
+            source_display: Pre-fetched display name (skips redundant lookup if provided)
 
         Returns:
             ExpansionResult with children or error
         """
+        # Validate code format first
+        validation_error = _validate_snomed_code(code)
+        if validation_error:
+            err = ERROR_MESSAGES[ErrorCategory.INVALID_CODE_FORMAT]
+            return ExpansionResult(
+                source_code=code,
+                source_display="Unknown",
+                children=[],
+                total_count=0,
+                expansion_timestamp=datetime.now(),
+                error=f"{err.message}: {validation_error}"
+            )
+
+        code = code.strip()
+
         try:
-            source_display = "Unknown"
-            lookup_display, lookup_error = self.lookup_concept(code)
-            if lookup_display and not lookup_error:
-                source_display = lookup_display
+            # Use provided display name or fetch it
+            if source_display:
+                display = source_display
+            else:
+                display = "Unknown"
+                lookup_display, lookup_error = self.lookup_concept(code)
+                if lookup_display and not lookup_error:
+                    display = lookup_display
+                elif lookup_error and "not found" in lookup_error.lower():
+                    # Code doesn't exist - return early with clear error
+                    return ExpansionResult(
+                        source_code=code,
+                        source_display="Unknown",
+                        children=[],
+                        total_count=0,
+                        expansion_timestamp=datetime.now(),
+                        error=f"SNOMED code '{code}' not found in NHS Terminology Server"
+                    )
+            source_display = display
 
             all_children: List[ExpandedConcept] = []
             offset = 0
@@ -374,14 +568,23 @@ class NHSTerminologyClient:
         Returns:
             (display_name, error_message)
         """
+        # Validate code format first
+        validation_error = _validate_snomed_code(code)
+        if validation_error:
+            err = ERROR_MESSAGES[ErrorCategory.INVALID_CODE_FORMAT]
+            return None, f"{err.message}: {validation_error}"
+
         params = {
             'system': 'http://snomed.info/sct',
-            'code': code
+            'code': code.strip()
         }
 
         response, error = self._make_request('CodeSystem/$lookup', params)
 
         if error:
+            # Make error more specific for lookup failures
+            if "not found" in error.lower():
+                return None, f"SNOMED code '{code}' not found in NHS Terminology Server"
             return None, error
 
         # Parse lookup response

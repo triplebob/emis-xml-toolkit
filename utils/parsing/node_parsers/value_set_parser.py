@@ -129,9 +129,12 @@ def parse_value_sets(
         }
         if cluster_code:
             base_flags["cluster_code"] = cluster_code
+        # Flags that should NOT propagate from criterion-level to individual codes
+        # (these are determined per-code from XML structure, not inherited)
+        _code_specific_flags = {"is_refset", "is_pseudo_refset", "is_pseudo_member"}
         if parent_flags:
             for k, v in parent_flags.items():
-                if k not in base_flags:
+                if k not in base_flags and k not in _code_specific_flags:
                     base_flags[k] = v
 
         # Create a pseudo-refset container for clusterCode-style pseudo-refsets

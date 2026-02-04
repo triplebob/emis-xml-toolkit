@@ -5,6 +5,9 @@ on:
     - cron: "0 * * * *"   # run at minute 0 every hour
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   ping:
     runs-on: ubuntu-latest

@@ -16,7 +16,7 @@ psutil>=5.8.0,<6.0.0
 openpyxl>=3.0.0,<4.0.0
 
 # Security for NHS API authentication
-cryptography>=3.4.8,<42.0.0
+cryptography>=42.0.2
 
 # Encoding detection for XML files
 chardet>=4.0.0,<6.0.0

@@ -48,6 +48,7 @@ caching/
 exports/
 ├── analytics_exports.py         # Analytics export handlers
 ├── clinical_exports.py          # Clinical code exports (CSV)
+├── explorer_exports.py          # XML Explorer tree exports (TXT/SVG)
 ├── report_excel.py              # Report Excel exports
 ├── report_export_common.py      # Shared report export logic
 ├── report_json.py               # Report JSON exports
@@ -140,6 +141,7 @@ pattern_plugins/
 ```text
 system/
 ├── debug_logger.py     # Debug logging controls
+├── debug_output.py     # Unified console debug output helpers
 ├── error_handling.py   # Structured error management
 ├── session_state.py    # Centralised session state keys and helpers
 ├── update_versions.py  # Version update utilities
@@ -307,6 +309,7 @@ Current test files:
 - `tests/test_session_state.py` - Session state unit tests
 - `tests/test_snomed_translation.py` - SNOMED translation and deduplication tests
 - `tests/test_structure_parser.py` - Structure parsing tests
+- `tests/test_value_set_resolver.py` - Value set resolver invalidation tests
 - `tests/test_performance.py` - Performance benchmarks
 
 Recommended release checks:
@@ -339,7 +342,7 @@ python -m unittest discover tests
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.0*
+*Last Updated: 4th February 2026*
+*Application Version: 3.0.1*
 
 For specific module details, see the [Module Architecture Guide](architecture/modules.md).

@@ -6,7 +6,14 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
 def _iter_value_sets_with_context(elem: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -70,7 +77,15 @@ def _multi_column_context(parent_cv: ET.Element, namespaces: Dict[str, str]) -> 
     return extras
 
 
-@register_pattern("emisinternal_classification")
+@register_pattern(
+    PluginMetadata(
+        id="emisinternal_classification",
+        version="1.0.0",
+        description="Detects EMISINTERNAL code system filters and classifications",
+        priority=PluginPriority.HIGH,
+        tags=["emisinternal", "classification", "filtering"],
+    )
+)
 def detect_emisinternal(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None

@@ -3,10 +3,25 @@ Value set and code system pattern detectors (clinical vs library vs inactive).
 """
 
 from .registry import register_pattern
-from .base import PatternContext, PatternResult, find_first, tag_local
+from .base import (
+    PatternContext,
+    PatternResult,
+    PluginMetadata,
+    PluginPriority,
+    find_first,
+    tag_local,
+)
 
 
-@register_pattern("value_set_properties")
+@register_pattern(
+    PluginMetadata(
+        id="value_set_properties",
+        version="1.0.0",
+        description="Detects value set properties (library items, inactive codes)",
+        priority=40,  # Between HIGH and NORMAL
+        tags=["value-set", "library", "inactive"],
+    )
+)
 def detect_value_set_properties(ctx: PatternContext):
     if tag_local(ctx.element) != "criterion":
         return None
@@ -44,7 +59,15 @@ def detect_value_set_properties(ctx: PatternContext):
     )
 
 
-@register_pattern("value_set_description_handling")
+@register_pattern(
+    PluginMetadata(
+        id="value_set_description_handling",
+        version="1.0.0",
+        description="Handles value set description vs GUID fallback patterns",
+        priority=40,  # Between HIGH and NORMAL
+        tags=["value-set", "description"],
+    )
+)
 def detect_value_set_description_handling(ctx: PatternContext):
     """
     Detect valueSet patterns for proper description vs displayName separation.

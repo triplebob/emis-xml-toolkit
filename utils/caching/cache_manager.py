@@ -462,7 +462,7 @@ class CacheManager:
             # Reuse structure data from cached parse (avoid duplicate parsing)
             structure_data = cached.get("structure_data", {}) or {}
 
-            _debug(f"New pipeline returned: {len(ui_rows)} ui_rows, {len(entities)} entities, {len(folders)} folders")
+            _debug(f"Pipeline returned: {len(ui_rows)} ui_rows, {len(entities)} entities, {len(folders)} folders")
 
             from .lookup_manager import is_lookup_loaded
             has_qualifier_present = any("Has Qualifier" in row for row in ui_rows)
@@ -478,7 +478,7 @@ class CacheManager:
                     ui_rows = serialise_codes_for_ui(enriched, include_debug_fields=debug_mode)
                 except Exception:
                     pass
-            _debug(f"New pipeline success: {len(ui_rows)} entries (empty permitted)")
+            _debug(f"Pipeline success: {len(ui_rows)} entries (empty permitted)")
             # Reset unified cache so a different file rebuilds UI data
             if "unified_clinical_data_cache" in st.session_state:
                 del st.session_state["unified_clinical_data_cache"]
@@ -488,19 +488,19 @@ class CacheManager:
             st.session_state[SessionStateKeys.XML_STRUCTURE_DATA] = structure_data
             if code_store is not None:
                 st.session_state[SessionStateKeys.CODE_STORE] = code_store
+                st.session_state[SessionStateKeys.CODE_STORE_SOURCE_HASH] = xml_content_hash
+            else:
+                st.session_state.pop(SessionStateKeys.CODE_STORE, None)
+                st.session_state.pop(SessionStateKeys.CODE_STORE_SOURCE_HASH, None)
             
-            # Mark processing as complete for file session tracking
-            filename = st.session_state.get(SessionStateKeys.XML_FILENAME, '')
-            filesize = st.session_state.get(SessionStateKeys.XML_FILESIZE)
-            if filename and filesize is not None:
-                import hashlib
-                file_hash = hashlib.md5(f"{filename}_{filesize}".encode()).hexdigest()[:16]
-                st.session_state['last_processed_hash'] = file_hash
+            # Mark processing as complete for file session tracking (content-hash based).
+            st.session_state["current_file_hash"] = xml_content_hash
+            st.session_state["last_processed_hash"] = xml_content_hash
             
             return ui_rows
                 
         except Exception as e:
-            _debug(f"New pipeline failed with error: {type(e).__name__}: {str(e)}")
+            _debug(f"Pipeline failed with error: {type(e).__name__}: {str(e)}")
             # Surface the actual error for debugging
             raise ValueError(f"New parsing pipeline failed: {type(e).__name__}: {str(e)}") from e
     
