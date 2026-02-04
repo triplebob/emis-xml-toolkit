@@ -4,7 +4,6 @@ Generates comprehensive Excel workbooks with Overview, Rule Logic, and Rule Code
 """
 
 from io import BytesIO
-import re
 from typing import Dict, List, Any
 import streamlit as st
 from openpyxl import Workbook
@@ -42,20 +41,19 @@ CENTRE_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=T
 LEFT_ALIGNMENT = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
 
-EMOJI_PATTERN = re.compile(
-    "["
-    "\u2600-\u26FF"  # misc symbols
-    "\u2700-\u27BF"  # dingbats
-    "\U0001F1E6-\U0001F1FF"  # flags
-    "\U0001F300-\U0001F5FF"  # symbols & pictographs
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F900-\U0001FAFF"  # supplemental symbols and pictographs
-    "\uFE0F"  # variation selector
-    "\u200D"  # zero width joiner
-    "]+",
-    flags=re.UNICODE,
+EMOJI_RANGES = (
+    (0x2600, 0x26FF),    # misc symbols
+    (0x2700, 0x27BF),    # dingbats
+    (0x1F1E6, 0x1F1FF),  # flags
+    (0x1F300, 0x1F5FF),  # symbols & pictographs
+    (0x1F600, 0x1F64F),  # emoticons
+    (0x1F680, 0x1F6FF),  # transport & map symbols
+    (0x1F900, 0x1FAFF),  # supplemental symbols and pictographs
 )
+EMOJI_CODEPOINTS = {
+    0xFE0F,  # variation selector
+    0x200D,  # zero width joiner
+}
 
 
 def _apply_header_style(ws, row_num: int):
@@ -68,7 +66,15 @@ def _apply_header_style(ws, row_num: int):
 
 def _strip_emojis(text: str) -> str:
     """Remove emojis and other pictographs from text."""
-    return EMOJI_PATTERN.sub("", text).strip()
+    cleaned_chars: List[str] = []
+    for ch in str(text):
+        codepoint = ord(ch)
+        if codepoint in EMOJI_CODEPOINTS:
+            continue
+        if any(start <= codepoint <= end for start, end in EMOJI_RANGES):
+            continue
+        cleaned_chars.append(ch)
+    return "".join(cleaned_chars).strip()
 
 
 def _auto_size_columns(ws, max_width: int = 60):
