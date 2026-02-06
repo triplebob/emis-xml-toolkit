@@ -8,8 +8,8 @@ from utils.exports.mds_exports import build_mds_csv, build_mds_export_filename
 
 class TestMdsExports(unittest.TestCase):
     def test_build_mds_export_filename_contains_mode(self):
-        filename = build_mds_export_filename("C&M Extra Searches.xml", view_mode="per_source")
-        self.assertTrue(filename.startswith("C&M_Extra_Searches_MDS_per_source_"))
+        filename = build_mds_export_filename("Sample Searches.xml", view_mode="per_source")
+        self.assertTrue(filename.startswith("Sample_Searches_MDS_per_source_"))
         self.assertRegex(filename, r"\d{8}_\d{6}\.csv$")
 
     def test_build_mds_csv_escapes_special_characters(self):
