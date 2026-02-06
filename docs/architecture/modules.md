@@ -474,8 +474,10 @@ On-demand export builders.
 |--------|---------|
 | `clinical_exports.py` | Clinical code CSV exports with deduplication |
 | `terminology_child_exports.py` | NHS expansion result exports with XML column |
+| `terminology_tree_exports.py` | Hierarchy tree exports (TXT/SVG/JSON) |
+| `mds_exports.py` | MDS lazy CSV export helpers with footer metadata |
 | `analytics_exports.py` | Analytics export handlers |
-| `explorer_exports.py` | XML Explorer tree exports (TXT/SVG) with lazy generation |
+| `explorer_exports.py` | XML Explorer tree exports (TXT/SVG/JSON) with lazy generation |
 
 ---
 
@@ -609,12 +611,13 @@ Modular tab implementations organised by domain.
 
 | Directory | Purpose |
 |-----------|---------|
-| `clinical_codes/` | Clinical code tabs (summary, codes, medications, refsets, analytics) |
+| `analytics/` | Analytics tabs (XML overview, quality metrics, MDS export) |
+| `clinical_codes/` | Clinical code tabs (summary, codes, medications, refsets) |
 | `xml_inspector/` | XML exploration (file browser, dependencies, raw viewer) |
 | `search_browser/` | Search analysis (overview, detail, criteria viewer) |
 | `report_viewer/` | Report viewing (list, audit, aggregate) |
 | `terminology_server/` | NHS integration (expansion, lookup) |
-| `debug/` | Debug features (memory diagnostics) |
+| `debug/` | Debug features (memory diagnostics, plugin manager) |
 
 ---
 
@@ -686,5 +689,5 @@ Use `SessionStateKeys` constants from `utils/system/session_state.py`.
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

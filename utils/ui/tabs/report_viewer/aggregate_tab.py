@@ -17,7 +17,6 @@ from ...theme import ThemeColours, create_info_box_style
 from ..search_browser.search_criteria_viewer import render_criterion_detail
 from ....metadata.report_filtering import build_aggregate_criteria_groups, has_embedded_report_code_rules
 
-
 def _collect_group_columns(aggregate: Dict) -> List[str]:
     columns: List[str] = []
     for group in aggregate.get("groups") or []:

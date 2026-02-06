@@ -141,7 +141,7 @@ def _batch_lookup_snomed_for_ui(emis_guids: List[str]) -> Dict[str, str]:
 
 
 
-@st.cache_data(show_spinner="Loading report metadata...", ttl=1800, max_entries=10)
+@st.cache_data(show_spinner="Loading report metadata...", ttl=1800, max_entries=10, scope="session")
 def _load_report_metadata(report_id: str, report_hash: str, report_name: str, report_type: str, description: str, parent_info: str, search_date: str):
     """
     Load and cache basic report metadata with spinner.
@@ -159,7 +159,7 @@ def _load_report_metadata(report_id: str, report_hash: str, report_name: str, re
         'metadata_loaded': True
     }
 
-@st.cache_data(show_spinner="Extracting clinical codes...", ttl=1800, max_entries=10)
+@st.cache_data(show_spinner="Extracting clinical codes...", ttl=1800, max_entries=10, scope="session")
 def _extract_clinical_codes(report_id: str, report_hash: str, criteria_data: list):
     """
     Extract and count clinical codes with progress tracking and spinner.
@@ -226,7 +226,7 @@ def _extract_clinical_codes(report_id: str, report_hash: str, criteria_data: lis
     }
 
 
-@st.cache_data(show_spinner="Processing column groups...", ttl=1800, max_entries=10)
+@st.cache_data(show_spinner="Processing column groups...", ttl=1800, max_entries=10, scope="session")
 def _process_column_groups(report_id: str, report_hash: str, column_groups_data: list):
     """
     Process column groups with progress tracking and spinner.
@@ -308,35 +308,34 @@ def cache_processed_data(cache_key: str, data: Any) -> None:
     """
     st.session_state[cache_key] = data
 
-@st.cache_data(ttl=1800, max_entries=10)  # 30-minute TTL for report pagination
-def paginate_reports(reports: List, page_size: int = 20, page_key: str = "page") -> tuple:
+@st.cache_data(ttl=1800, max_entries=10, scope="session")  # 30-minute TTL, session-scoped
+def paginate_reports(reports: List, page_size: int = 20, current_page: int = 1) -> tuple:
     """
     Implement pagination for large report lists to improve performance
-    
+
     Args:
         reports: List of reports to paginate
         page_size: Number of reports per page (default 20)
-        page_key: Session state key for page tracking
-        
+        current_page: Current page number (passed from session state by caller)
+
     Returns:
         Tuple of (current_page_reports, total_pages, current_page)
     """
     if not reports:
         return [], 0, 1
-        
+
     total_reports = len(reports)
     total_pages = (total_reports + page_size - 1) // page_size  # Ceiling division
-    
-    # Get current page from session state
-    current_page = st.session_state.get(page_key, 1)
-    current_page = max(1, min(current_page, total_pages))  # Clamp to valid range
-    
+
+    # Clamp current_page to valid range
+    current_page = max(1, min(current_page, total_pages))
+
     # Calculate slice indices
     start_idx = (current_page - 1) * page_size
     end_idx = min(start_idx + page_size, total_reports)
-    
+
     current_page_reports = reports[start_idx:end_idx]
-    
+
     return current_page_reports, total_pages, current_page
 
 def render_pagination_controls(total_pages: int, current_page: int, page_key: str = "page"):
@@ -377,7 +376,7 @@ def render_pagination_controls(total_pages: int, current_page: int, page_key: st
             st.session_state[page_key] = total_pages
             st.rerun()
 
-@st.cache_data(ttl=1800, max_entries=10, show_spinner="Loading report sections...")
+@st.cache_data(ttl=1800, max_entries=10, show_spinner="Loading report sections...", scope="session")
 def load_report_sections(report_id: str, report_data_hash: str):
     """
     Load and process report sections with proper Streamlit caching
@@ -400,7 +399,7 @@ def load_report_sections(report_id: str, report_data_hash: str):
         'load_time': datetime.now().isoformat()
     }
 
-@st.cache_data(show_spinner="Preparing export data...", ttl=600, max_entries=10)
+@st.cache_data(show_spinner="Preparing export data...", ttl=600, max_entries=10, scope="session")
 def prepare_export_data(report_id: str, export_type: str, report_hash: str):
     """
     Prepare export data with proper Streamlit caching
@@ -607,9 +606,7 @@ def extract_clinical_codes_from_searches(searches):
 
 
 def determine_container_type(criterion, group):
-    """Determine the container type based on criterion and group context"""
-    # TODO: Implement the container detection logic from EMIS XML patterns
-    # For now, return basic container type
+    """Determine the container type based on criterion and group context."""
     return "Search Rule Main Criteria"
 
 

@@ -115,7 +115,7 @@ Defined in `utils/pattern_plugins/base.py`:
 | `description` | `str` | `""` | Human-readable description |
 | `author` | `str` | `""` | Plugin author |
 | `priority` | `int` | `100` | Execution priority (lower runs first) |
-| `min_app_version` | `str` | `"3.0.1"` | Minimum ClinXML version required |
+| `min_app_version` | `str` | `"3.0.2"` | Minimum ClinXML version required |
 | `tags` | `List[str]` | `[]` | Categorisation tags |
 
 ```python
@@ -126,7 +126,7 @@ class PluginMetadata:
     description: str = ""
     author: str = ""
     priority: int = PluginPriority.DEFAULT
-    min_app_version: str = "3.0.1"
+    min_app_version: str = "3.0.2"
     tags: List[str] = field(default_factory=list)
 ```
 
@@ -630,16 +630,16 @@ def detect_my_new_pattern(ctx: PatternContext):
 
 | Test File | Purpose |
 |-----------|---------|
-| `tests/test_search_parser.py` | Search parsing tests |
-| `tests/test_parsing_report_parser.py` | Report parsing tests |
-| `tests/test_structure_parser.py` | Structure parsing tests |
-| `tests/test_builtin_plugins.py` | Built-in plugin regression tests |
-| `tests/test_flags_and_plugins.py` | Registry and validation contracts |
-| `tests/test_plugin_harness.py` | Standalone plugin smoke tests |
-| `tests/test_plugin_registry_versioning.py` | Metadata, priority, versioning, enable/disable |
-| `tests/test_namespace_utils.py` | Namespace helper behaviour |
-| `tests/test_exports.py` | Export path integration checks |
-| `tests/test_snomed_translation.py` | SNOMED translation behaviour |
+| `tests/parsing/test_search_parser.py` | Search parsing tests |
+| `tests/parsing/test_parsing_report_parser.py` | Report parsing tests |
+| `tests/parsing/test_structure_parser.py` | Structure parsing tests |
+| `tests/plugins/test_builtin_plugins.py` | Built-in plugin regression tests |
+| `tests/plugins/test_flags_and_plugins.py` | Registry and validation contracts |
+| `tests/plugins/test_plugin_harness.py` | Standalone plugin smoke tests |
+| `tests/plugins/test_plugin_registry_versioning.py` | Metadata, priority, versioning, enable/disable |
+| `tests/parsing/test_namespace_utils.py` | Namespace helper behaviour |
+| `tests/exports/test_exports.py` | Export path integration checks |
+| `tests/metadata/test_snomed_translation.py` | SNOMED translation behaviour |
 
 ---
 
@@ -667,5 +667,5 @@ def detect_my_new_pattern(ctx: PatternContext):
 
 ---
 
-*Last Updated: 4th February 2026*
-*Application Version: 3.1.0*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

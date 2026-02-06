@@ -11,6 +11,8 @@ def render_pseudo_refset_members_tab(results=None):
         st.write("❌ No analysis data found - please run XML analysis first")
         return
 
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
+
     # Pre-categorised by _category_split: all pseudo members (clinical + medication)
     base_pseudo_members = unified_results.get("pseudo_members", [])
 

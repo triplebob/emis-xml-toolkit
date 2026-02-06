@@ -6,7 +6,7 @@ The test suite validates core functionality across parsing, metadata, exports, a
 
 **Test Location:** `tests/`
 
-**Total Tests:** 54
+**Total Tests:** ~130
 
 **Framework:** Python `unittest`
 
@@ -23,13 +23,13 @@ python -m unittest discover tests -v
 ### Specific Test File
 
 ```bash
-python -m unittest tests.test_builtin_plugins -v
+python -m unittest tests.plugins.test_builtin_plugins -v
 ```
 
 ### Specific Test Class
 
 ```bash
-python -m unittest tests.test_builtin_plugins.TestBuiltinPlugins -v
+python -m unittest tests.plugins.test_builtin_plugins.TestBuiltinPlugins -v
 ```
 
 ### With pytest (if installed)
@@ -44,19 +44,26 @@ python -m pytest tests/ -v
 
 | File | Tests | Purpose |
 |------|-------|---------|
-| `test_builtin_plugins.py` | 6 | Built-in plugin pattern detection |
-| `test_code_store.py` | 5 | CodeStore deduplication, reference tracking, and debug logging |
-| `test_exports.py` | 5 | Clinical, search, and report export generation |
-| `test_flags_and_plugins.py` | 5 | Flag validation and plugin registry contracts |
-| `test_namespace_utils.py` | 6 | Namespace helper functions |
-| `test_parsing_report_parser.py` | 3 | Report parsing (list, audit, aggregate) |
-| `test_performance.py` | 7 | Performance controls and memory efficiency |
-| `test_plugin_harness.py` | 3 | Standalone plugin execution harness |
-| `test_search_parser.py` | 1 | Search parsing with groups and dependencies |
-| `test_session_state.py` | 6 | Session state keys and cache utilities |
-| `test_snomed_translation.py` | 3 | SNOMED translation and deduplication |
-| `test_structure_parser.py` | 2 | Structure parsing and folder tree enrichment |
-| `test_value_set_resolver.py` | 3 | Value set resolver CodeStore invalidation |
+| `tests/plugins/test_builtin_plugins.py` | 6 | Built-in plugin pattern detection |
+| `tests/caching/test_code_store.py` | 5 | CodeStore deduplication, reference tracking, and debug logging |
+| `tests/exports/test_exports.py` | 5 | Clinical, search, and report export generation |
+| `tests/exports/test_mds_exports.py` | 6 | MDS CSV export, footer rows, and filename generation |
+| `tests/plugins/test_flags_and_plugins.py` | 5 | Flag validation and plugin registry contracts |
+| `tests/parsing/test_namespace_utils.py` | 6 | Namespace helper functions |
+| `tests/parsing/test_parsing_report_parser.py` | 3 | Report parsing (list, audit, aggregate) |
+| `tests/performance/test_performance.py` | 7 | Performance controls and memory efficiency |
+| `tests/plugins/test_plugin_harness.py` | 3 | Standalone plugin execution harness |
+| `tests/plugins/test_plugin_registry_versioning.py` | 4 | Plugin versioning and metadata |
+| `tests/parsing/test_search_parser.py` | 1 | Search parsing with groups and dependencies |
+| `tests/caching/test_session_state.py` | 6 | Session state keys and cache utilities |
+| `tests/metadata/test_snomed_translation.py` | 3 | SNOMED translation and deduplication |
+| `tests/metadata/test_mds_provider.py` | 8 | MDS entity-first extraction, filtering, and EMIS XML output |
+| `tests/parsing/test_structure_parser.py` | 2 | Structure parsing and folder tree enrichment |
+| `tests/parsing/test_value_set_resolver.py` | 3 | Value set resolver CodeStore invalidation |
+| `tests/terminology_server/test_terminology_client.py` | 6 | Terminology API client and authentication |
+| `tests/terminology_server/test_terminology_service.py` | 6 | Expansion service and caching |
+| `tests/terminology_server/test_terminology_workflows.py` | 6 | Hierarchy lineage tracing and tree building |
+| `tests/ui/test_mds_tab.py` | 13 | MDS preview transforms and row styling |
 
 ---
 
@@ -339,6 +346,81 @@ Tests CodeStore cache invalidation based on content hash tracking.
 
 </details>
 
+<details>
+<summary><strong>test_mds_provider.py</strong> - MDS Entity Extraction</summary>
+
+Tests MDS (Minimum Dataset) entity-first extraction and filtering.
+
+**Test Class:** `TestMdsProvider`
+
+**Coverage:**
+- Filter excludes EMISINTERNAL codes
+- Filter excludes pseudo-refset containers
+- Filter includes pseudo-refset members with core type classification
+- Filter excludes codes without valid EMIS GUID
+- Unique mode deduplicates by `emis_guid`
+- Per-source mode deduplicates by `(source_guid, emis_guid)`
+- Linked criteria recursion captured
+- Mapping enrichment from `pipeline_codes`
+- `include_children` flag preservation and conflict resolution
+- Refset codes include `<isRefset>true</isRefset>` in EMIS XML output
+
+</details>
+
+<details>
+<summary><strong>test_mds_exports.py</strong> - MDS Export Helpers</summary>
+
+Tests MDS CSV export generation and filename formatting.
+
+**Test Class:** `TestMdsExports`
+
+**Coverage:**
+- CSV escapes quotes, commas, and newlines correctly
+- Empty rows return empty string
+- Footer rows include XML filename, toolkit credit, and export date
+- Filename contains view mode suffix (`unique_codes` or `per_source`)
+- Timestamp format in filename
+
+</details>
+
+<details>
+<summary><strong>test_mds_tab.py</strong> - MDS Preview UI</summary>
+
+Tests MDS tab preview transforms and row styling.
+
+**Test Classes:**
+- `TestMdsPreviewTransform` — Column renames, emoji prefixes, capitalisation
+- `TestMdsRowHighlighting` — Row background colours by mapping status
+
+**Coverage:**
+- `snake_case` columns renamed to friendly display names
+- EMIS GUID gets search emoji prefix (empty values show no emoji)
+- SNOMED Code gets medical emoji prefix (empty values show no emoji)
+- Code type capitalisation (`clinical` → `Clinical`, `refset` → `RefSet`)
+- Mapping status title-cased with underscores removed
+- `emis_xml` column dropped from preview
+- Column ordering matches expected sequence
+- Found status uses green background, not-found uses red
+
+</details>
+
+<details>
+<summary><strong>test_terminology_workflows.py</strong> - Hierarchy Lineage</summary>
+
+Tests NHS terminology hierarchy tracing and tree building.
+
+**Test Class:** `TestTerminologyWorkflows`
+
+**Coverage:**
+- `LineageNode` dataclass creation and serialisation
+- `trace_lineage` builds parent chain from expansion results
+- `to_hierarchical_json` produces valid JSON structure with source filename
+- Shared lineage detection across multiple expansion branches
+- Depth limiting and node capping
+- ASCII tree rendering with depth indicators
+
+</details>
+
 ---
 
 ## Test Patterns and Conventions
@@ -460,8 +542,8 @@ Some tests require external fixtures:
 
 | Test File | Fixture | Location |
 |-----------|---------|----------|
-| `test_flags_and_plugins.py` | XML files | `xml_examples/*.xml` |
-| `test_plugin_harness.py` | XML files | `xml_examples/*.xml` |
+| `tests/plugins/test_flags_and_plugins.py` | XML files | `xml_examples/*.xml` |
+| `tests/plugins/test_plugin_harness.py` | XML files | `xml_examples/*.xml` |
 
 Ensure at least one valid EMIS XML file exists in `xml_examples/` before running the full test suite.
 
@@ -479,7 +561,7 @@ python -m unittest discover tests -v
 python -m pytest tests/ -v
 
 # Run specific category
-python -m unittest tests.test_builtin_plugins tests.test_flags_and_plugins -v
+python -m unittest tests.plugins.test_builtin_plugins tests.plugins.test_flags_and_plugins -v
 ```
 
 **Expected output:** All tests should pass with status `OK`
@@ -497,5 +579,5 @@ python -m unittest tests.test_builtin_plugins tests.test_flags_and_plugins -v
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

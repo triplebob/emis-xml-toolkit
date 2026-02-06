@@ -12,13 +12,24 @@ import pandas as pd
 from ...theme import ThemeColours, success_box, warning_box, error_box
 from ....caching.lookup_cache import lookup_snomed_to_emis
 from ....system.session_state import SessionStateKeys
-from ....terminology_server import expand_single_code, get_expansion_service, lookup_concept_display
+from ....terminology_server import (
+    expand_single_code,
+    get_expansion_service,
+    lookup_concept_display,
+    trace_lineage,
+    LineageTraceResult,
+)
 from ....exports import (
     get_child_code_export_options,
     get_child_code_export_preview,
     build_child_code_export_filename,
     build_child_code_export_csv,
+    render_lookup_hierarchy_export_controls,
 )
+
+LOOKUP_HIERARCHY_DEPTH_CAP = 10
+LOOKUP_HIERARCHY_NODE_CAP = 2000
+LOOKUP_HIERARCHY_MAX_API_CALLS_CAP = 600
 
 
 def render_individual_code_lookup():
@@ -27,6 +38,9 @@ def render_individual_code_lookup():
 
     No XML processing or EMIS lookup required - pure SNOMED expansion
     """
+
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
+
     @st.fragment
     def code_lookup_fragment():
         st.markdown("### 🔬 Individual SNOMED Code Lookup")
@@ -316,6 +330,10 @@ def render_individual_code_lookup():
                                 }
                                 st.rerun()
 
+                # Hierarchy View Section
+                st.markdown("---")
+                _render_lookup_hierarchy_view(parent_code, parent_display, child_rows)
+
             else:
                 st.info("📍 No child concepts found (this may be a leaf node)")
 
@@ -351,3 +369,327 @@ def render_individual_code_lookup():
             """, unsafe_allow_html=True)
 
     code_lookup_fragment()
+
+
+def _render_lookup_hierarchy_view(parent_code: str, parent_display: str, child_rows: list):
+    """Render hierarchy view for single code lookup results."""
+    st.markdown("### 🌲 Hierarchy View")
+    st.caption(
+        f"Build a tree showing {parent_display} ({parent_code}) and its "
+        f"{len(child_rows)} descendants organised by SNOMED lineage."
+    )
+    
+    st.markdown("")
+    st.markdown("")
+    
+    if not child_rows:
+        st.info("No child codes available for hierarchy view")
+        return
+
+    # Check for existing lineage results
+    lineage_key = f"lookup_lineage_{parent_code}"
+    lineage_result = st.session_state.get(lineage_key)
+
+    capped_depth = LOOKUP_HIERARCHY_DEPTH_CAP
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        build_clicked = st.button(
+            "🌲 Build Hierarchy",
+            type="secondary",
+            help=f"Trace lineage for {parent_code}",
+            key="lookup_build_hierarchy_btn"
+        )
+    
+    with col2:
+        progress_placeholder = st.empty()
+        status_placeholder = st.empty()
+
+    if build_clicked:
+        st.session_state[f"{lineage_key}_warnings"] = []
+        _run_lookup_lineage_trace(
+            parent_code,
+            parent_display,
+            child_rows,
+            capped_depth,
+            lineage_key,
+            progress_placeholder=progress_placeholder,
+            status_placeholder=status_placeholder,
+        )
+
+    lookup_warnings = st.session_state.get(f"{lineage_key}_warnings", [])
+    for warning in lookup_warnings:
+        st.warning(warning)
+
+    # Display existing results
+    if lineage_result:
+        _render_lookup_lineage_tree(lineage_result, parent_code)
+
+
+def _run_lookup_lineage_trace(
+    parent_code: str,
+    parent_display: str,
+    child_rows: list,
+    max_depth: int,
+    lineage_key: str,
+    progress_placeholder=None,
+    status_placeholder=None,
+):
+    """Run lineage trace for lookup results."""
+    progress_host = progress_placeholder if progress_placeholder is not None else st
+    status_host = status_placeholder if status_placeholder is not None else st
+    progress_bar = progress_host.progress(0.0)
+    status_text = status_host.empty()
+
+    try:
+        # Get credentials
+        try:
+            client_id = st.secrets["NHSTSERVER_ID"]
+            client_secret = st.secrets["NHSTSERVER_TOKEN"]
+        except KeyError:
+            st.error("NHS Terminology Server credentials not configured")
+            return
+
+        # Build lookups from child_rows
+        descendant_codes = set()
+        emis_lookup = {}
+        display_lookup = {}
+        inactive_lookup = {}
+
+        for row in child_rows:
+            child_code = row.get("Child Code")
+            if child_code:
+                descendant_codes.add(str(child_code))
+                emis_lookup[str(child_code)] = row.get("EMIS GUID")
+                display_lookup[str(child_code)] = row.get("Child Display", "")
+                inactive_lookup[str(child_code)] = bool(row.get("Inactive"))
+
+        # Progress callback
+        def on_progress(message: str, current: int, total: int):
+            progress = current / total if total > 0 else 0
+            progress_bar.progress(min(progress, 1.0))
+            status_text.text(message)
+
+        status_text.text(f"Tracing lineage for {parent_code}...")
+
+        # Scale API call budget with descendant volume to reduce avoidable truncation
+        # on broad hierarchies, but keep a hard cap for safety.
+        max_api_calls = min(
+            max(100, len(descendant_codes) * 3),
+            LOOKUP_HIERARCHY_MAX_API_CALLS_CAP,
+        )
+
+        result = trace_lineage(
+            root_code=parent_code,
+            root_display=parent_display,
+            descendant_codes=descendant_codes,
+            emis_lookup=emis_lookup,
+            display_lookup=display_lookup,
+            inactive_lookup=inactive_lookup,
+            include_inactive=True,
+            max_depth=max_depth,
+            max_api_calls=max_api_calls,
+            max_nodes=LOOKUP_HIERARCHY_NODE_CAP,
+            client_id=client_id,
+            client_secret=client_secret,
+            progress_callback=on_progress,
+        )
+
+        progress_bar.empty()
+        status_text.empty()
+
+        if result.error:
+            st.error(f"Lineage trace failed: {result.error}")
+            return
+
+        # Store result
+        st.session_state[lineage_key] = result
+        warnings = st.session_state.get(f"{lineage_key}_warnings", [])
+        if result.truncated:
+            truncation_warning = result.truncation_reason or (
+                f"Hierarchy was truncated (node cap {LOOKUP_HIERARCHY_NODE_CAP})."
+            )
+            if truncation_warning not in warnings:
+                warnings.append(truncation_warning)
+        expected_nodes = len(descendant_codes)
+        if not result.truncated and result.total_nodes < expected_nodes:
+            coverage_warning = (
+                f"Hierarchy includes {result.total_nodes} of {expected_nodes} "
+                "descendant code(s)."
+            )
+            if coverage_warning not in warnings:
+                warnings.append(coverage_warning)
+        st.session_state[f"{lineage_key}_warnings"] = warnings
+
+        st.success(
+            f"Traced {result.total_nodes}/{expected_nodes} nodes, "
+            f"max depth {result.max_depth_reached}, "
+            f"{result.api_calls_made} API calls"
+            + (f", {len(result.shared_lineage_codes)} shared lineage codes" if result.shared_lineage_codes else "")
+        )
+        st.rerun()
+
+    except Exception as e:
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"Lineage trace failed: {str(e)}")
+
+
+def _render_lookup_lineage_tree(result: LineageTraceResult, parent_code: str):
+    """Render the lineage tree for lookup results."""
+    if not result.tree:
+        st.info("No hierarchy data available")
+        return
+
+    def _build_code_display_map(node, mapping):
+        """Build code -> display lookup from the rendered lineage tree."""
+        mapping[str(node.code)] = node.display or str(node.code)
+        for child in node.children or []:
+            _build_code_display_map(child, mapping)
+
+    def _get_shared_parents(shared_code: str, display_map: dict) -> list:
+        """Return unique direct parents for a shared-lineage code."""
+        parents = []
+        seen = set()
+        for node in result.flat_nodes:
+            if str(node.code) != shared_code:
+                continue
+            parent_code_value = str(node.direct_parent_code or "").strip()
+            if not parent_code_value:
+                continue
+            parent_display = display_map.get(parent_code_value, parent_code_value)
+            key = (parent_code_value, parent_display)
+            if key in seen:
+                continue
+            seen.add(key)
+            parents.append(key)
+        return parents
+
+    def _escape_html(text: str) -> str:
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    # Legend
+    st.caption("**Key:** ✓ EMIS GUID found | ❌ Not in EMIS lookup | ⚠️ Shared lineage (multiple parents)")
+
+    # Build tree once, reuse for display and export
+    tree_lines = _build_lookup_ascii_tree(result.tree, result.shared_lineage_codes)
+
+    with st.expander(f"🌲 Hierarchy Tree: {parent_code}", expanded=True):
+        if tree_lines:
+            st.code("\n".join(tree_lines))
+
+            # Stats
+            st.caption(
+                f"Total nodes: {result.total_nodes} \u00a0|\u00a0 "
+                f"Max depth: {result.max_depth_reached} \u00a0|\u00a0 "
+                f"API calls: {result.api_calls_made}"
+                + (f" \u00a0|\u00a0 Shared lineage: {len(result.shared_lineage_codes)}" if result.shared_lineage_codes else "")
+            )
+
+    if result.shared_lineage_codes:
+        code_display_map = {}
+        _build_code_display_map(result.tree, code_display_map)
+
+        with st.container(key="lookup_shared_lineage_scope"):
+            # Scope nested-expander title tweaks to this lookup-tab section only.
+            st.markdown(
+                """
+                <style>
+                .st-key-lookup_shared_lineage_scope div[data-testid="stExpander"] div[data-testid="stExpander"] summary p {
+                    font-size: 0.9rem;
+                    margin: 0;
+                    line-height: 1.2;
+                }
+                .st-key-lookup_shared_lineage_scope div[data-testid="stExpander"] div[data-testid="stExpander"] summary {
+                    min-height: 1.8rem;
+                    padding-top: 0.1rem;
+                    padding-bottom: 0.1rem;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.expander("⚠️ Shared Lineage Codes", expanded=False):
+                st.caption(
+                    f"{len(result.shared_lineage_codes)} code(s) appear under multiple parent branches."
+                )
+                for code in sorted(result.shared_lineage_codes):
+                    code_str = str(code)
+                    code_display = code_display_map.get(code_str, code_str)
+                    shared_parents = _get_shared_parents(code_str, code_display_map)
+                    with st.expander(f"{code_str} ({code_display})", expanded=False):
+                        if shared_parents:
+                            for parent_code_value, parent_display in shared_parents:
+                                safe_display = _escape_html(parent_display)
+                                st.markdown(
+                                    f"- `{parent_code_value}` "
+                                    f"<span style='font-size:0.9em;'>({safe_display})</span>",
+                                    unsafe_allow_html=True,
+                                )
+                        else:
+                            st.markdown("- Parent lineage unavailable")
+
+    render_lookup_hierarchy_export_controls(
+        lines=tree_lines,
+        parent_code=parent_code,
+        json_data=result.to_hierarchical_json(source_filename=f"Individual lookup: {parent_code}"),
+    )
+
+
+def _build_lookup_ascii_tree(
+    node,
+    shared_codes: list,
+    prefix: str = "",
+    is_last: bool = True,
+    is_root: bool = True
+) -> list:
+    """Build ASCII tree lines from LineageNode in SQL/file-browser style."""
+    lines = []
+
+    # Format node display - SQL style: [Depth].[Code].[Display]
+    code = node.code
+    display = node.display or code
+    depth_label = "R" if node.depth == 0 else f"D{node.depth}"
+
+    # Build indicators
+    indicators = ""
+    if node.inactive:
+        indicators += " (inactive)"
+    if node.emis_guid:
+        if node.emis_guid == "Not in EMIS lookup table":
+            indicators += " ❌"
+        else:
+            indicators += " ✓"
+    if code in shared_codes:
+        indicators += " ⚠️"
+
+    node_text = f"[{depth_label}].[{code}].[{display}]{indicators}"
+
+    if is_root:
+        lines.append(f"🌲 {node_text}")
+        # Children of root get initial indent
+        child_prefix = "    "
+    else:
+        connector = "+--" if is_last else "|--"
+        lines.append(f"{prefix}{connector} {node_text}")
+        child_prefix = prefix + ("      " if is_last else "|     ")
+
+    children = node.children or []
+
+    for idx, child in enumerate(children):
+        is_last_child = idx == len(children) - 1
+        child_lines = _build_lookup_ascii_tree(
+            child,
+            shared_codes,
+            prefix=child_prefix,
+            is_last=is_last_child,
+            is_root=False
+        )
+        lines.extend(child_lines)
+
+    return lines

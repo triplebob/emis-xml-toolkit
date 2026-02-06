@@ -195,7 +195,7 @@ def format_memory_display(memory_mb):
     else:
         return f"{memory_mb/1024:.1f} GB"
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False, scope="session")
 def _get_cached_status_content(lookup_size, version_str, load_source):
     """Cache static status content that doesn't change during session"""
     source_icons = {
@@ -220,7 +220,7 @@ def _get_cached_status_content(lookup_size, version_str, load_source):
     
     return f"{icon} Lookup table loaded from {message}: {lookup_size:,} total mappings"
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False, scope="session")
 def _get_cached_version_info(version_info_dict):
     """Cache version information that doesn't change during session"""
     if not version_info_dict or len(version_info_dict) == 0:
@@ -306,12 +306,14 @@ def render_status_bar():
             # Changelog section - Direct in-app display
             with st.sidebar.expander(f"🎯 What's New: v{__version__}", expanded=False):
                 st.markdown(f"""
-                                **Security & UI Enhancements:**
-                                - Security patch applied with upgraded `cryptography` and resolved all Github Dependabot alerts.
-                                - Explorer exports extended with lazy TXT and styled SVG tree output, and XML viewer improved with syntax‑aligned line numbers.
-                                - Terminology Server error handling upgraded with structured categories, SNOMED validation, and clearer user‑facing messages.
-                                - EMIS GUID matching accelerated via filtered PyArrow queries and cached batch lookup.
-                                - Plugin registry now version‑aware with compatibility checks for safer plugin development.
+                                **Analytics & MDS Generator Update:**
+                                - Analytics promoted to a top‑level tab with new XML Overview and MDS Generator subtabs.
+                                - New MDS export with smart filtering, entity‑first traversal, view modes, metrics, and styled preview.
+                                - SNOMED hierarchy lineage view added with ASCII tree, shared‑lineage detection, and TXT/SVG/JSON exports.
+                                - Session‑scoped caching deployed for user‑isolated data; Streamlit 1.53.0+ now required.
+                                - Fixed plugin flag inheritance for pseudo‑refsets and added new Plugins debug subtab.
+                                - Test suite expanded to ~130 tests covering MDS, lineage workflows, and plugin behaviour.
+
                 """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
 

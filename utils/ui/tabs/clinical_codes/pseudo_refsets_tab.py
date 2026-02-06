@@ -10,6 +10,8 @@ def render_pseudo_refsets_tab(results=None):
     if not unified_results:
         st.write("❌ No analysis data found - please run XML analysis first")
         return
+    
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
 
     # Pre-categorised by _category_split: only pseudo refset containers
     base_pseudo_refsets = unified_results.get("pseudo_refsets", [])

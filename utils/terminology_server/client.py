@@ -558,6 +558,79 @@ class NHSTerminologyClient:
                 error=f"Expansion failed: {str(e)}"
             )
 
+    def get_direct_children(
+        self,
+        code: str,
+        include_inactive: bool = False
+    ) -> Tuple[List[ExpandedConcept], Optional[str]]:
+        """
+        Get direct children of a SNOMED concept (one level down only).
+
+        Uses ECL expression `<! {code}` (child-of) rather than `< {code}` (descendant-of).
+
+        Args:
+            code: SNOMED CT concept code
+            include_inactive: Include inactive/deprecated concepts
+
+        Returns:
+            (list of direct children, error_message)
+        """
+        validation_error = _validate_snomed_code(code)
+        if validation_error:
+            return [], f"Invalid code: {validation_error}"
+
+        code = code.strip()
+        children: List[ExpandedConcept] = []
+        offset = 0
+        page_size = self.config.expansion_page_size
+        ecl_expression = f"<! {code}"  # Direct children only
+
+        try:
+            while True:
+                params = {
+                    'url': f'http://snomed.info/sct?fhir_vs=ecl/{quote(ecl_expression)}',
+                    'count': page_size,
+                    'offset': offset,
+                    'includeDesignations': 'false',
+                    'activeOnly': 'false' if include_inactive else 'true'
+                }
+
+                response, error = self._make_request('ValueSet/$expand', params)
+
+                if error:
+                    if offset == 0:
+                        # Check if it's a "no matches" error (leaf node)
+                        if "no match" in error.lower() or "leaf" in error.lower():
+                            return [], None  # No children, not an error
+                        return [], error
+                    break
+
+                expansion = response.get('expansion', {})
+                contains = expansion.get('contains', [])
+
+                for concept in contains:
+                    children.append(ExpandedConcept(
+                        code=concept.get('code', ''),
+                        display=concept.get('display', ''),
+                        system=concept.get('system', 'http://snomed.info/sct'),
+                        inactive=concept.get('inactive', False)
+                    ))
+
+                if len(contains) < page_size:
+                    break
+
+                offset += page_size
+
+                # Safety limit for direct children
+                if len(children) >= 10000:
+                    break
+
+            return children, None
+
+        except Exception as e:
+            logger.error(f"Error getting direct children for {code}: {str(e)}")
+            return [], f"Failed to get direct children: {str(e)}"
+
     def lookup_concept(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """
         Lookup a SNOMED concept to get its display name

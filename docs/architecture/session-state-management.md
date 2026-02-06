@@ -327,5 +327,5 @@ else:
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

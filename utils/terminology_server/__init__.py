@@ -48,6 +48,14 @@ from .expansion_workflow import (
     expand_single_code,
     lookup_concept_display,
 )
+from .lineage_workflow import (
+    LineageNode,
+    LineageTraceResult,
+    FullLineageTraceResult,
+    trace_lineage,
+    trace_lineage_for_expansion,
+    trace_full_lineage,
+)
 from .connection import test_connection
 
 __all__ = [
@@ -77,4 +85,11 @@ __all__ = [
     "expand_single_code",
     "lookup_concept_display",
     "test_connection",
+    # Lineage trace
+    "LineageNode",
+    "LineageTraceResult",
+    "FullLineageTraceResult",
+    "trace_lineage",
+    "trace_lineage_for_expansion",
+    "trace_full_lineage",
 ]

@@ -51,9 +51,11 @@ Expansion outputs include:
 ## Caching Behavior
 
 - Expansion results use a session-state cache in `service.py`
+- Cache is scoped to the active Streamlit session
 - Default expansion cache TTL is 90 minutes
 - Cache size is bounded (oldest entries are evicted when full)
 - Optional "use cache" toggles allow reuse of prior results
+- On new XML upload/reprocess, expansion + hierarchy payloads are cleared to prevent accumulation across files
 
 ## Reliability Characteristics
 
@@ -76,5 +78,5 @@ Expansion outputs include:
 
 ---
 
-*Last Updated: 2nd February 2026*  
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*  
+*Application Version: 3.0.2*

@@ -68,6 +68,7 @@ graph TB
       XMLX[xml_inspector/*]
       SEARCH[search_browser/*]
       REPORT[report_viewer/*]
+      ANALYTICS[analytics/*]
       LOOKUP[terminology_server/lookup_tab.py]
       EXPAND[terminology_server/expansion_tab.py]
     end
@@ -108,6 +109,7 @@ graph TB
     TABS --> XMLX
     TABS --> SEARCH
     TABS --> REPORT
+    TABS --> ANALYTICS
     TABS --> LOOKUP
 
     CLIN --> EXPAND
@@ -140,12 +142,13 @@ graph TB
 Processed-file mode:
 
 1. Clinical Codes
-2. XML Explorer
-3. Searches
-4. Reports
-5. Code Lookup
+2. Searches
+3. Reports
+4. XML Explorer
+5. Analytics
+6. Code Lookup
 
-Debug mode additionally exposes a Memory diagnostics tab.
+Debug mode additionally exposes a Debug tab (memory diagnostics, plugin manager).
 
 ## Caching Summary
 
@@ -157,5 +160,5 @@ Debug mode additionally exposes a Memory diagnostics tab.
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

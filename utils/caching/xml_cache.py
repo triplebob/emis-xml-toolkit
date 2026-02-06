@@ -55,7 +55,7 @@ def _flatten_from_code_store(code_store: CodeStore) -> List[Dict[str, Any]]:
     return flattened
 
 
-@st.cache_data(ttl=600, max_entries=1, show_spinner=False)
+@st.cache_data(ttl=600, max_entries=1, show_spinner=False, scope="session")
 def cache_parsed_xml(xml_hash: str, xml_content: str, pipeline_version: str = _PIPELINE_VERSION) -> Dict[str, Any]:
     """
     Cache pipeline parsing + enrichment keyed by XML content hash.

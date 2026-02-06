@@ -5,6 +5,73 @@
 
 ---
 
+## v3.0.2 - Analytics & MDS Generator (6th February 2026)
+
+### **Analytics Tab Restructure**
+
+- **Promoted to top-level tab**: Analytics now sits between XML Explorer and Code Lookup (6 tabs total)
+- **New tab order**: Clinical Codes | Searches | Reports | XML Explorer | Analytics | Code Lookup
+- **Subtab organisation**: XML Overview (moved from Clinical Codes) and MDS Generator (new)
+
+### **MDS (Minimum Dataset) Generator**
+
+New MDS clinical code export for resource management, repository indexing, audit, and governance workflows.
+
+- **📦 MDS Generator subtab**: Available under Analytics after XML processing
+- **Entity-first traversal**: Memory-safe extraction from `pipeline_entities` without DataFrame transforms
+- **Smart filtering**: Excludes EMISINTERNAL codes, pseudo-refset containers, and invalid GUIDs
+- **View modes**: Unique Codes (dedupe by GUID) or Per Source (dedupe by source + GUID)
+- **Code type classification**: Pseudo members assigned to core type (clinical/medication/refset)
+- **EMIS XML output**: Optional XML ready code column with `<values>` blocks including dynamic `includeChildren` from source data
+- **Conflict resolution**: Defaults to `includeChildren=false` when same code appears with conflicting values
+- **Summary metrics**: Criteria scanned, row count, mapped count, mapping rate, type breakdown
+- **Preview table**: First 50 rows with row highlighting by mapping status (green/red)
+- **New modules**: `mds_provider.py`, `mds_exports.py`, `mds_tab.py`
+
+### **NHS Terminology Server Hierarchy View**
+
+Full lineage display for expanded SNOMED codes with tree visualisation.
+
+- **Button-triggered hierarchy trace**: Available below Child Codes Detail table in expansion and lookup tabs
+- **ASCII tree view**: Parent-child relationships with depth indicators starting at root: `[R]`, `[D1]`, `[D2]`...
+- **Shared lineage detection**: Highlights codes appearing under multiple expansion branches
+- **Efficient API usage**: Reuses cached expansion results; only `<!` (direct children) queries are new calls
+- **Guard rails**: Configurable depth cap, API call cap, and node cap per parent
+- **Export support**: TXT, SVG, and JSON with full hierarchy metadata and source file tracking
+- **New module**: `lineage_workflow.py` extracted from `expansion_workflow.py` for maintainability
+
+### **Session-Scoped Caching**
+
+Streamlit 1.53.0+ session-scoped caching for user-isolated data.
+
+- **Deployed `scope="session"`**: Applied to `_load_report_metadata()`, `_extract_clinical_codes()`, `_process_column_groups()`, `paginate_reports()`, `load_report_sections()`
+- **Bug fix**: Resolved `paginate_reports()` reading session state inside cached function
+- **Updated requirements**: Now requires `streamlit>=1.53.0`
+- **Global caches preserved**: SNOMED lookups, version info, and file-hash based caches remain global as intended
+
+### **Plugin Flag Propagation Fix**
+
+- **Fixed incorrect flag inheritance**: `is_refset`, `is_pseudo_refset`, `is_pseudo_member` no longer propagate from criterion-level plugins to individual codes
+- **Correct tagging**: Regular codes in pseudo-refsets now correctly tagged as `is_pseudo_member: true`
+- **Fix location**: `value_set_parser.py` - excluded code-specific flags from `parent_flags` inheritance
+
+### **Plugin Manager UI**
+
+New debug interface for plugin inspection and control.
+
+- **Plugins subtab**: Available in Debug tab (debug mode only)
+- **Priority-coloured table**: Displays Name, Description, Tags, Priority, Score, Version, Enabled status
+- **Interactive controls**: Enable/disable plugins via checkboxes
+- **Reset functionality**: Reset All to Defaults button restores original plugin configuration
+
+### **Test Coverage Expansion**
+
+- **MDS tests**: 27 tests covering provider logic, export helpers, and preview transforms
+- **Terminology workflow tests**: 6 tests for hierarchy lineage tracing and tree building
+- **Total test count**: ~130 tests (up from 54)
+
+---
+
 ## v3.0.1 - Security & UI Enhancements (3rd February 2026)
 
 ### **Security Patch**
@@ -315,6 +382,6 @@ The parsing system has been rebuilt around a plugin-based architecture, enabling
 
 ---
 
-*Last Updated: 4th February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*
 *Live at: https://clinxml.streamlit.app/*

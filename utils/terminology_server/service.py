@@ -73,6 +73,24 @@ class ExpansionCache:
         try:
             if self._session_key not in st.session_state:
                 st.session_state[self._session_key] = {}
+
+            # Keep expansion cache scoped to the currently loaded XML session.
+            # If the file hash changes, drop old expansion entries to avoid
+            # accumulation across uploads/reprocess cycles.
+            current_file_hash = (
+                st.session_state.get("current_file_hash")
+                or st.session_state.get("last_processed_hash")
+            )
+            file_hash_key = f"{self._session_key}_file_hash"
+            cached_file_hash = st.session_state.get(file_hash_key)
+            if (
+                current_file_hash
+                and cached_file_hash
+                and cached_file_hash != current_file_hash
+            ):
+                st.session_state[self._session_key] = {}
+            if current_file_hash:
+                st.session_state[file_hash_key] = current_file_hash
             return st.session_state[self._session_key]
         except Exception:
             return self._cache
@@ -365,17 +383,30 @@ class ExpansionService:
         }
 
 
-# Singleton instance
+# Process-wide fallback singleton (used outside Streamlit session contexts)
 _expansion_service: Optional[ExpansionService] = None
 _service_lock = threading.Lock()
 
 
 def get_expansion_service() -> ExpansionService:
-    """Get global expansion service singleton"""
-    global _expansion_service
+    """
+    Get expansion service instance.
 
+    - In Streamlit runtime: scope to current session via st.session_state
+    - Outside Streamlit (tests/scripts): fall back to process singleton
+    """
+    if st is not None:
+        try:
+            session_key = "terminology_expansion_service"
+            if session_key not in st.session_state:
+                st.session_state[session_key] = ExpansionService()
+            return st.session_state[session_key]
+        except Exception:
+            # If session state isn't available, use process singleton fallback.
+            pass
+
+    global _expansion_service
     with _service_lock:
         if _expansion_service is None:
             _expansion_service = ExpansionService()
-
     return _expansion_service

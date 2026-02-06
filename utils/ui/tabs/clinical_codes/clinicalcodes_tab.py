@@ -16,6 +16,8 @@ def render_clinical_codes_tab(results=None):
             return value
         return str(value).strip().lower() in {"true", "1", "yes"}
 
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
+
     # Pre-categorised by _category_split: includes pseudo members
     base_clinical = unified_results.get("clinical_codes", [])
 

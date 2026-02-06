@@ -7,6 +7,7 @@ Current terminology integration modules:
 - `utils/terminology_server/client.py`
 - `utils/terminology_server/service.py`
 - `utils/terminology_server/expansion_workflow.py`
+- `utils/terminology_server/lineage_workflow.py`
 - `utils/terminology_server/connection.py`
 - UI entry points:
   - `utils/ui/tabs/terminology_server/lookup_tab.py`
@@ -50,6 +51,18 @@ Responsibilities:
 - Build summary rows and child export rows
 - Attach EMIS GUID mapping where available
 
+### `lineage_workflow.py`
+
+Hierarchy lineage tracing and tree building.
+
+Responsibilities:
+
+- Trace parent-child lineage from expansion results
+- Build `LineageNode` tree structures with depth tracking
+- Detect shared lineage across multiple branches
+- Generate ASCII tree representations with depth indicators
+- Export hierarchy to JSON with source file metadata
+
 ### `connection.py`
 
 Connection checks and quick diagnostics used by sidebar status/actions.
@@ -71,10 +84,18 @@ UI tab action
 ### Expansion Cache (`service.py`)
 
 - Backed by session state when Streamlit context is available
+- Cache is scoped to the active file hash (`current_file_hash` / `last_processed_hash`)
 - Default TTL: 90 minutes
 - Default max size: 10,000 entries
 - Eviction policy: remove oldest cached entry when at capacity
 - Cache key includes code + include-inactive option
+- File-change invalidation: cache is reset when a new XML file is loaded/reprocessed
+
+### Hierarchy / Lineage Session State
+
+- Hierarchy payloads (`full_lineage_trace_result`, `lookup_lineage_*`) are stored in session state
+- These are explicitly cleared on new XML upload/reprocess via session-state cleanup helpers
+- This prevents cross-file accumulation and memory creep in long-running sessions
 
 ### Lookup Mapping Dependency
 
@@ -104,7 +125,7 @@ UI surfaces these through clear status messages and error panels.
 - Credentials sourced from Streamlit secrets (`NHSTSERVER_ID`, `NHSTSERVER_TOKEN`)
 - Code lookup available without XML upload
 - Batch expansion in Clinical Codes tab consumes pipeline-produced clinical rows
-- Export helpers live in `utils/exports/terminology_child_exports.py`
+- Export helpers live in `utils/exports/terminology_child_exports.py` (child code CSV) and `utils/exports/terminology_tree_exports.py` (hierarchy tree TXT/SVG/JSON)
 
 ## Extension Guidance
 
@@ -118,5 +139,5 @@ When adding terminology features:
 
 ---
 
-*Last Updated: 2nd February 2026*  
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

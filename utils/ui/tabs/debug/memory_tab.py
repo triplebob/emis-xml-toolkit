@@ -227,6 +227,8 @@ def _get_gc_stats() -> Dict[str, Any]:
 
 def render_memory_content():
     """Render the memory diagnostics content."""
+    # Hide Streamlit dataframe toolbar download icon in this tab; exports are controlled via explicit buttons.
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
     st.subheader("Memory Diagnostics")
 
     # ─────────────────────────────────────────────────────────────

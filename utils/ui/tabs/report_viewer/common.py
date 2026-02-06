@@ -19,7 +19,7 @@ from ....exports.report_export_common import build_report_filename
 from ....system.session_state import SessionStateKeys
 
 
-@st.cache_data(ttl=600, max_entries=1)
+@st.cache_data(ttl=600, max_entries=1, scope="session")
 def _build_snomed_lookup(file_hash: str, codes_count: int) -> Dict[str, str]:
     """Cached SNOMED lookup builder - invalidates on file change."""
     ui_rows = st.session_state.get(SessionStateKeys.PIPELINE_CODES, [])
@@ -336,6 +336,7 @@ def _render_column_filters(filters: List[Dict[str, Any]]) -> None:
         )
     if rows:
         st.markdown("**Column Filters**")
+        st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
         st.dataframe(rows, hide_index=True, width="stretch")
 
 
@@ -364,6 +365,7 @@ def _render_value_sets(value_sets: List[Dict[str, Any]]) -> None:
         )
     if rows:
         st.markdown("**Value Sets**")
+        st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
         st.dataframe(rows, hide_index=True, width="stretch")
 
 

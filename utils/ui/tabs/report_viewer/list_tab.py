@@ -25,7 +25,6 @@ from ....metadata.report_filtering import (
 )
 from ..search_browser.search_criteria_viewer import render_linked_criteria
 
-
 def _code_system_label(code_system: str) -> str:
     if not code_system:
         return ""
@@ -158,6 +157,7 @@ def render_list_reports_tab(*_args, **_kwargs) -> None:
         selected_report, metadata, status_text = render_report_selector("list", "List Report", "list_report")
         if not selected_report:
             return
+        st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
 
         st.markdown("""
             <style>

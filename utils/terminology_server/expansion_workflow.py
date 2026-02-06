@@ -10,8 +10,18 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Callable, Tuple
 
 from .service import ExpansionConfig, get_expansion_service
-from .client import ExpansionResult
+from .client import ExpansionResult, ExpandedConcept
 from ..caching.lookup_cache import lookup_snomed_to_emis
+
+# Re-export lineage types and functions for backward compatibility
+from .lineage_workflow import (
+    LineageNode,
+    LineageTraceResult,
+    FullLineageTraceResult,
+    trace_lineage,
+    trace_lineage_for_expansion,
+    trace_full_lineage,
+)
 
 
 @dataclass
@@ -497,7 +507,7 @@ def build_hierarchical_json(child_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "export_metadata": {
             "export_type": "terminology_expansion",
             "export_timestamp": datetime.now().isoformat(),
-            "source": "ClinXML EMIS XML Converter",
+            "source": "ClinXML™ EMIS XML Toolkit (https://clinxml.streamlit.app)",
             "total_parents": len(hierarchy),
             "total_children": len(child_rows)
         },

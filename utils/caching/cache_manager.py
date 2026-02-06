@@ -19,7 +19,7 @@ class CacheManager:
     # =============================================================================
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=1)  # Scoped to current XML session
+    @st.cache_data(ttl=600, max_entries=1, scope="session")  # Scoped to current XML session
     def cache_snomed_lookup_dictionary(unified_data_hash: str, clinical_data: Dict[str, Any]) -> Dict[str, str]:
         """
         Cache SNOMED lookup dictionary for O(1) lookups
@@ -44,7 +44,7 @@ class CacheManager:
         return lookup_dict
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=1)  # Scoped to current XML session
+    @st.cache_data(ttl=600, max_entries=1, scope="session")  # Scoped to current XML session
     def cache_unified_clinical_data(analysis_hash: str, search_codes: List[Dict], report_codes: List[Dict], 
                                   medications: List[Dict], refsets: List[Dict], pseudo_refsets: List[Dict]) -> Dict[str, Any]:
         """
@@ -75,7 +75,7 @@ class CacheManager:
     # =============================================================================
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=10)  # 10-minute TTL, limited entries for memory
+    @st.cache_data(ttl=600, max_entries=10, scope="session")  # 10-minute TTL, limited entries for memory
     def cache_list_report_visualisation(report_id: str, report_hash: str, column_groups_count: int,
                                       criteria_count: int, total_codes: int) -> Dict[str, Any]:
         """
@@ -102,7 +102,7 @@ class CacheManager:
         }
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=10)  # 10-minute TTL, limited entries for memory
+    @st.cache_data(ttl=600, max_entries=10, scope="session")  # 10-minute TTL, limited entries for memory
     def cache_audit_report_visualisation(report_id: str, report_hash: str, population_refs_count: int,
                                        criteria_count: int, aggregation_config: str) -> Dict[str, Any]:
         """
@@ -129,7 +129,7 @@ class CacheManager:
         }
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=10)  # 10-minute TTL, limited entries for memory
+    @st.cache_data(ttl=600, max_entries=10, scope="session")  # 10-minute TTL, limited entries for memory
     def cache_aggregate_report_visualisation(report_id: str, report_hash: str, aggregate_groups_count: int,
                                            statistical_groups_count: int, cross_tab_config: str) -> Dict[str, Any]:
         """
@@ -156,7 +156,7 @@ class CacheManager:
         }
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=20)  # 10-minute TTL, limited entries for memory
+    @st.cache_data(ttl=600, max_entries=20, scope="session")  # 10-minute TTL, limited entries for memory
     def cache_report_metadata(report_id: str, report_name: str, report_type: str,
                             parent_info: str, search_date: str, description: str) -> Dict[str, Any]:
         """
@@ -188,7 +188,7 @@ class CacheManager:
     # =============================================================================
     
     @staticmethod
-    @st.cache_data(ttl=300, max_entries=10)  # 5-minute TTL, limited entries for memory
+    @st.cache_data(ttl=300, max_entries=10, scope="session")  # 5-minute TTL, limited entries for memory
     def cache_dataframe_rendering(data_hash: str, dataframe_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Cache DataFrame rendering configuration
@@ -376,7 +376,7 @@ class CacheManager:
         }
     
     @staticmethod
-    @st.cache_data(ttl=600, max_entries=1, show_spinner=False)  # Scoped to current XML session
+    @st.cache_data(ttl=600, max_entries=1, show_spinner=False, scope="session")  # Scoped to current XML session
     def cache_xml_code_extraction(xml_content_hash: str, xml_content: str) -> List[Dict[str, Any]]:
         """
         Cache XML code extraction to avoid expensive parsing

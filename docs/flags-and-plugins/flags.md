@@ -413,12 +413,12 @@ Update consumers:
 
 **5. Add or update tests**
 
-- Parser tests: `tests/test_search_parser.py`, `tests/test_parsing_report_parser.py`
-- Built-in plugin regression tests: `tests/test_builtin_plugins.py`
-- Flag/plugin contract tests: `tests/test_flags_and_plugins.py`
-- Plugin harness tests: `tests/test_plugin_harness.py`
-- Namespace helper tests: `tests/test_namespace_utils.py`
-- Related downstream checks: `tests/test_exports.py`, `tests/test_snomed_translation.py`, `tests/test_code_store.py`
+- Parser tests: `tests/parsing/test_search_parser.py`, `tests/parsing/test_parsing_report_parser.py`
+- Built-in plugin regression tests: `tests/plugins/test_builtin_plugins.py`
+- Flag/plugin contract tests: `tests/plugins/test_flags_and_plugins.py`
+- Plugin harness tests: `tests/plugins/test_plugin_harness.py`
+- Namespace helper tests: `tests/parsing/test_namespace_utils.py`
+- Related downstream checks: `tests/exports/test_exports.py`, `tests/metadata/test_snomed_translation.py`, `tests/caching/test_code_store.py`
 - Behaviour tests for target tab/export path
 
 </details>
@@ -466,5 +466,5 @@ Update consumers:
 
 ---
 
-*Last Updated: 3rd February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*

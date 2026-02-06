@@ -46,17 +46,19 @@ caching/
 
 ```text
 exports/
-├── analytics_exports.py         # Analytics export handlers
-├── clinical_exports.py          # Clinical code exports (CSV)
-├── explorer_exports.py          # XML Explorer tree exports (TXT/SVG)
-├── report_excel.py              # Report Excel exports
-├── report_export_common.py      # Shared report export logic
-├── report_json.py               # Report JSON exports
-├── search_data_provider.py      # Search export data helpers
-├── search_excel.py              # Search Excel exports
-├── search_json.py               # Search JSON exports
-├── terminology_child_exports.py # NHS terminology expansion exports
-└── ui_export_manager.py         # Export coordination and lazy generation
+├── analytics_exports.py           # Analytics export handlers
+├── clinical_exports.py            # Clinical code exports (CSV)
+├── explorer_exports.py            # XML Explorer tree exports (TXT/SVG/JSON)
+├── mds_exports.py                 # MDS lazy CSV export helpers
+├── report_excel.py                # Report Excel exports
+├── report_export_common.py        # Shared report export logic
+├── report_json.py                 # Report JSON exports
+├── search_data_provider.py        # Search export data helpers
+├── search_excel.py                # Search Excel exports
+├── search_json.py                 # Search JSON exports
+├── terminology_child_exports.py   # NHS terminology expansion exports
+├── terminology_tree_exports.py    # Hierarchy tree exports (TXT/SVG/JSON)
+└── ui_export_manager.py           # Export coordination and lazy generation
 ```
 
 </details>
@@ -73,6 +75,7 @@ metadata/
 ├── enrichment.py                # Code enrichment
 ├── flag_mapper.py               # Flag mapping and validation
 ├── flag_registry.py             # Canonical flag definitions (95+ flags)
+├── mds_provider.py              # MDS entity-first row builder and summariser
 ├── models.py                    # Data models
 ├── operator_translator.py       # Operator translation
 ├── population_describer.py      # Population description
@@ -158,6 +161,7 @@ terminology_server/
 ├── client.py              # FHIR R4 API client with OAuth2
 ├── connection.py          # Connection utilities
 ├── expansion_workflow.py  # Expansion workflow orchestration
+├── lineage_workflow.py    # Hierarchy lineage tracing and tree building
 └── service.py             # Expansion service layer
 ```
 
@@ -173,8 +177,10 @@ ui/
 ├── theme.py            # Centralised theme constants
 ├── ui_tabs.py          # Main results interface routing
 └── tabs/
+    ├── analytics/                # Analytics top-level tab
+    │   ├── mds_tab.py            # MDS Generator view and export
+    │   └── xml_overview_tab.py   # XML overview and quality metrics
     ├── clinical_codes/           # Clinical code tabs
-    │   ├── analytics_tab.py      # Analytics view
     │   ├── clinical_tabs.py      # Tab orchestration
     │   ├── clinicalcodes_tab.py  # Clinical codes view
     │   ├── codes_common.py       # Shared utilities
@@ -272,12 +278,13 @@ Raw Data → Type-Specific Processing → Lazy Generation → User Download
 Normal processed view (non-debug):
 
 1. Clinical Codes
-2. XML Explorer
-3. Searches
-4. Reports
-5. Code Lookup
+2. Searches
+3. Reports
+4. XML Explorer
+5. Analytics (subtabs: XML Overview, MDS Generator)
+6. Code Lookup
 
-Debug mode adds a Memory tab for diagnostics.
+Debug mode adds a Debug tab for diagnostics.
 
 ---
 
@@ -298,19 +305,27 @@ Debug mode adds a Memory tab for diagnostics.
 
 Current test files:
 
-- `tests/test_builtin_plugins.py` - Built-in plugin regression tests
-- `tests/test_code_store.py` - CodeStore deduplication and reference tests
-- `tests/test_exports.py` - Search/report/clinical export generation tests
-- `tests/test_parsing_report_parser.py` - Report parsing tests
-- `tests/test_flags_and_plugins.py` - Flag/plugin contract tests
-- `tests/test_namespace_utils.py` - Namespace helper tests
-- `tests/test_plugin_harness.py` - Plugin harness smoke tests
-- `tests/test_search_parser.py` - Search parsing tests
-- `tests/test_session_state.py` - Session state unit tests
-- `tests/test_snomed_translation.py` - SNOMED translation and deduplication tests
-- `tests/test_structure_parser.py` - Structure parsing tests
-- `tests/test_value_set_resolver.py` - Value set resolver invalidation tests
-- `tests/test_performance.py` - Performance benchmarks
+- `tests/terminology_server/test_terminology_client.py` - Terminology client tests
+- `tests/terminology_server/test_terminology_service.py` - Terminology service tests
+- `tests/terminology_server/test_terminology_workflows.py` - Hierarchy/expansion workflow tests
+- `tests/test_terminology_server.py` - Standalone terminology aggregator import
+- `tests/plugins/test_builtin_plugins.py` - Built-in plugin regression tests
+- `tests/plugins/test_flags_and_plugins.py` - Flag/plugin contract tests
+- `tests/plugins/test_plugin_harness.py` - Plugin harness smoke tests
+- `tests/plugins/test_plugin_registry_versioning.py` - Plugin versioning and metadata tests
+- `tests/parsing/test_namespace_utils.py` - Namespace helper tests
+- `tests/parsing/test_parsing_report_parser.py` - Report parsing tests
+- `tests/parsing/test_search_parser.py` - Search parsing tests
+- `tests/parsing/test_structure_parser.py` - Structure parsing tests
+- `tests/parsing/test_value_set_resolver.py` - Value set resolver invalidation tests
+- `tests/caching/test_code_store.py` - CodeStore deduplication and reference tests
+- `tests/caching/test_session_state.py` - Session state unit tests
+- `tests/exports/test_exports.py` - Search/report/clinical export generation tests
+- `tests/exports/test_mds_exports.py` - MDS CSV export and filename tests
+- `tests/metadata/test_snomed_translation.py` - SNOMED translation and deduplication tests
+- `tests/metadata/test_mds_provider.py` - MDS entity-first extraction and filtering tests
+- `tests/ui/test_mds_tab.py` - MDS preview transform and styling tests
+- `tests/performance/test_performance.py` - Performance benchmarks
 
 Recommended release checks:
 
@@ -342,7 +357,7 @@ python -m unittest discover tests
 
 ---
 
-*Last Updated: 4th February 2026*
-*Application Version: 3.0.1*
+*Last Updated: 6th February 2026*
+*Application Version: 3.0.2*
 
 For specific module details, see the [Module Architecture Guide](architecture/modules.md).

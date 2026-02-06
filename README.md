@@ -42,15 +42,15 @@ Transform complex EMIS XML documents into actionable insights for NHS healthcare
 ## Key Features
 
 <details>
-<summary><strong>Complete Analysis Interface (5 Tabs)</strong></summary>
+<summary><strong>Complete Analysis Interface (6 Tabs)</strong></summary>
 
 - **Clinical Codes**: SNOMED translation with deduplication modes and source tracking
   - Summary, Clinical Codes, Medications, RefSets, Pseudo RefSets, Pseudo Members
   - Child Code Finder with NHS terminology expansion
-  - Analytics dashboard with processing statistics
-- **XML Explorer**: Native file browser with folder navigation and dependency visualisation
 - **Searches**: Rule Logic Browser with detailed criterion analysis and exports
 - **Reports**: List, Audit, and Aggregate report viewers with structured metadata
+- **XML Explorer**: Native file browser with folder navigation and dependency visualisation
+- **Analytics**: Processing statistics, quality metrics, and dataset exports
 - **Code Lookup**: Standalone SNOMED lookup without requiring XML upload
 
 </details>
@@ -422,5 +422,5 @@ Users accept full responsibility for any decisions made using this toolkit.
 
 ---
 
-*Last Updated: 4th February 2026*
-*Application Version: [3.0.1](changelog.md) - [View Release Notes](changelog.md)*
+*Last Updated: 6th February 2026*
+*Application Version: [3.0.2](changelog.md) - [View Release Notes](changelog.md)*

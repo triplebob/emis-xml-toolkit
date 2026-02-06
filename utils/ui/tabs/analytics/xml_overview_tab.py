@@ -1,7 +1,14 @@
+"""
+XML Overview tab - Processing analytics and quality metrics.
+
+Displays file metrics, structure quality, translation success, and breakdowns
+by source/category for the currently loaded XML file.
+"""
+
 import streamlit as st
 import pandas as pd
 from ...theme import info_box, warning_box, success_box
-from .codes_common import get_unified_clinical_data
+from ..clinical_codes.codes_common import get_unified_clinical_data
 from ....system.session_state import SessionStateKeys
 from ....metadata.structure_provider import get_structure_metadata
 from ....exports.analytics_exports import render_analytics_export_controls
@@ -21,12 +28,12 @@ def _rag_box(label: str, value: str, colour: str) -> str:
     </div>
     """
 
-
-def render_analytics_tab(results=None):
+def render_xml_overview_tab(results=None):
     """
-    Analytics tab mirroring the compatibility depth, powered by the pipeline + audit stats.
-    Shows file metrics, structure quality, translation success, and breakdowns by source/category.
+    XML Overview tab showing file metrics, structure quality, translation success,
+    and breakdowns by source/category.
     """
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
     @st.fragment
     def analytics_fragment():
         unified_results = get_unified_clinical_data()
@@ -126,7 +133,7 @@ def render_analytics_tab(results=None):
 
         # XML structure metrics
         if audit_stats and "xml_structure" in audit_stats:
-            st.write("### 🏗️ XML Structure Analysis")
+            st.write("### 🗃️ XML Structure Analysis")
             with st.container(border=True):
                 xs = audit_stats["xml_structure"]
 

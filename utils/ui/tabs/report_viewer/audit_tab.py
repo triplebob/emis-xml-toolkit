@@ -17,7 +17,6 @@ from .common import (
 from ...theme import ThemeColours, create_info_box_style
 from ....metadata.report_filtering import build_audit_criteria_overview
 
-
 def _collect_group_columns(aggregate: Dict) -> List[str]:
     columns: List[str] = []
     for group in aggregate.get("groups") or []:

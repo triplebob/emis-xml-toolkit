@@ -33,13 +33,12 @@ from ....parsing.node_parsers.linked_criteria_parser import (
 )
 from ....metadata.column_name_mapper import get_column_display_name
 
-
 def _get_snomed_cache() -> Dict[str, Any]:
     """Fetch the SNOMED cache from session state."""
     return st.session_state.get(SessionStateKeys.MATCHED_EMIS_SNOMED_CACHE, {}) or {}
 
 
-@st.cache_data(ttl=600, max_entries=1)
+@st.cache_data(ttl=600, max_entries=1, scope="session")
 def _build_clinical_codes_cache(file_hash: str, codes_count: int) -> Dict[str, Dict[str, Any]]:
     """Cached clinical codes lookup builder - invalidates on file change."""
     pipeline_codes = st.session_state.get(SessionStateKeys.PIPELINE_CODES, []) or []
@@ -671,6 +670,7 @@ def _render_value_set_codes(vs: Dict, codes: List[Dict], codes_cache: Dict, sour
         })
 
     df = pd.DataFrame(rows, columns=["EMIS Code", "SNOMED Code", "Description", "Scope", "Is Refset"])
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
     st.dataframe(
         df,
         width="stretch",
@@ -725,6 +725,7 @@ def _render_combined_unnamed_codes(code_tuples: List[tuple], codes_cache: Dict) 
         })
 
     df = pd.DataFrame(rows, columns=["EMIS Code", "SNOMED Code", "Description", "Scope", "Is Refset"])
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
     st.dataframe(
         df,
         width="stretch",

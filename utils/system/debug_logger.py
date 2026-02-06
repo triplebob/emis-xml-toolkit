@@ -177,7 +177,10 @@ def run_test_suite(test_module: str) -> tuple[bool, str]:
         
         # Import the test module
         if test_module == 'test_performance':
-            import tests.test_performance as test_perf
+            try:
+                import tests.performance.test_performance as test_perf
+            except ImportError:  # Backward compatibility with older test layout
+                import tests.test_performance as test_perf
             suite = unittest.TestLoader().loadTestsFromModule(test_perf)
         else:
             return False, f"Unknown test module: {test_module}"

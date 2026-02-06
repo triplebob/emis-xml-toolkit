@@ -10,7 +10,6 @@ from .refsets_tab import render_refsets_tab
 from .pseudo_refsets_tab import render_pseudo_refsets_tab
 from .pseudo_members_tab import render_pseudo_refset_members_tab
 from .summary_tab import render_summary_tab
-from .analytics_tab import render_analytics_tab
 
 __all__ = [
     "render_clinical_codes_tab",
@@ -19,5 +18,4 @@ __all__ = [
     "render_pseudo_refsets_tab",
     "render_pseudo_refset_members_tab",
     "render_summary_tab",
-    "render_analytics_tab",
 ]

@@ -12,7 +12,6 @@ from .tabs import (
     render_refsets_tab,
     render_pseudo_refsets_tab,
     render_pseudo_refset_members_tab,
-    render_analytics_tab,
     render_search_tabs,
     render_xml_tab,
     render_list_reports_tab,
@@ -21,6 +20,7 @@ from .tabs import (
     render_reports_tab,
     render_expansion_tab_content
 )
+from .tabs.analytics import render_xml_overview_tab, render_mds_tab
 
 
 def render_results_tabs(_results=None):
@@ -44,23 +44,25 @@ def render_results_tabs(_results=None):
     debug_mode = st.session_state.get(SessionStateKeys.DEBUG_MODE, False)
 
     if has_clinical_results:
-        # Show clinical + XML browser + search browser + code lookup; reports remain disabled
-        # Add Memory tab in debug mode
+        # Show clinical + XML browser + search browser + analytics + code lookup
+        # Add Debug tab in debug mode
         if debug_mode:
-            main_tab1, main_tab_xml, main_tab2, main_tab_reports, main_tab_lookup, main_tab_debug = st.tabs([
+            main_tab1, main_tab2, main_tab_reports, main_tab_xml, main_tab_analytics, main_tab_lookup, main_tab_debug = st.tabs([
                 "🏥 Clinical Codes",
-                "🗂 XML Explorer",
                 "🔍 Searches",
                 "📊 Reports",
+                "🗂 XML Explorer",
+                "📈 Analytics",
                 "🔬 Code Lookup",
                 "⚙️ Debug"
             ])
         else:
-            main_tab1, main_tab_xml, main_tab2, main_tab_reports, main_tab_lookup = st.tabs([
+            main_tab1, main_tab2, main_tab_reports, main_tab_xml, main_tab_analytics, main_tab_lookup = st.tabs([
                 "🏥 Clinical Codes",
-                "🗂 XML Explorer",
                 "🔍 Searches",
                 "📊 Reports",
+                "🗂 XML Explorer",
+                "📈 Analytics",
                 "🔬 Code Lookup"
             ])
 
@@ -75,6 +77,9 @@ def render_results_tabs(_results=None):
 
         with main_tab_reports:
             render_reports_tab()
+
+        with main_tab_analytics:
+            render_analytics_main_tab()
 
         with main_tab_lookup:
             from .tabs.terminology_server import render_individual_code_lookup
@@ -156,7 +161,6 @@ def render_clinical_codes_main_tab():
         tab_pseudo_refsets,
         tab_pseudo_members,
         tab_expansion,
-        tab_analytics,
     ) = st.tabs([
         "📊 Summary",
         "🏥 Clinical Codes",
@@ -165,7 +169,6 @@ def render_clinical_codes_main_tab():
         "🔍 Pseudo RefSets",
         "📝 Pseudo RefSet Members",
         "👪 Child Code Finder",
-        "📊 Analytics",
     ])
     
     with tab_summary:
@@ -192,5 +195,14 @@ def render_clinical_codes_main_tab():
         pipeline_codes = st.session_state.get(SessionStateKeys.PIPELINE_CODES, [])
         render_expansion_tab_content(pipeline_codes)
 
-    with tab_analytics:
-        render_analytics_tab()
+
+def render_analytics_main_tab():
+    """Render the Analytics main tab with subtabs."""
+    # Analytics sub-tabs
+    tab_overview, tab_mds = st.tabs(["📋 XML Overview", "📦 MDS Generator"])
+
+    with tab_overview:
+        render_xml_overview_tab()
+
+    with tab_mds:
+        render_mds_tab()

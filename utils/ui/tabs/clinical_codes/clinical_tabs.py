@@ -10,8 +10,8 @@ from .medications_tab import render_medications_tab as _render_medications_tab_i
 from .refsets_tab import render_refsets_tab as _render_refsets_tab_impl
 from .pseudo_refsets_tab import render_pseudo_refsets_tab as _render_pseudo_refsets_tab_impl
 from .pseudo_members_tab import render_pseudo_refset_members_tab as _render_pseudo_refset_members_tab_impl
-from .analytics_tab import render_analytics_tab as _render_analytics_tab_impl
 from ..terminology_server import render_expansion_tab_content as _render_expansion_tab_impl
+
 
 def render_summary_tab(*_args, **_kwargs):
     """Delegate to summary implementation."""
@@ -41,11 +41,6 @@ def render_pseudo_refsets_tab(*_args, **_kwargs):
 def render_pseudo_refset_members_tab(*_args, **_kwargs):
     """Delegate to the pseudo-refset members implementation."""
     _render_pseudo_refset_members_tab_impl()
-
-
-def render_analytics_tab(*_args, **_kwargs):
-    """Delegate to analytics implementation."""
-    _render_analytics_tab_impl()
 
 
 def render_expansion_tab_content(clinical_data=None):

@@ -11,6 +11,8 @@ def render_refsets_tab(results=None):
         st.write("❌ No analysis data found - please run XML analysis first")
         return
 
+    st.markdown("""<style>[data-testid="stElementToolbar"]{display: none;}</style>""", unsafe_allow_html=True)
+
     # Pre-categorised by _category_split: true refsets only
     base_refsets = unified_results.get("refsets", [])
 

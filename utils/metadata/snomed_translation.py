@@ -6,7 +6,7 @@ from ..system.session_state import (
     SessionStateKeys
 )
 
-@st.cache_data(ttl=3600, max_entries=1, show_spinner=False)  # Cache translation for active file only
+@st.cache_data(ttl=3600, max_entries=1, show_spinner=False, scope="session")  # Cache translation for active file only
 def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col, deduplication_mode='unique_codes'):
     """
     Translate EMIS GUIDs to SNOMED codes using lookup DataFrame with persistent session cache.

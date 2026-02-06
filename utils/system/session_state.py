@@ -80,6 +80,11 @@ class SessionStateKeys:
     NHS_CONNECTION_STATUS = "nhs_connection_status"
     EXPANSION_IN_PROGRESS = "expansion_in_progress"
     EXPANSION_STATUS = "expansion_status"
+    TERMINOLOGY_EXPANSION_CACHE = "terminology_expansion_cache"
+    FULL_LINEAGE_TRACE_RESULT = "full_lineage_trace_result"
+    FULL_LINEAGE_TRACE_WARNINGS = "full_lineage_trace_warnings"
+    LOOKUP_CHILD_CODES_STATE = "lookup_child_codes_state"
+    LOOKUP_CHILD_CODES_EXPORT_STATE = "lookup_child_codes_export_state"
 
     # Processing and audit data
     EMIS_GUIDS = "emis_guids"
@@ -93,6 +98,7 @@ class SessionStateKeys:
     XML_STRUCTURE_DATA = "xml_structure_data"
     CODE_STORE = "code_store"
     CODE_STORE_SOURCE_HASH = "code_store_source_hash"
+    MDS_DATASET_CACHE = "mds_dataset_cache"
 
     # Error handling
     PENDING_ERRORS = "pending_errors"
@@ -124,6 +130,7 @@ class SessionStateGroups:
         SessionStateKeys.XML_STRUCTURE_DATA,
         SessionStateKeys.CODE_STORE,
         SessionStateKeys.CODE_STORE_SOURCE_HASH,
+        SessionStateKeys.MDS_DATASET_CACHE,
         "unified_clinical_data_cache",
         "expansion_results_data",
     ]
@@ -172,6 +179,42 @@ def clear_results_state() -> None:
             del st.session_state[key]
 
 
+def clear_terminology_expansion_state() -> None:
+    """
+    Clear terminology expansion/lineage state to prevent session accumulation.
+
+    This removes heavy hierarchy payloads, per-lookup lineage trees, and
+    session-scoped terminology expansion cache entries.
+    """
+    static_keys = [
+        SessionStateKeys.TERMINOLOGY_EXPANSION_CACHE,
+        f"{SessionStateKeys.TERMINOLOGY_EXPANSION_CACHE}_file_hash",
+        SessionStateKeys.FULL_LINEAGE_TRACE_RESULT,
+        SessionStateKeys.FULL_LINEAGE_TRACE_WARNINGS,
+        SessionStateKeys.LOOKUP_CHILD_CODES_STATE,
+        SessionStateKeys.LOOKUP_CHILD_CODES_EXPORT_STATE,
+        "child_codes_export_state",
+        "expansion_results_data",
+    ]
+    for key in static_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    dynamic_prefixes = ("lookup_lineage_",)
+    dynamic_keys = [
+        key for key in st.session_state.keys()
+        if any(key.startswith(prefix) for prefix in dynamic_prefixes)
+    ]
+    for key in dynamic_keys:
+        del st.session_state[key]
+
+    try:
+        from ..terminology_server import get_expansion_service
+        get_expansion_service().expansion_cache.clear()
+    except Exception:
+        pass
+
+
 def clear_export_state() -> None:
     """Clear export-related cache keys and perform garbage collection."""
     keys_to_remove = []
@@ -180,6 +223,7 @@ def clear_export_state() -> None:
             key.startswith(SessionStateKeys.EXCEL_CACHE_PREFIX)
             or key.startswith(SessionStateKeys.JSON_CACHE_PREFIX)
             or key.startswith("export_")
+            or key.startswith("mds_export_")
         ):
             keys_to_remove.append(key)
 
@@ -318,6 +362,7 @@ def clear_for_new_xml_selection() -> None:
     """Lightweight clearing for when a XML file is selected."""
     clear_pipeline_caches()
     clear_results_state()
+    clear_terminology_expansion_state()
     clear_ui_state()
     clear_report_state()
 
@@ -330,17 +375,21 @@ def clear_for_new_xml_selection() -> None:
         SessionStateKeys.PIPELINE_ENTITIES,
         SessionStateKeys.CODE_STORE,
         SessionStateKeys.CODE_STORE_SOURCE_HASH,
+        SessionStateKeys.MDS_DATASET_CACHE,
         SessionStateKeys.UPLOADED_FILE,
         SessionStateKeys.LOOKUP_ENCRYPTED_BYTES,
         SessionStateKeys.EMIS_GUID_COL,
         SessionStateKeys.SNOMED_CODE_COL,
         SessionStateKeys.MATCHED_EMIS_SNOMED_CACHE,
         SessionStateKeys.MATCHED_EMIS_SNOMED_TIMESTAMP,
-        "expansion_results_data",
         "unified_clinical_data_cache",
     ]:
         if key in st.session_state:
             del st.session_state[key]
+
+    mds_export_keys = [key for key in st.session_state.keys() if key.startswith("mds_export_")]
+    for key in mds_export_keys:
+        del st.session_state[key]
 
     st.session_state[SessionStateKeys.IS_PROCESSING] = False
     gc.collect()
@@ -350,6 +399,7 @@ def clear_for_new_xml() -> None:
     """Comprehensive clearing for XML upload."""
     clear_pipeline_caches()
     clear_results_state()
+    clear_terminology_expansion_state()
     clear_processing_state()
     clear_export_state()
     clear_ui_state()
@@ -363,13 +413,13 @@ def clear_for_new_xml() -> None:
         SessionStateKeys.XML_STRUCTURE_DATA,
         SessionStateKeys.CODE_STORE,
         SessionStateKeys.CODE_STORE_SOURCE_HASH,
+        SessionStateKeys.MDS_DATASET_CACHE,
         "unified_clinical_data_cache",
         SessionStateKeys.LOOKUP_ENCRYPTED_BYTES,
         SessionStateKeys.EMIS_GUID_COL,
         SessionStateKeys.SNOMED_CODE_COL,
         SessionStateKeys.MATCHED_EMIS_SNOMED_CACHE,
         SessionStateKeys.MATCHED_EMIS_SNOMED_TIMESTAMP,
-        "expansion_results_data",
     ]:
         if key in st.session_state:
             del st.session_state[key]

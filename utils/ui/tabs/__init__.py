@@ -10,7 +10,7 @@ Modules:
 - search_browser/analysis_tabs: Search analysis, XML structure, and detailed rules
 - search_browser/search_tabs: Search tabs and related controls
 - xml_inspector/xml_tab: XML browser and dependencies view
-- analytics_tab: Processing analytics and quality metrics
+- analytics: XML overview, MDS export, and quality metrics
 """
 
 # Import all functions from the modular structure
@@ -21,7 +21,6 @@ from .clinical_codes.clinical_tabs import (
     render_refsets_tab,
     render_pseudo_refsets_tab,
     render_pseudo_refset_members_tab,
-    render_analytics_tab,
     render_expansion_tab_content,
 )
 from .search_browser.analysis_tabs import render_search_analysis_tab
@@ -41,7 +40,6 @@ __all__ = [
     'render_refsets_tab',
     'render_pseudo_refsets_tab',
     'render_pseudo_refset_members_tab',
-    'render_analytics_tab',
     'render_expansion_tab_content',
     'render_search_tabs',
     'render_xml_tab',

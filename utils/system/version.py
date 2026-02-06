@@ -4,7 +4,7 @@ Single source of truth for application version across all components
 """
 
 # Application Version - Update this single location for all version references
-__version__ = "3.0.1"
+__version__ = "3.0.2"
 
 # Application metadata
 APP_NAME = "ClinXML"
@@ -14,8 +14,8 @@ APP_DESCRIPTION = "Comprehensive EMIS XML analysis and clinical code extraction 
 # Version components for programmatic access
 VERSION_MAJOR = 3
 VERSION_MINOR = 0
-VERSION_PATCH = 1
+VERSION_PATCH = 2
 
 # Build information
-BUILD_DATE = "4th February 2026"
+BUILD_DATE = "6th February 2026"
 BUILD_TYPE = "stable"  # stable, beta, alpha, dev

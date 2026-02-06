@@ -396,7 +396,7 @@ def export_search_json(
             "search_name": search.get("name", ""),
             "folder_path": get_search_folder_path(search_id, folders, all_searches),
             "export_type": "single_search",
-            "generated_by": "ClinXML™ EMIS XML Converter (https://clinxml.streamlit.app)"
+            "generated_by": "ClinXML™ EMIS XML Toolkit (https://clinxml.streamlit.app)"
         },
         "search": {
             "id": search_id,
@@ -474,7 +474,7 @@ def export_full_structure_json(all_searches: List[Dict], folders: List[Dict]) ->
             "total_searches": len(searches_array),
             "source_filename": source_filename,
             "export_type": "full_structure",
-            "generated_by": "ClinXML™ EMIS XML Converter (https://clinxml.streamlit.app)"
+            "generated_by": "ClinXML™ EMIS XML Toolkit (https://clinxml.streamlit.app)"
         },
         "folders": folders,  # List of folder dicts with id, name, parent_id
         "searches": searches_array,

@@ -3,24 +3,57 @@ Export builders for XML Explorer views (Dependencies and File Browser).
 """
 
 import gc
+import json
 import re
+from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import streamlit as st
 
 
-def build_explorer_export_filenames(xml_filename: str = "", tree_label: str = "dependency_tree") -> Tuple[str, str]:
-    """Build stable TXT/SVG filenames for an explorer tree export."""
+def build_explorer_export_filenames(xml_filename: str = "", tree_label: str = "dependency_tree") -> Tuple[str, str, str]:
+    """Build stable TXT/SVG/JSON filenames for an explorer tree export."""
     base_name = Path(str(xml_filename) or "clinxml").stem
     safe_label = str(tree_label or "explorer_tree").strip().lower().replace(" ", "_")
     export_base = f"{base_name}_{safe_label}"
-    return f"{export_base}.txt", f"{export_base}.svg"
+    return f"{export_base}.txt", f"{export_base}.svg", f"{export_base}.json"
 
 
 def build_explorer_tree_text(lines: List[str]) -> str:
     """Build plain text export content from rendered tree lines."""
     return "\n".join(lines) + "\n"
+
+
+def build_explorer_tree_json(
+    lines: List[str],
+    json_data: Optional[Dict[str, Any]] = None,
+    tree_label: str = "explorer_tree",
+    source_filename: Optional[str] = None,
+) -> str:
+    """
+    Build JSON export content from tree data.
+
+    If json_data is provided (e.g. from LineageTraceResult.to_hierarchical_json()),
+    use that directly. Otherwise, create a simple structure with the lines array.
+    """
+    if json_data is not None:
+        return json.dumps(json_data, indent=2, ensure_ascii=False)
+
+    # Fallback: simple JSON structure for explorer trees
+    metadata = {
+        "export_type": tree_label,
+        "export_timestamp": datetime.now().isoformat(),
+        "source": "ClinXML™ EMIS XML Toolkit (https://clinxml.streamlit.app)",
+        "line_count": len(lines),
+    }
+    if source_filename:
+        metadata["source_file"] = source_filename
+    export_data = {
+        "export_metadata": metadata,
+        "tree_lines": lines,
+    }
+    return json.dumps(export_data, indent=2, ensure_ascii=False)
 
 
 def build_explorer_tree_svg(lines: List[str]) -> str:
@@ -216,16 +249,23 @@ def render_explorer_tree_export_controls(
     tree_display_name: str,
     expander_label: str,
     state_prefix: str,
+    expander_expanded: bool = False,
+    json_data: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Render lazy TXT/SVG export controls for explorer tree views."""
+    """Render lazy TXT/SVG/JSON export controls for explorer tree views."""
     if not lines:
         return
 
-    txt_filename, svg_filename = build_explorer_export_filenames(xml_filename, tree_label)
+    txt_filename, svg_filename, json_filename = build_explorer_export_filenames(xml_filename, tree_label)
     context_id = f"{txt_filename}|{len(lines)}|{lines[0] if lines else ''}|{lines[-1] if lines else ''}"
 
-    with st.expander(expander_label, expanded=False):
-        col1, col2, col3, col4 = st.columns(4)
+    # Capture values in closure to avoid late binding issues
+    _json_data = json_data
+    _tree_label = tree_label
+    _xml_filename = xml_filename
+
+    with st.expander(expander_label, expanded=expander_expanded):
+        col1, col2, col3, col4, col5, col6 = st.columns([3, 0.1, 3, 0.1, 3, 3])
         with col1:
             _render_lazy_tree_export_button(
                 state_key=f"{state_prefix}_txt_export_state",
@@ -237,7 +277,8 @@ def render_explorer_tree_export_controls(
                 button_key_prefix=f"{state_prefix}_txt",
                 content_builder=lambda: build_explorer_tree_text(lines),
             )
-        with col2:
+        # col2 is spacer
+        with col3:
             _render_lazy_tree_export_button(
                 state_key=f"{state_prefix}_svg_export_state",
                 context_id=context_id,
@@ -248,3 +289,16 @@ def render_explorer_tree_export_controls(
                 button_key_prefix=f"{state_prefix}_svg",
                 content_builder=lambda: build_explorer_tree_svg(lines),
             )
+        # col4 is spacer
+        with col5:
+            _render_lazy_tree_export_button(
+                state_key=f"{state_prefix}_json_export_state",
+                context_id=context_id,
+                filename=json_filename,
+                mime_type="application/json",
+                export_label=f"🔄 Export {tree_display_name} (JSON)",
+                download_label=f"📥 Download {tree_display_name} (JSON)",
+                button_key_prefix=f"{state_prefix}_json",
+                content_builder=lambda: build_explorer_tree_json(lines, _json_data, _tree_label, _xml_filename),
+            )
+        # col6 is spacer
